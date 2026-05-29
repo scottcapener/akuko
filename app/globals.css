@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-bg: #18181a;
+  --color-bg-elevated: #1f1f21;
+  --color-bg-panel: #1c1c1e;
+  --color-border: #2a2a2c;
+  --color-muted: #9b9890;
+  --color-accent: #c4a882;
+  --color-text: #e8e6e3;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Mono", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  background: #18181a;
+  color: #e8e6e3;
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2c;
+  border-radius: 2px;
+}
+
+/* Remove default textarea/input outlines */
+textarea:focus,
+input:focus {
+  outline: none;
+}
