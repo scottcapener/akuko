@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useAkuko } from "@/lib/useAkuko";
 import LeftColumn from "@/components/LeftColumn";
 import CenterColumn from "@/components/CenterColumn";
@@ -21,6 +22,24 @@ export default function Home() {
     setMobilePanel((prev) => (prev === p ? null : p));
   }
 
+  const leftProps = {
+    book: store.book,
+    activeChapter: store.activeChapter,
+    onBookTitleChange: store.setBookTitle,
+    onCoverImage: store.setCoverImage,
+    onReorderChapters: store.reorderChapters,
+  };
+
+  const rightProps = {
+    chapter: store.activeChapter,
+    onAddImage: store.addLibraryImage,
+    onRemoveImage: store.removeLibraryImage,
+    onAddFile: store.addLibraryFile,
+    onRemoveFile: store.removeLibraryFile,
+    onAddMusicLink: store.addMusicLink,
+    onRemoveMusicLink: store.removeMusicLink,
+  };
+
   return (
     <div className="h-full flex flex-col bg-[#18181a] overflow-hidden">
       {/* ── Mobile top bar ── */}
@@ -28,14 +47,12 @@ export default function Home() {
         {/* Book icon */}
         <button
           onClick={() => openPanel("left")}
-          className={`p-1.5 rounded transition-colors ${
-            mobilePanel === "left"
-              ? "text-[#c4a882]"
-              : "text-[#9b9890] hover:text-[#e8e6e3]"
+          className={`p-1.5 rounded transition-opacity ${
+            mobilePanel === "left" ? "opacity-100" : "opacity-50 hover:opacity-80"
           }`}
         >
           <svg
-            className="w-5 h-5"
+            className="w-5 h-5 text-[#9b9890]"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -49,36 +66,17 @@ export default function Home() {
           </svg>
         </button>
 
-        {/* Wordmark */}
-        <span
-          className="font-mono text-base tracking-tight text-[#c4a882] select-none"
-          style={{ fontFamily: "var(--font-mono, monospace)" }}
-        >
-          ak
-        </span>
+        {/* Wordmark — logo.svg cropped to "ak" visually via the full logo */}
+        <Image src="/logo.svg" alt="Akuko" width={52} height={15} className="opacity-50" />
 
         {/* Library icon */}
         <button
           onClick={() => openPanel("right")}
-          className={`p-1.5 rounded transition-colors ${
-            mobilePanel === "right"
-              ? "text-[#c4a882]"
-              : "text-[#9b9890] hover:text-[#e8e6e3]"
+          className={`p-1.5 rounded transition-opacity ${
+            mobilePanel === "right" ? "opacity-100" : "opacity-50 hover:opacity-80"
           }`}
         >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={1.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
-            />
-          </svg>
+          <Image src="/library.svg" alt="Library" width={20} height={20} />
         </button>
       </header>
 
@@ -87,12 +85,9 @@ export default function Home() {
         {/* Left column — desktop */}
         <div className="hidden md:flex w-52 flex-shrink-0 flex-col">
           <LeftColumn
-            book={store.book}
-            activeChapter={store.activeChapter}
-            onBookTitleChange={store.setBookTitle}
+            {...leftProps}
             onChapterClick={store.setActiveChapter}
             onAddChapter={store.addChapter}
-            onReorderChapters={store.reorderChapters}
           />
         </div>
 
@@ -106,25 +101,17 @@ export default function Home() {
               store.updateScene(chapterId, sceneId, patch as Partial<Scene>)
             }
             onAddScene={store.addScene}
+            onAddImage={store.addLibraryImage}
           />
         </div>
 
         {/* Right column — desktop */}
         <div className="hidden md:flex w-60 flex-shrink-0 flex-col">
-          <RightColumn
-            chapter={store.activeChapter}
-            onAddImage={store.addLibraryImage}
-            onRemoveImage={store.removeLibraryImage}
-            onAddFile={store.addLibraryFile}
-            onRemoveFile={store.removeLibraryFile}
-            onAddMusicLink={store.addMusicLink}
-            onRemoveMusicLink={store.removeMusicLink}
-          />
+          <RightColumn {...rightProps} />
         </div>
       </div>
 
       {/* ── Mobile slide-in panels ── */}
-      {/* Backdrop */}
       {mobilePanel && (
         <div
           className="md:hidden fixed inset-0 bg-black/50 z-30"
@@ -139,9 +126,7 @@ export default function Home() {
         }`}
       >
         <LeftColumn
-          book={store.book}
-          activeChapter={store.activeChapter}
-          onBookTitleChange={store.setBookTitle}
+          {...leftProps}
           onChapterClick={(id) => {
             store.setActiveChapter(id);
             setMobilePanel(null);
@@ -150,7 +135,6 @@ export default function Home() {
             store.addChapter();
             setMobilePanel(null);
           }}
-          onReorderChapters={store.reorderChapters}
         />
       </div>
 
@@ -160,15 +144,7 @@ export default function Home() {
           mobilePanel === "right" ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        <RightColumn
-          chapter={store.activeChapter}
-          onAddImage={store.addLibraryImage}
-          onRemoveImage={store.removeLibraryImage}
-          onAddFile={store.addLibraryFile}
-          onRemoveFile={store.removeLibraryFile}
-          onAddMusicLink={store.addMusicLink}
-          onRemoveMusicLink={store.removeMusicLink}
-        />
+        <RightColumn {...rightProps} />
       </div>
     </div>
   );

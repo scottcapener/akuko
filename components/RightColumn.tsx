@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import Image from "next/image";
 import { Chapter, LibraryImage, LibraryFile, LibraryMusicLink } from "@/lib/types";
 
 function makeId() {
@@ -110,9 +111,7 @@ export default function RightColumn({
       )}
 
       <div className="px-4 pt-5 pb-2 flex-shrink-0">
-        <p className="text-[10px] uppercase tracking-widest text-[#9b9890] opacity-60">
-          Library
-        </p>
+        <Image src="/library.svg" alt="Library" width={16} height={16} className="opacity-50" />
       </div>
 
       {/* Image drop zone */}
@@ -183,18 +182,10 @@ export default function RightColumn({
             ))}
             {/* Add more images */}
             <button
-              className="aspect-square rounded bg-[#222224] flex items-center justify-center text-[#9b9890] hover:text-[#c4a882] transition-colors"
+              className="aspect-square rounded bg-[#222224] flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"
               onClick={() => fileInputRef.current?.click()}
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
+              <Image src="/plus.svg" alt="Add image" width={14} height={14} />
             </button>
           </div>
         )}
@@ -215,18 +206,10 @@ export default function RightColumn({
             Text files
           </p>
           <button
-            className="text-[#9b9890] hover:text-[#c4a882] transition-colors"
+            className="opacity-40 hover:opacity-100 transition-opacity"
             onClick={() => textInputRef.current?.click()}
           >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
+            <Image src="/plus.svg" alt="Add file" width={14} height={14} />
           </button>
         </div>
         <input

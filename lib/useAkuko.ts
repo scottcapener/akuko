@@ -90,6 +90,11 @@ export function useAkuko() {
     [updateBook]
   );
 
+  const setCoverImage = useCallback(
+    (dataUrl: string | undefined) => updateBook((b) => ({ ...b, coverImage: dataUrl })),
+    [updateBook]
+  );
+
   // ── Chapters ───────────────────────────────────────────────
   const addChapter = useCallback(() => {
     updateBook((b) => {
@@ -284,6 +289,7 @@ export function useAkuko() {
     activeChapter,
     wordCount,
     setBookTitle,
+    setCoverImage,
     setActiveChapter,
     addChapter,
     reorderChapters,

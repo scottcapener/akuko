@@ -39,6 +39,7 @@ export interface Book {
   id: string;
   title: string;
   coverColor: string;
+  coverImage?: string; // data URL
   chapters: Chapter[];
   activeChapterId: string;
 }
