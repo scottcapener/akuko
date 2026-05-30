@@ -67,7 +67,7 @@ export default function LeftColumn({
   return (
     <div className="flex flex-col h-full bg-[#18181a] border-r border-[#2a2a2c] w-full">
       {/* Wordmark */}
-      <div className="px-5 pt-6 pb-2 flex-shrink-0">
+      <div className="px-5 pt-6 pb-5 flex-shrink-0">
         <Image
           src="/logo.svg"
           alt="Akuko"
@@ -159,7 +159,7 @@ export default function LeftColumn({
 
       {/* Chapter grid */}
       <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <p className="text-[10px] uppercase tracking-widest text-[#9b9890] mb-2 opacity-60">
+        <p className="text-[11px] font-medium tracking-wide uppercase text-[#6b6966] mb-2">
           Chapters
         </p>
         <div className="grid grid-cols-3 gap-1.5">

@@ -66,7 +66,7 @@ function SceneBlock({
         onClick={(e) => e.stopPropagation()}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        className="w-full bg-transparent text-[10px] uppercase tracking-widest text-[#9b9890] placeholder:text-[#9b9890]/40 mb-2 focus:outline-none cursor-text"
+        className="w-full bg-transparent text-[11px] font-medium tracking-wide uppercase text-[#6b6966] placeholder:text-[#6b6966]/50 mb-2 focus:outline-none cursor-text"
         style={{ fontFamily: "inherit" }}
       />
 
@@ -82,7 +82,7 @@ function SceneBlock({
           onSceneChange(chapterId, scene.id, { body: e.target.value });
           autoResize(e.target);
         }}
-        className="w-full bg-transparent text-[#e8e6e3] text-sm leading-relaxed resize-none placeholder:text-[#9b9890]/30 focus:outline-none"
+        className="w-full bg-transparent text-[#e8e6e3] text-sm leading-relaxed resize-none overflow-hidden placeholder:text-[#9b9890]/30 focus:outline-none"
         style={{ fontFamily: "inherit", minHeight: "3em" }}
       />
     </div>

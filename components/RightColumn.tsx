@@ -202,7 +202,7 @@ export default function RightColumn({
       {/* Text files */}
       <div className="px-4 mb-3">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[10px] uppercase tracking-widest text-[#9b9890] opacity-60">
+          <p className="text-[11px] font-medium tracking-wide uppercase text-[#6b6966]">
             Text files
           </p>
           <button
@@ -265,7 +265,7 @@ export default function RightColumn({
 
       {/* Music links */}
       <div className="px-4 pb-6">
-        <p className="text-[10px] uppercase tracking-widest text-[#9b9890] opacity-60 mb-2">
+        <p className="text-[11px] font-medium tracking-wide uppercase text-[#6b6966] mb-2">
           Music
         </p>
         <div className="flex gap-2 mb-3">
