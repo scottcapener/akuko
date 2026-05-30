@@ -25,22 +25,37 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session — must not run any logic between createServerClient and
-  // getUser() to avoid session invalidation bugs.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
 
-  // Protected routes
+  // Unauthenticated users can't access the editor or account page
   if (!user && (pathname.startsWith("/write") || pathname.startsWith("/account"))) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Logged-in users shouldn't see the auth pages
-  if (user && (pathname === "/login" || pathname === "/signup")) {
+  // Authenticated users trying to reach /login go to /write
+  if (user && pathname === "/login") {
     return NextResponse.redirect(new URL("/write", request.url));
+  }
+
+  // Authenticated users on /signup — only redirect away if their profile is
+  // already complete (display_name set). If they're mid-signup (no profile yet)
+  // let them stay on /signup to finish.
+  if (user && pathname === "/signup") {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const profileComplete = !!profile?.display_name;
+    if (profileComplete) {
+      return NextResponse.redirect(new URL("/write", request.url));
+    }
+    // Profile incomplete — fall through and let them finish signup
   }
 
   return supabaseResponse;

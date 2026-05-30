@@ -68,8 +68,11 @@ export default function WritePage() {
     setMobilePanel((prev) => (prev === p ? null : p));
   }
 
+  // Merge live chapters array into book so LeftColumn grid renders correctly
+  const bookWithChapters = { ...store.book, chapters: store.chapters };
+
   const leftProps = {
-    book: store.book,
+    book: bookWithChapters,
     activeChapter: store.activeChapter,
     onBookTitleChange: store.setBookTitle,
     onCoverImage: store.setCoverImage,
@@ -98,7 +101,7 @@ export default function WritePage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
           </svg>
         </button>
-        <Image src="/logo.svg" alt="Akuko" width={52} height={15} className="opacity-50" />
+        <Image src="/hakuko-logo.svg" alt="Hakuko" width={52} height={12} className="opacity-50" />
         <button
           onClick={() => openPanel("right")}
           className={`p-1.5 rounded transition-opacity ${mobilePanel === "right" ? "opacity-100" : "opacity-50 hover:opacity-80"}`}

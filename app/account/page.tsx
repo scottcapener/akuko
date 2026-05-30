@@ -161,7 +161,7 @@ export default function AccountPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <Link href="/write">
-            <Image src="/logo.svg" alt="Akuko" width={72} height={20} className="opacity-60" />
+            <Image src="/hakuko-logo-large.svg" alt="Hakuko" width={72} height={17} className="opacity-60" />
           </Link>
           <button onClick={handleSignOut} className="text-xs text-[#9b9890]/60 hover:text-[#9b9890] transition-colors">
             Sign out

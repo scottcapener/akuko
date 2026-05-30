@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   try {
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; AkukoBot/1.0)",
+        "User-Agent": "Mozilla/5.0 (compatible; HakukoBot/1.0)",
         Accept: "text/html,application/xhtml+xml",
       },
       signal: AbortSignal.timeout(5000),

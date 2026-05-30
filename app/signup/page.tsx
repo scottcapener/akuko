@@ -95,6 +95,17 @@ export default function SignupPage() {
   const [displayName, setDisplayName] = useState("");
   const [penName, setPenName] = useState("");
 
+  // ── Detect returning user from email confirmation ──────────────────────
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      // User has confirmed email — skip step 1, go to phone (step 2)
+      // unless they're already past that (profile complete → middleware redirects)
+      if (step === 1) setStep(2);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Handlers ──────────────────────────────────────────────────────────
 
   async function handleStep1() {
@@ -192,7 +203,7 @@ export default function SignupPage() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8 gap-4">
           <Link href="/">
-            <Image src="/logo.svg" alt="Akuko" width={80} height={23} className="opacity-60" />
+            <Image src="/hakuko-logo-large.svg" alt="Hakuko" width={80} height={19} className="opacity-60" />
           </Link>
           <div className="w-full">
             <div className="flex justify-between text-[10px] text-[#6b6966] uppercase tracking-wide mb-1.5">

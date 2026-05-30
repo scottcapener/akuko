@@ -99,7 +99,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm flex flex-col gap-8">
         <div className="flex justify-center">
           <Link href="/">
-            <Image src="/logo.svg" alt="Akuko" width={80} height={23} className="opacity-60" />
+            <Image src="/hakuko-logo-large.svg" alt="Hakuko" width={80} height={19} className="opacity-60" />
           </Link>
         </div>
 

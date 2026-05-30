@@ -34,9 +34,13 @@ export function useAkukoDb() {
   // Pending scene saves: sceneId -> patch
   const pendingSaves = useRef<Map<string, Partial<Scene>>>(new Map());
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guard against React StrictMode double-invocation creating duplicate books
+  const initialized = useRef(false);
 
   // ── Bootstrap ─────────────────────────────────────────────────────────
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;

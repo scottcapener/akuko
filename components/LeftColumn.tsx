@@ -69,10 +69,10 @@ export default function LeftColumn({
       {/* Wordmark */}
       <div className="px-5 pt-6 pb-5 flex-shrink-0">
         <Image
-          src="/logo.svg"
-          alt="Akuko"
+          src="/hakuko-logo.svg"
+          alt="Hakuko"
           width={72}
-          height={20}
+          height={17}
           className="opacity-60"
           priority
         />
