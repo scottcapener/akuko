@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { Chapter, LibraryImage, LibraryFile, LibraryMusicLink } from "@/lib/types";
 
@@ -18,7 +18,27 @@ interface Props {
   onRemoveMusicLink: (chapterId: string, linkId: string) => void;
 }
 
-function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+function Lightbox({
+  images,
+  index,
+  onClose,
+  onNavigate,
+}: {
+  images: { dataUrl: string }[];
+  index: number;
+  onClose: () => void;
+  onNavigate: (next: number) => void;
+}) {
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "ArrowRight") onNavigate((index + 1) % images.length);
+      else if (e.key === "ArrowLeft") onNavigate((index - 1 + images.length) % images.length);
+      else if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [index, images.length, onClose, onNavigate]);
+
   return (
     <div
       className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center cursor-pointer"
@@ -26,7 +46,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={src}
+        src={images[index].dataUrl}
         alt="Lightbox"
         className="max-w-[90vw] max-h-[90vh] object-contain rounded-md"
         onClick={(e) => e.stopPropagation()}
@@ -44,7 +64,7 @@ export default function RightColumn({
   onAddMusicLink,
   onRemoveMusicLink,
 }: Props) {
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [draggingOver, setDraggingOver] = useState(false);
   const [musicUrl, setMusicUrl] = useState("");
   const [musicLoading, setMusicLoading] = useState(false);
@@ -125,8 +145,13 @@ export default function RightColumn({
 
   return (
     <div className="flex flex-col h-full bg-[#18181a] border-l border-[#1f1f21] w-full overflow-y-auto">
-      {lightboxSrc && (
-        <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+      {lightboxIndex !== null && chapter.library.images.length > 0 && (
+        <Lightbox
+          images={chapter.library.images}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={setLightboxIndex}
+        />
       )}
 
       <div className="px-4 pt-5 pb-2 flex-shrink-0">
@@ -171,14 +196,14 @@ export default function RightColumn({
           </div>
         ) : (
           <div className="p-2 grid grid-cols-3 gap-1.5">
-            {chapter.library.images.map((img) => (
+            {chapter.library.images.map((img, i) => (
               <div key={img.id} className="relative group aspect-square">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={img.dataUrl}
                   alt={img.name}
                   className="w-full h-full object-cover rounded cursor-pointer"
-                  onClick={() => setLightboxSrc(img.dataUrl)}
+                  onClick={() => setLightboxIndex(i)}
                 />
                 <button
                   onClick={(e) => {
