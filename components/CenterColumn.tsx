@@ -137,7 +137,7 @@ export default function CenterColumn({
       )}
 
       {/* Chapter title */}
-      <div className="w-full flex justify-center border-b border-[#2a2a2c] flex-shrink-0">
+      <div className="w-full flex justify-center border-b border-[#1f1f21] flex-shrink-0">
         <div className="w-full max-w-[700px] px-6 pt-6 pb-4">
           <input
             value={chapter.title}
@@ -163,7 +163,7 @@ export default function CenterColumn({
           {/* Add scene button */}
           <button
             onClick={() => onAddScene(chapter.id)}
-            className="mt-2 ml-4 flex items-center gap-2 text-[#9b9890] hover:text-[#c4a882] text-xs transition-colors group"
+            className="mt-2 ml-4 mb-16 flex items-center gap-2 text-[#9b9890] hover:text-[#c4a882] text-xs transition-colors group"
           >
             <Image
               src="/plus.svg"

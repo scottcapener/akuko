@@ -20,6 +20,9 @@ export interface LibraryMusicLink {
   id: string;
   url: string;
   title: string;
+  description: string;
+  image: string;     // og:image URL (may be empty)
+  loading?: boolean;
 }
 
 export interface ChapterLibrary {

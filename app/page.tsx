@@ -17,7 +17,8 @@ const RIGHT_MAX = 400;
 const LEFT_DEFAULT = 208;   // w-52
 const RIGHT_DEFAULT = 240;  // w-60
 
-function useColumnResize(defaultPx: number, min: number, max: number) {
+// direction: 1 = drag-right grows (left handle), -1 = drag-left grows (right handle)
+function useColumnResize(defaultPx: number, min: number, max: number, direction: 1 | -1 = 1) {
   const [width, setWidth] = useState(defaultPx);
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -34,7 +35,7 @@ function useColumnResize(defaultPx: number, min: number, max: number) {
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
       if (!dragging.current) return;
-      const delta = e.clientX - startX.current;
+      const delta = (e.clientX - startX.current) * direction;
       setWidth(Math.min(max, Math.max(min, startW.current + delta)));
     }
     function onMouseUp() {
@@ -57,8 +58,8 @@ function useColumnResize(defaultPx: number, min: number, max: number) {
 export default function Home() {
   const store = useAkuko();
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
-  const left = useColumnResize(LEFT_DEFAULT, LEFT_MIN, LEFT_MAX);
-  const right = useColumnResize(RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX);
+  const left = useColumnResize(LEFT_DEFAULT, LEFT_MIN, LEFT_MAX, 1);
+  const right = useColumnResize(RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX, -1);
 
   if (!store.hydrated) {
     return <div className="h-full bg-[#18181a]" />;
@@ -89,7 +90,7 @@ export default function Home() {
   return (
     <div className="h-full flex flex-col bg-[#18181a] overflow-hidden">
       {/* ── Mobile top bar ── */}
-      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-[#2a2a2c] flex-shrink-0">
+      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-[#1f1f21] flex-shrink-0">
         <button
           onClick={() => openPanel("left")}
           className={`p-1.5 rounded transition-opacity ${
@@ -127,7 +128,7 @@ export default function Home() {
         {/* Left resize handle */}
         <div
           onMouseDown={left.onMouseDown}
-          className="w-1 flex-shrink-0 bg-[#2a2a2c] hover:bg-[#c4a882]/40 cursor-col-resize transition-colors active:bg-[#c4a882]/60"
+          className="w-px flex-shrink-0 bg-[#1f1f21] hover:bg-[#c4a882]/40 cursor-col-resize transition-colors active:bg-[#c4a882]/60"
         />
 
         {/* Center column */}
@@ -147,7 +148,7 @@ export default function Home() {
         {/* Right resize handle */}
         <div
           onMouseDown={right.onMouseDown}
-          className="w-1 flex-shrink-0 bg-[#2a2a2c] hover:bg-[#c4a882]/40 cursor-col-resize transition-colors active:bg-[#c4a882]/60"
+          className="w-px flex-shrink-0 bg-[#1f1f21] hover:bg-[#c4a882]/40 cursor-col-resize transition-colors active:bg-[#c4a882]/60"
         />
 
         {/* Right column */}

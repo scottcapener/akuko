@@ -47,6 +47,7 @@ export default function RightColumn({
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [draggingOver, setDraggingOver] = useState(false);
   const [musicUrl, setMusicUrl] = useState("");
+  const [musicLoading, setMusicLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
 
@@ -88,24 +89,42 @@ export default function RightColumn({
     processImageFiles(e.dataTransfer.files);
   }
 
-  function handleMusicAdd() {
+  async function handleMusicAdd() {
     const url = musicUrl.trim();
-    if (!url) return;
-    let title = url;
-    try {
-      const u = new URL(url);
-      title = u.hostname.replace("www.", "");
-    } catch {}
-    onAddMusicLink(chapter.id, {
-      id: makeId(),
-      url,
-      title,
-    });
+    if (!url || musicLoading) return;
     setMusicUrl("");
+    setMusicLoading(true);
+
+    // Optimistic hostname fallback
+    let hostname = url;
+    try { hostname = new URL(url).hostname.replace("www.", ""); } catch {}
+
+    try {
+      const res = await fetch(`/api/og?url=${encodeURIComponent(url)}`);
+      const data = await res.json();
+      onAddMusicLink(chapter.id, {
+        id: makeId(),
+        url,
+        title: data.title || hostname,
+        description: data.description || "",
+        image: data.image || "",
+      });
+    } catch {
+      // Network error — still add the card with what we have
+      onAddMusicLink(chapter.id, {
+        id: makeId(),
+        url,
+        title: hostname,
+        description: "",
+        image: "",
+      });
+    } finally {
+      setMusicLoading(false);
+    }
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#18181a] border-l border-[#2a2a2c] w-full overflow-y-auto">
+    <div className="flex flex-col h-full bg-[#18181a] border-l border-[#1f1f21] w-full overflow-y-auto">
       {lightboxSrc && (
         <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
       )}
@@ -119,7 +138,7 @@ export default function RightColumn({
         className={`mx-4 mb-3 rounded-lg border border-dashed transition-colors ${
           draggingOver
             ? "border-[#c4a882] bg-[#c4a882]/5"
-            : "border-[#2a2a2c] hover:border-[#9b9890]/40"
+            : "border-[#222224] hover:border-[#2a2a2c]"
         }`}
         onDragOver={(e) => {
           e.preventDefault();
@@ -168,13 +187,7 @@ export default function RightColumn({
                   }}
                   className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/70 rounded-full items-center justify-center hidden group-hover:flex"
                 >
-                  <svg
-                    className="w-2.5 h-2.5 text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
-                  >
+                  <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
@@ -182,7 +195,7 @@ export default function RightColumn({
             ))}
             {/* Add more images */}
             <button
-              className="aspect-square rounded bg-[#222224] flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"
+              className="aspect-square rounded bg-[#1f1f21] flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"
               onClick={() => fileInputRef.current?.click()}
             >
               <Image src="/plus.svg" alt="Add image" width={14} height={14} />
@@ -199,11 +212,11 @@ export default function RightColumn({
         />
       </div>
 
-      {/* Text files */}
+      {/* Notes (formerly Text files) */}
       <div className="px-4 mb-3">
         <div className="flex items-center justify-between mb-2">
           <p className="text-[11px] font-medium tracking-wide uppercase text-[#6b6966]">
-            Text files
+            Notes
           </p>
           <button
             className="opacity-40 hover:opacity-100 transition-opacity"
@@ -221,7 +234,7 @@ export default function RightColumn({
           onChange={(e) => processTextFiles(e.target.files)}
         />
         {chapter.library.files.length === 0 ? (
-          <p className="text-[11px] text-[#9b9890]/40 italic">No text files yet</p>
+          <p className="text-[11px] text-[#9b9890]/40 italic">No notes yet</p>
         ) : (
           <div className="flex flex-col gap-1">
             {chapter.library.files.map((f) => (
@@ -229,31 +242,15 @@ export default function RightColumn({
                 key={f.id}
                 className="flex items-center gap-2 group px-2 py-1.5 rounded hover:bg-[#1f1f21] transition-colors"
               >
-                <svg
-                  className="w-4 h-4 text-[#9b9890] flex-shrink-0"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-                  />
+                <svg className="w-4 h-4 text-[#9b9890] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                 </svg>
                 <span className="text-xs text-[#e8e6e3] truncate flex-1">{f.name}</span>
                 <button
                   onClick={() => onRemoveFile(chapter.id, f.id)}
                   className="hidden group-hover:block text-[#9b9890] hover:text-red-400 transition-colors"
                 >
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
@@ -275,13 +272,14 @@ export default function RightColumn({
             value={musicUrl}
             onChange={(e) => setMusicUrl(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleMusicAdd()}
-            className="flex-1 bg-[#222224] text-[#e8e6e3] text-xs px-3 py-1.5 rounded border border-[#2a2a2c] placeholder:text-[#9b9890]/40 focus:outline-none focus:border-[#c4a882]/50"
+            className="flex-1 bg-[#1f1f21] text-[#e8e6e3] text-xs px-3 py-1.5 rounded border border-[#222224] placeholder:text-[#9b9890]/40 focus:outline-none focus:border-[#c4a882]/50"
           />
           <button
             onClick={handleMusicAdd}
-            className="px-2.5 py-1.5 rounded bg-[#2a2a2c] text-[#9b9890] hover:text-[#c4a882] text-xs transition-colors"
+            disabled={musicLoading}
+            className="px-2.5 py-1.5 rounded bg-[#222224] text-[#9b9890] hover:text-[#c4a882] text-xs transition-colors disabled:opacity-40"
           >
-            Add
+            {musicLoading ? "…" : "Add"}
           </button>
         </div>
         {chapter.library.musicLinks.length === 0 ? (
@@ -293,25 +291,26 @@ export default function RightColumn({
                 key={link.id}
                 className="flex items-center gap-2.5 group bg-[#1f1f21] rounded-lg px-3 py-2 hover:bg-[#222224] transition-colors"
               >
-                {/* Placeholder art */}
-                <div className="w-9 h-9 rounded bg-[#2a2a2c] flex-shrink-0 flex items-center justify-center">
-                  <svg
-                    className="w-4 h-4 text-[#9b9890]"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z"
-                    />
-                  </svg>
+                {/* Artwork — og:image or music note placeholder */}
+                <div className="w-9 h-9 rounded bg-[#222224] flex-shrink-0 overflow-hidden flex items-center justify-center">
+                  {link.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={link.image} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <svg className="w-4 h-4 text-[#9b9890]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
+                    </svg>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-[#e8e6e3] truncate">{link.title}</p>
-                  <p className="text-[10px] text-[#9b9890] truncate">{link.url}</p>
+                  {link.description ? (
+                    <p className="text-[10px] text-[#9b9890] truncate">{link.description}</p>
+                  ) : (
+                    <p className="text-[10px] text-[#9b9890]/50 truncate">
+                      {(() => { try { return new URL(link.url).hostname.replace("www.", ""); } catch { return link.url; } })()}
+                    </p>
+                  )}
                 </div>
                 <a
                   href={link.url}
@@ -320,31 +319,15 @@ export default function RightColumn({
                   className="flex-shrink-0 text-[#9b9890] hover:text-[#c4a882] transition-colors"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"
-                    />
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
                   </svg>
                 </a>
                 <button
                   onClick={() => onRemoveMusicLink(chapter.id, link.id)}
-                  className="hidden group-hover:block text-[#9b9890] hover:text-red-400 transition-colors flex-shrink-0"
+                  className="hidden group-hover:flex text-[#9b9890] hover:text-red-400 transition-colors flex-shrink-0"
                 >
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>

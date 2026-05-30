@@ -65,7 +65,7 @@ export default function LeftColumn({
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#18181a] border-r border-[#2a2a2c] w-full">
+    <div className="flex flex-col h-full bg-[#18181a] border-r border-[#1f1f21] w-full">
       {/* Wordmark */}
       <div className="px-5 pt-6 pb-5 flex-shrink-0">
         <Image
@@ -199,7 +199,7 @@ export default function LeftColumn({
       </div>
 
       {/* Avatar */}
-      <div className="px-4 pb-5 flex-shrink-0 border-t border-[#2a2a2c] pt-3">
+      <div className="px-4 pb-5 flex-shrink-0 border-t border-[#1f1f21] pt-3">
         <div className="w-8 h-8 rounded-full bg-[#2a2a2c] flex items-center justify-center">
           <svg
             className="w-4 h-4 text-[#9b9890]"
