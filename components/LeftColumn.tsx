@@ -116,6 +116,20 @@ export default function LeftColumn({
               </span>
             </div>
           )}
+          {/* Remove cover button */}
+          {book.coverImage && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCoverImage(undefined);
+              }}
+              className="absolute top-1.5 right-1.5 w-5 h-5 bg-black/70 rounded-full items-center justify-center hidden group-hover:flex transition-opacity"
+            >
+              <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
         <input
           ref={coverInputRef}

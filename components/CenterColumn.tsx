@@ -28,23 +28,41 @@ function SceneBlock({
   onSceneChange: (chapterId: string, sceneId: string, patch: Partial<Scene>) => void;
 }) {
   const [focused, setFocused] = useState(false);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLInputElement>(null);
 
-  function autoResize(el: HTMLTextAreaElement) {
-    el.style.height = "auto";
-    el.style.height = el.scrollHeight + "px";
-  }
-
+  // Set innerHTML on mount and when navigating to a different scene.
+  // We intentionally don't re-sync on every scene.body change so the cursor
+  // never jumps while the user is actively typing.
   useEffect(() => {
-    if (bodyRef.current) autoResize(bodyRef.current);
-  }, [scene.body]);
+    if (bodyRef.current) bodyRef.current.innerHTML = scene.body;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene.id]);
 
-  // When the wrapper div is clicked, only redirect to body if the click
-  // didn't land on the label input itself.
   function handleWrapperClick(e: React.MouseEvent<HTMLDivElement>) {
     if (e.target === labelRef.current) return;
     bodyRef.current?.focus();
+  }
+
+  function handlePaste(e: React.ClipboardEvent<HTMLDivElement>) {
+    // If clipboard contains an image, let it bubble up to CenterColumn
+    // so it gets added to the library instead of pasted as text.
+    const items = Array.from(e.clipboardData.items);
+    if (items.some((it) => it.type.startsWith("image/"))) return;
+    // Otherwise strip HTML — insert plain text only.
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // Allow Cmd/Ctrl+I (italic). Block all other formatting shortcuts.
+    if (
+      (e.metaKey || e.ctrlKey) &&
+      !["i", "z", "y", "a", "c", "x", "v"].includes(e.key.toLowerCase())
+    ) {
+      e.preventDefault();
+    }
   }
 
   return (
@@ -54,7 +72,7 @@ function SceneBlock({
       }`}
       onClick={handleWrapperClick}
     >
-      {/* Scene label — stop propagation so click stays here */}
+      {/* Scene label */}
       <input
         ref={labelRef}
         maxLength={260}
@@ -70,19 +88,21 @@ function SceneBlock({
         style={{ fontFamily: "inherit" }}
       />
 
-      {/* Scene body */}
-      <textarea
+      {/* Scene body — contentEditable so Cmd+I italic works natively */}
+      <div
         ref={bodyRef}
-        value={scene.body}
-        placeholder="Write here…"
-        rows={3}
+        contentEditable
+        suppressContentEditableWarning
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        onChange={(e) => {
-          onSceneChange(chapterId, scene.id, { body: e.target.value });
-          autoResize(e.target);
-        }}
-        className="w-full bg-transparent text-[#e8e6e3] text-sm leading-relaxed resize-none overflow-hidden placeholder:text-[#9b9890]/30 focus:outline-none"
+        onInput={() =>
+          onSceneChange(chapterId, scene.id, {
+            body: bodyRef.current?.innerHTML ?? "",
+          })
+        }
+        onPaste={handlePaste}
+        onKeyDown={handleKeyDown}
+        className="w-full bg-transparent text-[#e8e6e3] text-sm leading-relaxed focus:outline-none empty:before:content-['Write_here…'] empty:before:text-[#9b9890]/30 empty:before:pointer-events-none [&_em]:italic"
         style={{ fontFamily: "inherit", minHeight: "3em" }}
       />
     </div>
@@ -163,7 +183,7 @@ export default function CenterColumn({
           {/* Add scene button */}
           <button
             onClick={() => onAddScene(chapter.id)}
-            className="mt-2 ml-4 mb-16 flex items-center gap-2 text-[#9b9890] hover:text-[#c4a882] text-xs transition-colors group"
+            className="mt-2 ml-4 mb-16 flex items-center gap-2 transition-colors group"
           >
             <Image
               src="/plus.svg"
@@ -172,7 +192,7 @@ export default function CenterColumn({
               height={16}
               className="opacity-40 group-hover:opacity-100 transition-opacity"
             />
-            <span className="text-[10px] uppercase tracking-widest">Add scene</span>
+            <span className="text-[11px] font-medium tracking-wide uppercase text-[#6b6966] group-hover:text-[#c4a882] transition-colors">Add scene</span>
           </button>
         </div>
       </div>

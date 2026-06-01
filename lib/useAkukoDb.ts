@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "./supabase/client";
 import * as db from "./db";
-import { Book, Chapter, Scene, LibraryImage, LibraryFile, LibraryMusicLink } from "./types";
+import { Book, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink } from "./types";
 
 export type SaveStatus = "idle" | "saving" | "saved";
 
@@ -33,6 +33,9 @@ export function useAkukoDb() {
 
   // Pending scene saves: sceneId -> patch
   const pendingSaves = useRef<Map<string, Partial<Scene>>>(new Map());
+  // Pending note saves: noteId -> patch
+  const pendingNoteSaves = useRef<Map<string, { title?: string; body?: string }>>(new Map());
+  const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guard against React StrictMode double-invocation creating duplicate books
   const initialized = useRef(false);
@@ -257,30 +260,25 @@ export function useAkukoDb() {
     []
   );
 
-  const addLibraryFile = useCallback(
-    async (chapterId: string, fileData: LibraryFile) => {
-      if (!userId) return;
+  const addNote = useCallback(
+    async (chapterId: string) => {
       const chapter = chapters.find((c) => c.id === chapterId);
-      const position = chapter?.library.files.length ?? 0;
-
-      // fileData.content is a string — reconstruct a File object
-      const blob = new Blob([fileData.content], { type: "text/plain" });
-      const file = new File([blob], fileData.name, { type: "text/plain" });
-
-      const saved = await db.addLibraryFile(chapterId, userId, file, position);
+      const position = chapter?.library.notes.length ?? 0;
+      const saved = await db.addNote(chapterId, { title: "", body: "" }, position);
       setChapters((prev) =>
         prev.map((c) =>
           c.id !== chapterId
             ? c
-            : { ...c, library: { ...c.library, files: [...c.library.files, saved] } }
+            : { ...c, library: { ...c.library, notes: [...c.library.notes, saved] } }
         )
       );
     },
-    [userId, chapters]
+    [chapters]
   );
 
-  const removeLibraryFile = useCallback(
-    async (chapterId: string, fileId: string) => {
+  const updateNote = useCallback(
+    (chapterId: string, noteId: string, patch: { title?: string; body?: string }) => {
+      // Optimistic update
       setChapters((prev) =>
         prev.map((c) =>
           c.id !== chapterId
@@ -289,12 +287,49 @@ export function useAkukoDb() {
                 ...c,
                 library: {
                   ...c.library,
-                  files: c.library.files.filter((f) => f.id !== fileId),
+                  notes: c.library.notes.map((n) =>
+                    n.id === noteId ? { ...n, ...patch } : n
+                  ),
                 },
               }
         )
       );
-      await db.removeLibraryItem(fileId);
+      // Debounced DB save — merge patches per note
+      const existing = pendingNoteSaves.current.get(noteId) ?? {};
+      pendingNoteSaves.current.set(noteId, { ...existing, ...patch });
+      const existing_timer = noteTimers.current.get(noteId);
+      if (existing_timer) clearTimeout(existing_timer);
+      noteTimers.current.set(
+        noteId,
+        setTimeout(() => {
+          const update = pendingNoteSaves.current.get(noteId);
+          if (update) {
+            db.updateNote(noteId, update);
+            pendingNoteSaves.current.delete(noteId);
+          }
+          noteTimers.current.delete(noteId);
+        }, 1500)
+      );
+    },
+    []
+  );
+
+  const removeNote = useCallback(
+    async (chapterId: string, noteId: string) => {
+      setChapters((prev) =>
+        prev.map((c) =>
+          c.id !== chapterId
+            ? c
+            : {
+                ...c,
+                library: {
+                  ...c.library,
+                  notes: c.library.notes.filter((n) => n.id !== noteId),
+                },
+              }
+        )
+      );
+      await db.removeLibraryItem(noteId);
     },
     []
   );
@@ -363,8 +398,9 @@ export function useAkukoDb() {
     addScene,
     addLibraryImage,
     removeLibraryImage,
-    addLibraryFile,
-    removeLibraryFile,
+    addNote,
+    updateNote,
+    removeNote,
     addMusicLink,
     removeMusicLink,
   };

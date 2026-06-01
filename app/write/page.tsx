@@ -60,6 +60,11 @@ export default function WritePage() {
   const left = useColumnResize(LEFT_DEFAULT, LEFT_MIN, LEFT_MAX, 1);
   const right = useColumnResize(RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX, -1);
 
+  useEffect(() => {
+    const name = store.book?.title?.trim();
+    document.title = name ? `Hakuko – ${name}` : "Hakuko";
+  }, [store.book?.title]);
+
   if (!store.hydrated || !store.book || !store.activeChapter) {
     return <div className="h-full bg-[#18181a]" />;
   }
@@ -83,8 +88,9 @@ export default function WritePage() {
     chapter: store.activeChapter,
     onAddImage: store.addLibraryImage,
     onRemoveImage: store.removeLibraryImage,
-    onAddFile: store.addLibraryFile,
-    onRemoveFile: store.removeLibraryFile,
+    onAddNote: store.addNote,
+    onUpdateNote: store.updateNote,
+    onRemoveNote: store.removeNote,
     onAddMusicLink: store.addMusicLink,
     onRemoveMusicLink: store.removeMusicLink,
   };
@@ -97,7 +103,7 @@ export default function WritePage() {
           onClick={() => openPanel("left")}
           className={`p-1.5 rounded transition-opacity ${mobilePanel === "left" ? "opacity-100" : "opacity-50 hover:opacity-80"}`}
         >
-          <svg className="w-5 h-5 text-[#9b9890]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <svg className="w-5 h-5 text-[#585563]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
           </svg>
         </button>
@@ -146,13 +152,25 @@ export default function WritePage() {
 
       {/* ── Mobile slide-in panels ── */}
       {mobilePanel && (
-        <div className="md:hidden fixed inset-0 bg-black/50 z-30" onClick={() => setMobilePanel(null)} />
+        <div className="md:hidden fixed inset-0 bg-black/50 z-30" onClick={() => setMobilePanel(null)}>
+          {/* X button visible in the backdrop strip beside the left panel */}
+          {mobilePanel === "left" && (
+            <button
+              onClick={() => setMobilePanel(null)}
+              className="absolute top-4 right-3 w-8 h-8 flex items-center justify-center text-white/60 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
       )}
-      <div className={`md:hidden fixed top-0 bottom-0 left-0 z-40 w-[75vw] transition-transform duration-200 ${mobilePanel === "left" ? "translate-x-0" : "-translate-x-full"}`}>
+      <div className={`md:hidden fixed top-0 bottom-0 left-0 z-40 w-[calc(100%-44px)] transition-transform duration-200 ${mobilePanel === "left" ? "translate-x-0" : "-translate-x-full"}`}>
         <LeftColumn {...leftProps} onChapterClick={(id) => { store.setActiveChapter(id); setMobilePanel(null); }} onAddChapter={() => { store.addChapter(); setMobilePanel(null); }} />
       </div>
-      <div className={`md:hidden fixed top-0 bottom-0 right-0 z-40 w-[75vw] transition-transform duration-200 ${mobilePanel === "right" ? "translate-x-0" : "translate-x-full"}`}>
-        <RightColumn {...rightProps} />
+      <div className={`md:hidden fixed top-0 bottom-0 right-0 z-40 w-[85vw] transition-transform duration-200 ${mobilePanel === "right" ? "translate-x-0" : "translate-x-full"}`}>
+        <RightColumn {...rightProps} onClose={() => setMobilePanel(null)} />
       </div>
     </div>
   );

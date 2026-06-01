@@ -10,10 +10,11 @@ export interface LibraryImage {
   dataUrl: string;
 }
 
-export interface LibraryFile {
+export interface LibraryNote {
   id: string;
-  name: string;
-  content: string;
+  title: string;
+  body: string; // HTML — plain text + <em> tags only
+  position: number;
 }
 
 export interface LibraryMusicLink {
@@ -27,7 +28,7 @@ export interface LibraryMusicLink {
 
 export interface ChapterLibrary {
   images: LibraryImage[];
-  files: LibraryFile[];
+  notes: LibraryNote[];
   musicLinks: LibraryMusicLink[];
 }
 

@@ -6,7 +6,7 @@
  */
 
 import { createClient } from "./supabase/client";
-import { Book, Chapter, Scene, LibraryImage, LibraryFile, LibraryMusicLink } from "./types";
+import { Book, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink } from "./types";
 
 const UNLOCK_THRESHOLDS = [1000, 2000, 5000, 10000, 25000];
 
@@ -77,7 +77,7 @@ export async function getOrCreateBook(userId: string): Promise<{
     id: dbBook.id,
     title: dbBook.title,
     coverColor: dbBook.cover_color ?? "#2a2a2e",
-    coverImage: dbBook.cover_image_url ?? undefined,
+    coverImage: dbBook.cover_image_path ?? undefined,
     chapters: [],
     activeChapterId: chapters[0].id,
   };
@@ -86,7 +86,7 @@ export async function getOrCreateBook(userId: string): Promise<{
     id: c.id,
     title: c.title,
     scenes: [],
-    library: { images: [], files: [], musicLinks: [] },
+    library: { images: [], notes: [], musicLinks: [] },
   }));
 
   return { book, chapters: mappedChapters };
@@ -99,7 +99,7 @@ export async function updateBookTitle(bookId: string, title: string) {
 export async function updateBookCover(bookId: string, coverImageUrl: string | undefined) {
   await supabase()
     .from("books")
-    .update({ cover_image_url: coverImageUrl ?? null })
+    .update({ cover_image_path: coverImageUrl ?? null })
     .eq("id", bookId);
 }
 
@@ -142,7 +142,7 @@ export async function createChapter(bookId: string, position: number): Promise<C
     id: data.id,
     title: data.title,
     scenes: [],
-    library: { images: [], files: [], musicLinks: [] },
+    library: { images: [], notes: [], musicLinks: [] },
   };
 }
 
@@ -198,7 +198,7 @@ export async function saveScene(sceneId: string, patch: Partial<Pick<Scene, "lab
 
 export async function getLibraryForChapter(chapterId: string): Promise<{
   images: LibraryImage[];
-  files: LibraryFile[];
+  notes: LibraryNote[];
   musicLinks: LibraryMusicLink[];
 }> {
   const { data } = await supabase()
@@ -209,12 +209,11 @@ export async function getLibraryForChapter(chapterId: string): Promise<{
 
   const items = data ?? [];
   const images: LibraryImage[] = [];
-  const files: LibraryFile[] = [];
+  const notes: LibraryNote[] = [];
   const musicLinks: LibraryMusicLink[] = [];
 
   for (const item of items) {
     if (item.type === "image") {
-      // Generate signed URL for private storage
       let dataUrl = item.url ?? "";
       if (item.storage_path) {
         const { data: signed } = await supabase()
@@ -224,14 +223,12 @@ export async function getLibraryForChapter(chapterId: string): Promise<{
       }
       images.push({ id: item.id, name: item.filename ?? "", dataUrl });
     } else if (item.type === "text") {
-      let content = "";
-      if (item.storage_path) {
-        const { data: blob } = await supabase()
-          .storage.from("library-files")
-          .download(item.storage_path);
-        if (blob) content = await blob.text();
-      }
-      files.push({ id: item.id, name: item.filename ?? "", content });
+      notes.push({
+        id: item.id,
+        title: item.og_title ?? "",
+        body: item.og_description ?? "",
+        position: item.position ?? 0,
+      });
     } else if (item.type === "music") {
       musicLinks.push({
         id: item.id,
@@ -243,7 +240,7 @@ export async function getLibraryForChapter(chapterId: string): Promise<{
     }
   }
 
-  return { images, files, musicLinks };
+  return { images, notes, musicLinks };
 }
 
 export async function addLibraryImage(
@@ -306,35 +303,35 @@ export async function removeLibraryItem(itemId: string, storagePath?: string) {
   await db.from("library_items").delete().eq("id", itemId);
 }
 
-export async function addLibraryFile(
+export async function addNote(
   chapterId: string,
-  userId: string,
-  file: File,
+  note: { title: string; body: string },
   position: number
-): Promise<LibraryFile> {
-  const path = `${userId}/${chapterId}/files/${Date.now()}-${file.name}`;
-  const db = supabase();
-
-  const { error: uploadError } = await db.storage
-    .from("library-files")
-    .upload(path, file);
-  if (uploadError) throw uploadError;
-
-  const { data, error } = await db
+): Promise<LibraryNote> {
+  const { data, error } = await supabase()
     .from("library_items")
     .insert({
       chapter_id: chapterId,
       type: "text",
-      storage_path: path,
-      filename: file.name,
+      og_title: note.title,
+      og_description: note.body,
       position,
     })
     .select()
     .single();
   if (error) throw error;
+  return { id: data.id, title: note.title, body: note.body, position };
+}
 
-  const content = await file.text();
-  return { id: data.id, name: file.name, content };
+export async function updateNote(
+  noteId: string,
+  patch: { title?: string; body?: string }
+) {
+  const update: Record<string, string> = {};
+  if (patch.title !== undefined) update.og_title = patch.title;
+  if (patch.body !== undefined) update.og_description = patch.body;
+  if (Object.keys(update).length === 0) return;
+  await supabase().from("library_items").update(update).eq("id", noteId);
 }
 
 export async function addMusicLink(
