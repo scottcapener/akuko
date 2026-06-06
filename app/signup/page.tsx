@@ -97,10 +97,20 @@ export default function SignupPage() {
 
   // ── Detect returning user from email confirmation ──────────────────────
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
-      // User has confirmed email — skip step 1, go to phone (step 2)
-      // unless they're already past that (profile complete → middleware redirects)
+      // Already has a session. If their profile is complete, they're a
+      // finished user who shouldn't be here — send them to the editor.
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profile?.display_name) {
+        router.replace("/write");
+        return;
+      }
+      // Mid-signup (email confirmed, profile not finished) — resume at phone step.
       if (step === 1) setStep(2);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
