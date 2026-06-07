@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
     if (!email.trim()) { setError("Email is required."); return; }
     setLoading(true);
     const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin}/reset-password`,
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin}/auth/callback?next=/reset-password`,
     });
     setLoading(false);
     if (err) { setError(err.message); return; }
