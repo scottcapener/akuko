@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -52,6 +52,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
+
+  // Already logged in? Skip the login form.
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) router.replace("/write");
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleLogin() {
     setError("");

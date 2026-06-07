@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { createClient } from "@/lib/supabase/client";
 import { useAkukoDb } from "@/lib/useAkukoDb";
 import LeftColumn from "@/components/LeftColumn";
 import CenterColumn from "@/components/CenterColumn";
@@ -55,10 +57,19 @@ function useColumnResize(defaultPx: number, min: number, max: number, direction:
 }
 
 export default function WritePage() {
+  const router = useRouter();
   const store = useAkukoDb();
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
   const left = useColumnResize(LEFT_DEFAULT, LEFT_MIN, LEFT_MAX, 1);
   const right = useColumnResize(RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX, -1);
+
+  // Route guard: unauthenticated users go to /login.
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      if (!user) router.replace("/login");
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const name = store.book?.title?.trim();
