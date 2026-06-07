@@ -9,7 +9,7 @@ import type { User, Session } from "@supabase/supabase-js";
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <label className="block text-[11px] font-medium tracking-wide uppercase text-[#6b6966] mb-1.5">
+    <label className="block text-[11px] font-medium tracking-wide uppercase text-[#413E3C] mb-1.5">
       {children}
     </label>
   );
@@ -19,15 +19,15 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full bg-[#1f1f21] text-[#e8e6e3] text-sm px-3 py-2.5 rounded-lg border border-[#2a2a2c] placeholder:text-[#9b9890]/40 focus:outline-none focus:border-[#c4a882]/60 transition-colors ${props.className ?? ""}`}
+      className={`w-full bg-[#1C1B1B] text-[#E1E1DF] text-sm px-3 py-2.5 rounded-lg border border-[#252220] placeholder:text-[#413E3C]/50 focus:outline-none focus:border-[#755C4B]/60 transition-colors ${props.className ?? ""}`}
     />
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border border-[#2a2a2c] rounded-xl p-5 flex flex-col gap-4">
-      <h2 className="text-[11px] font-medium tracking-wide uppercase text-[#6b6966]">{title}</h2>
+    <section className="border border-[#1C1B1B] rounded-xl p-5 flex flex-col gap-4">
+      <h2 className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C]">{title}</h2>
       {children}
     </section>
   );
@@ -38,7 +38,7 @@ function SaveButton({ loading, onClick }: { loading?: boolean; onClick: () => vo
     <button
       onClick={onClick}
       disabled={loading}
-      className="px-4 py-2 rounded-lg bg-[#c4a882] text-[#18181a] text-xs font-semibold hover:bg-[#d4b892] disabled:opacity-50 transition-colors self-start"
+      className="px-4 py-2 rounded-lg bg-[#755C4B] text-[#E1E1DF] text-xs font-semibold hover:bg-[#8B6D5A] disabled:opacity-50 transition-colors self-start"
     >
       {loading ? "Saving…" : "Save"}
     </button>
@@ -152,23 +152,23 @@ export default function AccountPage() {
   }
 
   if (loading) {
-    return <div className="min-h-full bg-[#18181a]" />;
+    return <div className="min-h-full bg-[#100F0F]" />;
   }
 
   return (
-    <div className="min-h-full bg-[#18181a] px-6 py-10">
+    <div className="min-h-full bg-[#100F0F] px-6 py-10">
       <div className="max-w-lg mx-auto flex flex-col gap-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <Link href="/write">
-            <Image src="/hakuko-logo-large.svg" alt="Hakuko" width={72} height={17} className="opacity-60" />
+            <Image src="/hakuko-logo-large.svg" alt="Hakuko" width={67} height={17} className="opacity-60" />
           </Link>
-          <button onClick={handleSignOut} className="text-xs text-[#9b9890]/60 hover:text-[#9b9890] transition-colors">
+          <button onClick={handleSignOut} className="text-xs text-[#413E3C]/60 hover:text-[#413E3C] transition-colors">
             Sign out
           </button>
         </div>
 
-        <h1 className="text-[#e8e6e3] text-xl font-semibold">Account settings</h1>
+        <h1 className="text-[#E1E1DF] text-xl font-semibold">Account settings</h1>
 
         {/* Profile */}
         <Section title="Profile">
@@ -177,10 +177,10 @@ export default function AccountPage() {
             <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Your name" />
           </div>
           <div>
-            <Label>Pen name <span className="normal-case text-[#6b6966]/60">(optional)</span></Label>
+            <Label>Pen name <span className="normal-case text-[#413E3C]/60">(optional)</span></Label>
             <Input value={penName} onChange={(e) => setPenName(e.target.value)} placeholder="Your writing alias" />
           </div>
-          {profileMsg && <p className={`text-xs ${profileMsg === "Saved." ? "text-[#c4a882]" : "text-red-400"}`}>{profileMsg}</p>}
+          {profileMsg && <p className={`text-xs ${profileMsg === "Saved." ? "text-[#755C4B]" : "text-red-400"}`}>{profileMsg}</p>}
           <SaveButton loading={profileSaving} onClick={saveProfile} />
         </Section>
 
@@ -190,7 +190,7 @@ export default function AccountPage() {
             <Label>Email address</Label>
             <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
           </div>
-          {emailMsg && <p className={`text-xs ${emailMsg.includes("Confirmation") ? "text-[#c4a882]" : "text-red-400"}`}>{emailMsg}</p>}
+          {emailMsg && <p className={`text-xs ${emailMsg.includes("Confirmation") ? "text-[#755C4B]" : "text-red-400"}`}>{emailMsg}</p>}
           <SaveButton loading={emailSaving} onClick={saveEmail} />
         </Section>
 
@@ -200,19 +200,19 @@ export default function AccountPage() {
             <Label>New password</Label>
             <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Minimum 10 characters" />
           </div>
-          {passwordMsg && <p className={`text-xs ${passwordMsg === "Password updated." ? "text-[#c4a882]" : "text-red-400"}`}>{passwordMsg}</p>}
+          {passwordMsg && <p className={`text-xs ${passwordMsg === "Password updated." ? "text-[#755C4B]" : "text-red-400"}`}>{passwordMsg}</p>}
           <SaveButton loading={passwordSaving} onClick={savePassword} />
         </Section>
 
         {/* Active sessions */}
         <Section title="Active sessions">
           {sessions.length === 0 ? (
-            <p className="text-xs text-[#9b9890]/60 italic">No session info available.</p>
+            <p className="text-xs text-[#413E3C]/60 italic">No session info available.</p>
           ) : (
             sessions.map((s) => (
-              <div key={s.access_token.slice(-8)} className="flex items-center justify-between text-xs text-[#9b9890]">
+              <div key={s.access_token.slice(-8)} className="flex items-center justify-between text-xs text-[#413E3C]">
                 <span>Current session</span>
-                <span className="text-[#6b6966]">
+                <span className="text-[#413E3C]">
                   Expires {new Date((s.expires_at ?? 0) * 1000).toLocaleDateString()}
                 </span>
               </div>
@@ -222,7 +222,7 @@ export default function AccountPage() {
 
         {/* Delete account */}
         <Section title="Danger zone">
-          <p className="text-xs text-[#9b9890]">
+          <p className="text-xs text-[#413E3C]">
             Permanently delete your account and all your data. This cannot be undone.
           </p>
           <div>

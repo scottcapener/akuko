@@ -65,15 +65,16 @@ export default function LeftColumn({
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#18181a] border-r border-[#1f1f21] w-full">
+    <div className="flex flex-col h-full bg-[#100F0F] border-r border-[#1C1B1B] w-full">
       {/* Wordmark */}
       <div className="px-5 pt-6 pb-5 flex-shrink-0">
         <Image
           src="/hakuko-logo.svg"
           alt="Hakuko"
-          width={72}
+          width={65}
           height={17}
-          className="opacity-60"
+          style={{ filter: 'brightness(0) invert(1)' }}
+          className="opacity-40"
           priority
         />
       </div>
@@ -84,8 +85,8 @@ export default function LeftColumn({
         <div
           className={`w-full aspect-[2/3] rounded-md mb-3 relative overflow-hidden cursor-pointer group transition-colors ${
             coverDragging
-              ? "ring-1 ring-[#c4a882] bg-[#c4a882]/5"
-              : "bg-[#222224] hover:ring-1 hover:ring-[#2a2a2c]"
+              ? "ring-1 ring-[#755C4B] bg-[#755C4B]/5"
+              : "bg-[#1C1B1B] hover:ring-1 hover:ring-[#252220]"
           }`}
           style={!book.coverImage ? { backgroundColor: book.coverColor } : {}}
           onDragOver={(e) => {
@@ -104,7 +105,7 @@ export default function LeftColumn({
               className="w-full h-full object-cover"
             />
           ) : (
-            <span className="absolute inset-0 flex items-center justify-center text-[#9b9890] text-xs uppercase tracking-widest opacity-30 select-none group-hover:opacity-60 transition-opacity">
+            <span className="absolute inset-0 flex items-center justify-center text-[#413E3C] text-xs uppercase tracking-widest opacity-30 select-none group-hover:opacity-60 transition-opacity">
               Cover
             </span>
           )}
@@ -146,7 +147,7 @@ export default function LeftColumn({
         {editingTitle ? (
           <input
             autoFocus
-            className="w-full bg-transparent text-sm font-medium text-[#e8e6e3] border-b border-[#c4a882] pb-0.5 focus:outline-none"
+            className="w-full bg-transparent text-sm font-medium text-[#E1E1DF] border-b border-[#755C4B] pb-0.5 focus:outline-none"
             value={titleDraft}
             onChange={(e) => setTitleDraft(e.target.value)}
             onBlur={commitTitle}
@@ -160,7 +161,7 @@ export default function LeftColumn({
           />
         ) : (
           <button
-            className="w-full text-left text-sm font-medium text-[#e8e6e3] hover:text-[#c4a882] transition-colors truncate"
+            className="w-full text-left text-sm font-medium text-[#E1E1DF] hover:text-[#755C4B] transition-colors truncate"
             onClick={() => {
               setTitleDraft(book.title);
               setEditingTitle(true);
@@ -173,7 +174,7 @@ export default function LeftColumn({
 
       {/* Chapter grid */}
       <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <p className="text-[11px] font-medium tracking-wide uppercase text-[#6b6966] mb-2">
+        <p className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C] mb-2">
           Chapters
         </p>
         <div className="grid grid-cols-3 gap-1.5">
@@ -191,8 +192,8 @@ export default function LeftColumn({
                 transition-colors truncate leading-tight
                 ${
                   ch.id === activeChapter.id
-                    ? "bg-[#2e2b27] text-[#c4a882] ring-1 ring-[#c4a882]/40"
-                    : "bg-[#222224] text-[#9b9890] hover:bg-[#2a2a2c] hover:text-[#e8e6e3]"
+                    ? "bg-[#1C1B1B] text-[#755C4B] ring-1 ring-[#755C4B]/40"
+                    : "bg-[#1C1B1B] text-[#413E3C] hover:bg-[#252220] hover:text-[#E1E1DF]"
                 }
               `}
               title={ch.title}
@@ -204,7 +205,7 @@ export default function LeftColumn({
           {/* Add chapter slot — plus always visible */}
           <button
             onClick={onAddChapter}
-            className="aspect-[3/4] rounded bg-[#222224] text-[#9b9890] hover:bg-[#2a2a2c] hover:text-[#c4a882] transition-colors flex items-center justify-center"
+            className="aspect-[3/4] rounded bg-[#1C1B1B] text-[#413E3C] hover:bg-[#252220] hover:text-[#755C4B] transition-colors flex items-center justify-center"
             title="Add chapter"
           >
             <Image src="/plus.svg" alt="Add chapter" width={14} height={14} className="opacity-50 hover:opacity-100 transition-opacity" />
@@ -213,10 +214,10 @@ export default function LeftColumn({
       </div>
 
       {/* Avatar */}
-      <div className="px-4 pb-5 flex-shrink-0 border-t border-[#1f1f21] pt-3">
-        <div className="w-8 h-8 rounded-full bg-[#2a2a2c] flex items-center justify-center">
+      <div className="px-4 pb-5 flex-shrink-0 border-t border-[#1C1B1B] pt-3">
+        <div className="w-8 h-8 rounded-full bg-[#1C1B1B] flex items-center justify-center">
           <svg
-            className="w-4 h-4 text-[#9b9890]"
+            className="w-4 h-4 text-[#413E3C]"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"

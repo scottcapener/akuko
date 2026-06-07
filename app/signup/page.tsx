@@ -19,14 +19,14 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
   if (score <= 1) return { score, label: "Weak", color: "#ef4444" };
   if (score <= 2) return { score, label: "Fair", color: "#f59e0b" };
   if (score <= 3) return { score, label: "Good", color: "#84cc16" };
-  return { score, label: "Strong", color: "#c4a882" };
+  return { score, label: "Strong", color: "#755C4B" };
 }
 
 // ── Shared UI atoms ─────────────────────────────────────────────────────────
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <label className="block text-[11px] font-medium tracking-wide uppercase text-[#6b6966] mb-1.5">
+    <label className="block text-[11px] font-medium tracking-wide uppercase text-[#413E3C] mb-1.5">
       {children}
     </label>
   );
@@ -36,7 +36,7 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full bg-[#1f1f21] text-[#e8e6e3] text-sm px-3 py-2.5 rounded-lg border border-[#2a2a2c] placeholder:text-[#9b9890]/40 focus:outline-none focus:border-[#c4a882]/60 transition-colors ${props.className ?? ""}`}
+      className={`w-full bg-[#1C1B1B] text-[#E1E1DF] text-sm px-3 py-2.5 rounded-lg border border-[#252220] placeholder:text-[#413E3C]/50 focus:outline-none focus:border-[#755C4B]/60 transition-colors ${props.className ?? ""}`}
     />
   );
 }
@@ -50,7 +50,7 @@ function PrimaryButton({
     <button
       {...props}
       disabled={loading || props.disabled}
-      className="w-full py-2.5 rounded-lg bg-[#c4a882] text-[#18181a] text-sm font-semibold tracking-wide hover:bg-[#d4b892] disabled:opacity-50 transition-colors"
+      className="w-full py-2.5 rounded-lg bg-[#755C4B] text-[#E1E1DF] text-sm font-semibold tracking-wide hover:bg-[#8B6D5A] disabled:opacity-50 transition-colors"
     >
       {loading ? "Please wait…" : children}
     </button>
@@ -209,20 +209,20 @@ export default function SignupPage() {
   const stepProgress = (step / 4) * 100;
 
   return (
-    <div className="min-h-full flex flex-col items-center justify-center bg-[#18181a] px-6 py-12">
+    <div className="min-h-full flex flex-col items-center justify-center bg-[#100F0F] px-6 py-12">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8 gap-4">
           <Link href="/">
-            <Image src="/hakuko-logo-large.svg" alt="Hakuko" width={80} height={19} className="opacity-60" />
+            <Image src="/hakuko-logo-large.svg" alt="Hakuko" width={75} height={19} className="opacity-60" />
           </Link>
           <div className="w-full">
-            <div className="flex justify-between text-[10px] text-[#6b6966] uppercase tracking-wide mb-1.5">
+            <div className="flex justify-between text-[10px] text-[#413E3C] uppercase tracking-wide mb-1.5">
               <span>{stepLabel}</span>
               <span>{step} / 4</span>
             </div>
-            <div className="h-px bg-[#2a2a2c] rounded-full overflow-hidden">
+            <div className="h-px bg-[#1C1B1B] rounded-full overflow-hidden">
               <div
-                className="h-full bg-[#c4a882] rounded-full transition-all duration-300"
+                className="h-full bg-[#755C4B] rounded-full transition-all duration-300"
                 style={{ width: `${stepProgress}%` }}
               />
             </div>
@@ -232,7 +232,7 @@ export default function SignupPage() {
         {/* Step 1 — Email + password */}
         {step === 1 && (
           <div className="flex flex-col gap-4">
-            <h1 className="text-[#e8e6e3] text-lg font-semibold">Create your account</h1>
+            <h1 className="text-[#E1E1DF] text-lg font-semibold">Create your account</h1>
             <div>
               <Label>Email</Label>
               <Input type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleStep1()} />
@@ -251,14 +251,14 @@ export default function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9b9890]/60 hover:text-[#9b9890] text-xs"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#413E3C]/60 hover:text-[#413E3C] text-xs"
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
               {password.length > 0 && (
                 <div className="mt-2 flex items-center gap-2">
-                  <div className="flex-1 h-0.5 bg-[#2a2a2c] rounded-full overflow-hidden">
+                  <div className="flex-1 h-0.5 bg-[#1C1B1B] rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-300"
                       style={{
@@ -275,9 +275,9 @@ export default function SignupPage() {
             </div>
             <ErrorMsg msg={error} />
             <PrimaryButton loading={loading} onClick={handleStep1}>Continue</PrimaryButton>
-            <p className="text-center text-[#9b9890]/60 text-xs">
+            <p className="text-center text-[#413E3C]/60 text-xs">
               Already have an account?{" "}
-              <Link href="/login" className="text-[#9b9890] hover:text-[#c4a882] underline underline-offset-2">Log in</Link>
+              <Link href="/login" className="text-[#413E3C] hover:text-[#755C4B] underline underline-offset-2">Log in</Link>
             </p>
           </div>
         )}
@@ -286,8 +286,8 @@ export default function SignupPage() {
         {step === 2 && (
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="text-[#e8e6e3] text-lg font-semibold">Add your phone</h1>
-              <p className="text-[#9b9890] text-xs mt-1">We'll send a one-time code to verify.</p>
+              <h1 className="text-[#E1E1DF] text-lg font-semibold">Add your phone</h1>
+              <p className="text-[#413E3C] text-xs mt-1">We'll send a one-time code to verify.</p>
             </div>
             <div>
               <Label>Phone number (international format)</Label>
@@ -309,8 +309,8 @@ export default function SignupPage() {
         {step === 3 && (
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="text-[#e8e6e3] text-lg font-semibold">Enter the code</h1>
-              <p className="text-[#9b9890] text-xs mt-1">Sent to {phone}. Valid for 10 minutes.</p>
+              <h1 className="text-[#E1E1DF] text-lg font-semibold">Enter the code</h1>
+              <p className="text-[#413E3C] text-xs mt-1">Sent to {phone}. Valid for 10 minutes.</p>
             </div>
             <div>
               <Label>6-digit code</Label>
@@ -328,7 +328,7 @@ export default function SignupPage() {
             <ErrorMsg msg={error} />
             <PrimaryButton loading={loading} onClick={handleStep3}>Verify</PrimaryButton>
             <button
-              className="text-xs text-[#9b9890]/60 hover:text-[#9b9890] transition-colors disabled:opacity-40"
+              className="text-xs text-[#413E3C]/60 hover:text-[#413E3C] transition-colors disabled:opacity-40"
               disabled={resendCooldown > 0}
               onClick={handleResend}
             >
@@ -341,8 +341,8 @@ export default function SignupPage() {
         {step === 4 && (
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="text-[#e8e6e3] text-lg font-semibold">One last thing</h1>
-              <p className="text-[#9b9890] text-xs mt-1">How should we call you?</p>
+              <h1 className="text-[#E1E1DF] text-lg font-semibold">One last thing</h1>
+              <p className="text-[#413E3C] text-xs mt-1">How should we call you?</p>
             </div>
             <div>
               <Label>Display name</Label>
@@ -356,7 +356,7 @@ export default function SignupPage() {
               />
             </div>
             <div>
-              <Label>Pen name <span className="normal-case text-[#6b6966]/60">(optional)</span></Label>
+              <Label>Pen name <span className="normal-case text-[#413E3C]/60">(optional)</span></Label>
               <Input
                 type="text"
                 placeholder="Your writing alias"

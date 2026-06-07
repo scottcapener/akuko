@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <label className="block text-[11px] font-medium tracking-wide uppercase text-[#6b6966] mb-1.5">
+    <label className="block text-[11px] font-medium tracking-wide uppercase text-[#413E3C] mb-1.5">
       {children}
     </label>
   );
@@ -18,7 +18,7 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full bg-[#1f1f21] text-[#e8e6e3] text-sm px-3 py-2.5 rounded-lg border border-[#2a2a2c] placeholder:text-[#9b9890]/40 focus:outline-none focus:border-[#c4a882]/60 transition-colors ${props.className ?? ""}`}
+      className={`w-full bg-[#1C1B1B] text-[#E1E1DF] text-sm px-3 py-2.5 rounded-lg border border-[#252220] placeholder:text-[#413E3C]/50 focus:outline-none focus:border-[#755C4B]/60 transition-colors ${props.className ?? ""}`}
     />
   );
 }
@@ -32,7 +32,7 @@ function PrimaryButton({
     <button
       {...props}
       disabled={loading || props.disabled}
-      className="w-full py-2.5 rounded-lg bg-[#c4a882] text-[#18181a] text-sm font-semibold tracking-wide hover:bg-[#d4b892] disabled:opacity-50 transition-colors"
+      className="w-full py-2.5 rounded-lg bg-[#755C4B] text-[#E1E1DF] text-sm font-semibold tracking-wide hover:bg-[#8B6D5A] disabled:opacity-50 transition-colors"
     >
       {loading ? "Please wait…" : children}
     </button>
@@ -103,17 +103,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-full flex flex-col items-center justify-center bg-[#18181a] px-6 py-12">
+    <div className="min-h-full flex flex-col items-center justify-center bg-[#100F0F] px-6 py-12">
       <div className="w-full max-w-sm flex flex-col gap-8">
         <div className="flex justify-center">
           <Link href="/">
-            <Image src="/hakuko-logo-large.svg" alt="Hakuko" width={80} height={19} className="opacity-60" />
+            <Image src="/hakuko-logo-large.svg" alt="Hakuko" width={75} height={19} className="opacity-60" />
           </Link>
         </div>
 
         {step === "credentials" && (
           <div className="flex flex-col gap-4">
-            <h1 className="text-[#e8e6e3] text-lg font-semibold">Welcome back</h1>
+            <h1 className="text-[#E1E1DF] text-lg font-semibold">Welcome back</h1>
             <div>
               <Label>Email</Label>
               <Input type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
@@ -124,9 +124,9 @@ export default function LoginPage() {
             </div>
             {error && <p className="text-red-400 text-xs">{error}</p>}
             <PrimaryButton loading={loading} onClick={handleLogin}>Log in</PrimaryButton>
-            <p className="text-center text-[#9b9890]/60 text-xs">
+            <p className="text-center text-[#413E3C]/60 text-xs">
               Don&apos;t have an account?{" "}
-              <Link href="/signup" className="text-[#9b9890] hover:text-[#c4a882] underline underline-offset-2">Sign up</Link>
+              <Link href="/signup" className="text-[#413E3C] hover:text-[#755C4B] underline underline-offset-2">Sign up</Link>
             </p>
           </div>
         )}
@@ -134,8 +134,8 @@ export default function LoginPage() {
         {step === "otp" && (
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="text-[#e8e6e3] text-lg font-semibold">Verify your phone</h1>
-              <p className="text-[#9b9890] text-xs mt-1">A code was sent to {phone}.</p>
+              <h1 className="text-[#E1E1DF] text-lg font-semibold">Verify your phone</h1>
+              <p className="text-[#413E3C] text-xs mt-1">A code was sent to {phone}.</p>
             </div>
             <div>
               <Label>6-digit code</Label>
@@ -152,7 +152,7 @@ export default function LoginPage() {
             </div>
             {error && <p className="text-red-400 text-xs">{error}</p>}
             <PrimaryButton loading={loading} onClick={handleOtp}>Verify</PrimaryButton>
-            <button className="text-xs text-[#9b9890]/60 hover:text-[#9b9890]" onClick={() => setStep("credentials")}>
+            <button className="text-xs text-[#413E3C]/60 hover:text-[#413E3C]" onClick={() => setStep("credentials")}>
               ← Back
             </button>
           </div>
