@@ -121,6 +121,9 @@ export default function LoginPage() {
             <div>
               <Label>Password</Label>
               <Input type="password" autoComplete="current-password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
+              <div className="flex justify-end mt-1.5">
+                <Link href="/forgot-password" className="text-[11px] text-[#413E3C]/60 hover:text-[#755C4B] transition-colors">Forgot password?</Link>
+              </div>
             </div>
             {error && <p className="text-red-400 text-xs">{error}</p>}
             <PrimaryButton loading={loading} onClick={handleLogin}>Log in</PrimaryButton>

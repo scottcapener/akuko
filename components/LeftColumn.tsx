@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { Book, Chapter } from "@/lib/types";
 
 interface Props {
@@ -23,11 +26,31 @@ export default function LeftColumn({
   onReorderChapters,
   onCoverImage,
 }: Props) {
+  const router = useRouter();
+  const supabase = createClient();
+
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(book.title);
   const [coverDragging, setCoverDragging] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const dragIndex = useRef<number | null>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.push("/");
+  }
 
   function commitTitle() {
     setEditingTitle(false);
@@ -213,23 +236,32 @@ export default function LeftColumn({
         </div>
       </div>
 
-      {/* Avatar */}
-      <div className="px-4 pb-5 flex-shrink-0 border-t border-[#1C1B1B] pt-3">
-        <div className="w-8 h-8 rounded-full bg-[#1C1B1B] flex items-center justify-center">
-          <svg
-            className="w-4 h-4 text-[#413E3C]"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={1.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-            />
-          </svg>
-        </div>
+      {/* User menu */}
+      <div ref={menuRef} className="px-4 pb-5 flex-shrink-0 border-t border-[#1C1B1B] pt-3 relative">
+        {menuOpen && (
+          <div className="absolute bottom-full left-4 mb-2 w-40 bg-[#1C1B1B] border border-[#252220] rounded-lg shadow-lg overflow-hidden">
+            <Link
+              href="/account"
+              onClick={() => setMenuOpen(false)}
+              className="block w-full text-left px-4 py-2.5 text-xs text-[#E1E1DF] hover:bg-[#252220] transition-colors"
+            >
+              Account
+            </Link>
+            <button
+              onClick={handleSignOut}
+              className="block w-full text-left px-4 py-2.5 text-xs text-[#755C4B] hover:bg-[#252220] transition-colors"
+            >
+              Log out
+            </button>
+          </div>
+        )}
+        <button
+          onClick={() => setMenuOpen((o) => !o)}
+          className="text-[#413E3C] hover:text-[#E1E1DF] transition-colors text-base font-bold tracking-widest leading-none px-1"
+          title="Account"
+        >
+          •••
+        </button>
       </div>
     </div>
   );
