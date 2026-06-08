@@ -6,11 +6,10 @@ export default function LandingPage() {
     <div className="min-h-full flex flex-col items-center justify-center bg-[#100F0F] px-6 text-center">
       <div className="flex flex-col items-center gap-8 max-w-sm w-full">
         <Image
-          src="/hakuko-logo-large.svg"
+          src="/logo-L.svg"
           alt="Hakuko"
-          width={110}
-          height={28}
-          className="opacity-60"
+          width={143}
+          height={36}
           priority
         />
         <p className="text-[#413E3C] text-base font-light tracking-wide">

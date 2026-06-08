@@ -92,12 +92,11 @@ export default function LeftColumn({
       {/* Wordmark */}
       <div className="px-5 pt-6 pb-5 flex-shrink-0">
         <Image
-          src="/hakuko-logo.svg"
+          src="/logo-S.svg"
           alt="Hakuko"
-          width={65}
-          height={17}
+          width={85}
+          height={22}
           style={{ filter: 'brightness(0) invert(1)' }}
-          className="opacity-40"
           priority
         />
       </div>
