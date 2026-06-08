@@ -102,16 +102,16 @@ export default function LeftColumn({
         />
       </div>
 
-      {/* Book cover + title */}
-      <div className="px-4 pb-4 flex-shrink-0">
+      {/* Scrollable: cover + title + chapters */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
         {/* Cover — drag-and-droppable */}
+        <div className="mb-3">
         <div
-          className={`w-full aspect-[2/3] rounded-md mb-3 relative overflow-hidden cursor-pointer group transition-colors ${
+          className={`w-full max-w-[140px] md:max-w-none aspect-[2/3] rounded-md relative overflow-hidden cursor-pointer group transition-colors ${
             coverDragging
               ? "ring-1 ring-[#755C4B] bg-[#755C4B]/5"
               : "bg-[#1C1B1B] hover:ring-1 hover:ring-[#252220]"
           }`}
-          style={!book.coverImage ? { backgroundColor: book.coverColor } : {}}
           onDragOver={(e) => {
             e.preventDefault();
             setCoverDragging(true);
@@ -193,11 +193,10 @@ export default function LeftColumn({
             {book.title}
           </button>
         )}
-      </div>
+        </div>
 
-      {/* Chapter grid */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <p className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C] mb-2">
+        {/* Chapter grid */}
+        <p className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C] mb-2 mt-4">
           Chapters
         </p>
         <div className="grid grid-cols-3 gap-1.5">
