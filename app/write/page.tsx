@@ -114,16 +114,16 @@ export default function WritePage() {
           onClick={() => openPanel("left")}
           className={`p-1.5 rounded transition-opacity ${mobilePanel === "left" ? "opacity-100" : "opacity-50 hover:opacity-80"}`}
         >
-          <svg className="w-5 h-5 text-[#413E3C]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <svg className="w-7 h-7 text-[#413E3C]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
           </svg>
         </button>
-        <Image src="/hakuko-logo.svg" alt="Hakuko" width={46} height={12} style={{ filter: 'brightness(0) invert(1)' }} className="opacity-40" />
+        <Image src="/logo-S.svg" alt="Hakuko" width={75} height={20} style={{ filter: 'brightness(0) invert(1)' }} />
         <button
           onClick={() => openPanel("right")}
           className={`p-1.5 rounded transition-opacity ${mobilePanel === "right" ? "opacity-100" : "opacity-50 hover:opacity-80"}`}
         >
-          <Image src="/library.svg" alt="Library" width={20} height={20} />
+          <Image src="/library.svg" alt="Library" width={28} height={28} />
         </button>
       </header>
 

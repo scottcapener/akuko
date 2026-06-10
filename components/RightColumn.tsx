@@ -131,7 +131,7 @@ function NoteLightbox({
             value={note.title}
             onChange={(e) => onUpdate(note.id, { title: e.target.value })}
             placeholder="Worldbuilding, character arc, story beats…"
-            className="w-full bg-transparent text-[#E1E1DF] text-sm font-bold placeholder:text-[#413E3C]/35 focus:outline-none"
+            className="w-full bg-transparent text-[#E1E1DF] text-base font-bold placeholder:text-[#413E3C]/35 focus:outline-none"
           />
         </div>
 
@@ -397,7 +397,7 @@ export default function RightColumn({
                 if (e.key === "Enter") handleMusicAdd();
                 if (e.key === "Escape") { setMusicModalOpen(false); setMusicUrl(""); }
               }}
-              className="w-full bg-[#100F0F] text-[#E1E1DF] text-sm px-3 py-2.5 rounded-lg border border-[#252220] placeholder:text-[#413E3C]/50 focus:outline-none focus:border-[#755C4B]/60 transition-colors"
+              className="w-full bg-[#100F0F] text-[#E1E1DF] text-base px-3 py-2.5 rounded-lg border border-[#252220] placeholder:text-[#413E3C]/50 focus:outline-none focus:border-[#755C4B]/60 transition-colors"
             />
             <button
               onClick={handleMusicAdd}

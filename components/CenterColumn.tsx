@@ -84,7 +84,7 @@ function SceneBlock({
         onClick={(e) => e.stopPropagation()}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        className="w-full bg-transparent text-[11px] font-medium tracking-wide uppercase text-[#413E3C] placeholder:text-[#413E3C]/50 mb-2 focus:outline-none cursor-text"
+        className="w-full bg-transparent text-base font-medium tracking-wide uppercase text-[#413E3C] placeholder:text-[#413E3C]/50 mb-2 focus:outline-none cursor-text"
         style={{ fontFamily: "inherit" }}
       />
 

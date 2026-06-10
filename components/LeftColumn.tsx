@@ -169,7 +169,7 @@ export default function LeftColumn({
         {editingTitle ? (
           <input
             autoFocus
-            className="w-full bg-transparent text-sm font-medium text-[#E1E1DF] border-b border-[#755C4B] pb-0.5 focus:outline-none"
+            className="w-full bg-transparent text-base font-medium text-[#E1E1DF] border-b border-[#755C4B] pb-0.5 focus:outline-none"
             value={titleDraft}
             onChange={(e) => setTitleDraft(e.target.value)}
             onBlur={commitTitle}

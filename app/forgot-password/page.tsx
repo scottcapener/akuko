@@ -17,7 +17,7 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full bg-[#1C1B1B] text-[#E1E1DF] text-sm px-3 py-2.5 rounded-lg border border-[#252220] placeholder:text-[#413E3C]/50 focus:outline-none focus:border-[#755C4B]/60 transition-colors ${props.className ?? ""}`}
+      className={`w-full bg-[#1C1B1B] text-[#E1E1DF] text-base px-3 py-2.5 rounded-lg border border-[#252220] placeholder:text-[#413E3C]/50 focus:outline-none focus:border-[#755C4B]/60 transition-colors ${props.className ?? ""}`}
     />
   );
 }
