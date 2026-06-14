@@ -39,6 +39,8 @@ export function useAkukoDb() {
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guard against React StrictMode double-invocation creating duplicate books
   const initialized = useRef(false);
+  // Tracks chapters whose scenes/library have already been fetched from DB
+  const loadedChapterIds = useRef(new Set<string>());
 
   // ── Bootstrap ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -63,6 +65,7 @@ export function useAkukoDb() {
         loadedChapters[0] = { ...loadedChapters[0], library };
       }
 
+      if (firstChapter) loadedChapterIds.current.add(firstChapter.id);
       setBook({ ...loadedBook, activeChapterId: loadedChapters[0]?.id ?? "" });
       setChapters(loadedChapters);
       setActiveChapterId(loadedChapters[0]?.id ?? null);
@@ -72,12 +75,9 @@ export function useAkukoDb() {
 
   // ── Load chapter data on switch ───────────────────────────────────────
   const loadChapter = useCallback(async (chapterId: string) => {
-    setChapters((prev) => {
-      const existing = prev.find((c) => c.id === chapterId);
-      // If already loaded (has scenes array populated from DB), skip
-      if (existing && existing.scenes.length > 0) return prev;
-      return prev;
-    });
+    // Skip if already loaded — prevents stale DB data from overwriting unsaved edits
+    if (loadedChapterIds.current.has(chapterId)) return;
+    loadedChapterIds.current.add(chapterId);
 
     const [scenes, library] = await Promise.all([
       db.getScenesForChapter(chapterId),
@@ -154,6 +154,7 @@ export function useAkukoDb() {
     // Load default scene
     const scenes = await db.getScenesForChapter(newChapter.id);
     const fullChapter = { ...newChapter, scenes };
+    loadedChapterIds.current.add(newChapter.id);
     setChapters((prev) => [...prev, fullChapter]);
     setActiveChapterId(newChapter.id);
     setBook((b) => (b ? { ...b, activeChapterId: newChapter.id } : b));
