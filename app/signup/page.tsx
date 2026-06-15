@@ -302,6 +302,9 @@ export default function SignupPage() {
             </div>
             <ErrorMsg msg={error} />
             <PrimaryButton loading={loading} onClick={handleStep2}>Send code</PrimaryButton>
+            <p className="text-[#413E3C]/70 text-[11px] leading-relaxed text-center">
+              By tapping Send code, you agree to receive one SMS for verification. Standard message and data rates may apply. We won&apos;t send you any other messages.
+            </p>
           </div>
         )}
 
