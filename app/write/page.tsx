@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
-import { useAkukoDb } from "@/lib/useAkukoDb";
+import { useHotCocoaDb } from "@/lib/useHotCocoaDb";
 import LeftColumn from "@/components/LeftColumn";
 import CenterColumn from "@/components/CenterColumn";
 import RightColumn from "@/components/RightColumn";
@@ -58,7 +58,7 @@ function useColumnResize(defaultPx: number, min: number, max: number, direction:
 
 export default function WritePage() {
   const router = useRouter();
-  const store = useAkukoDb();
+  const store = useHotCocoaDb();
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
   const left = useColumnResize(LEFT_DEFAULT, LEFT_MIN, LEFT_MAX, 1);
   const right = useColumnResize(RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX, -1);
@@ -73,7 +73,7 @@ export default function WritePage() {
 
   useEffect(() => {
     const name = store.book?.title?.trim();
-    document.title = name ? `Hakuko – ${name}` : "Hakuko";
+    document.title = name ? `Hot Cocoa – ${name}` : "Hot Cocoa";
   }, [store.book?.title]);
 
   if (!store.hydrated || !store.book || !store.activeChapter) {
@@ -118,7 +118,7 @@ export default function WritePage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
           </svg>
         </button>
-        <Image src="/logo-S.svg" alt="Hakuko" width={75} height={20} style={{ filter: 'brightness(0) invert(1)' }} />
+        <Image src="/logo-S.svg" alt="Hot Cocoa" width={105} height={20} style={{ filter: 'brightness(0) invert(1)' }} />
         <button
           onClick={() => openPanel("right")}
           className={`p-1.5 rounded transition-opacity ${mobilePanel === "right" ? "opacity-100" : "opacity-50 hover:opacity-80"}`}

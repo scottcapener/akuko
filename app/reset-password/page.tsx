@@ -77,7 +77,7 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-sm flex flex-col gap-8">
         <div className="flex justify-center">
           <Link href="/">
-            <Image src="/logo-L.svg" alt="Hakuko" width={98} height={25} />
+            <Image src="/logo-L.svg" alt="Hot Cocoa" width={90} height={52} />
           </Link>
         </div>
 

@@ -213,7 +213,7 @@ export default function SignupPage() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8 gap-4">
           <Link href="/">
-            <Image src="/logo-L.svg" alt="Hakuko" width={98} height={25} />
+            <Image src="/logo-L.svg" alt="Hot Cocoa" width={90} height={52} />
           </Link>
           <div className="w-full">
             <div className="flex justify-between text-[10px] text-[#413E3C] uppercase tracking-wide mb-1.5">

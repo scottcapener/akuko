@@ -1,15 +1,15 @@
 # Deployment Notes
 
-Hakuko is a Next.js 16 (App Router, Turbopack) app deployed on **Vercel**, with
+Hot Cocoa is a Next.js 16 (App Router, Turbopack) app deployed on **Vercel**, with
 **Supabase** for auth, database, and storage. Production lives at
-**https://hakuko.app**.
+**https://hotcocoa.app**.
 
 ## Production stack
 
 | Piece | Where | Notes |
 |-------|-------|-------|
-| Hosting | Vercel (project `akuko`) | Auto-deploys from `main` |
-| Domain | `hakuko.app` (Porkbun DNS) | Apex 307-redirects to `www.hakuko.app` |
+| Hosting | Vercel (project `hot-cocoa`) | Auto-deploys from `main` |
+| Domain | `hotcocoa.app` (Porkbun DNS) | Apex 307-redirects to `www.hotcocoa.app` |
 | Auth / DB / Storage | Supabase (`hvtghcpfvmechtbpblow`) | RLS-protected |
 | SMS OTP | Twilio | Phone verification pending as of launch |
 
@@ -17,13 +17,13 @@ Hakuko is a Next.js 16 (App Router, Turbopack) app deployed on **Vercel**, with
 
 | Type | Host | Value |
 |------|------|-------|
-| A | `hakuko.app` | `216.198.79.1` (Vercel anycast ingress) |
-| CNAME | `www.hakuko.app` | `<hash>.vercel-dns-017.com` (from Vercel) |
+| A | `hotcocoa.app` | `216.198.79.1` (Vercel anycast ingress) |
+| CNAME | `www.hotcocoa.app` | `<hash>.vercel-dns-017.com` (new value issued by Vercel for this domain) |
 
 ## Supabase auth URL config
 
-- **Site URL**: `https://hakuko.app`
-- **Redirect URLs**: `https://hakuko.app/**`
+- **Site URL**: `https://hotcocoa.app`
+- **Redirect URLs**: `https://hotcocoa.app/**`
 
 ## Hard-won gotchas (read before debugging a prod issue)
 
@@ -61,7 +61,7 @@ Requires Node 20.9+ (project uses nvm; `nvm use` / Node 22 locally).
 
 ## Remaining launch checklist
 
-- [ ] Test live signup end-to-end at https://hakuko.app/signup
+- [ ] Test live signup end-to-end at https://hotcocoa.app/signup
 - [ ] Re-enable "Confirm email" in Supabase (Auth → Providers → Email)
-- [ ] Resubmit Twilio number verification with `https://hakuko.app/signup` as the
+- [ ] Resubmit Twilio number verification with `https://hotcocoa.app/signup` as the
       opt-in URL (requires the public site, which is now live)

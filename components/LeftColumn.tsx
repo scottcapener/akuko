@@ -93,8 +93,8 @@ export default function LeftColumn({
       <div className="px-5 pt-6 pb-5 flex-shrink-0">
         <Image
           src="/logo-S.svg"
-          alt="Hakuko"
-          width={85}
+          alt="Hot Cocoa"
+          width={115}
           height={22}
           style={{ filter: 'brightness(0) invert(1)' }}
           priority

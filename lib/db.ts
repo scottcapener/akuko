@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * All Supabase data operations for Akuko.
- * Used by useAkukoDb hook — never call directly from components.
+ * All Supabase data operations for Hot Cocoa.
+ * Used by useHotCocoaDb hook — never call directly from components.
  */
 
 import { createClient } from "./supabase/client";
