@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { Chapter, Scene, LibraryImage } from "@/lib/types";
-import { SaveStatus } from "@/lib/useAkukoDb";
+import { SaveStatus } from "@/lib/useHotCocoaDb";
 
 interface Props {
   chapter: Chapter;

@@ -22,7 +22,7 @@ function wordCountAll(chapters: Chapter[]): number {
   );
 }
 
-export function useAkukoDb() {
+export function useHotCocoaDb() {
   const [userId, setUserId] = useState<string | null>(null);
   const [book, setBook] = useState<Book | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);

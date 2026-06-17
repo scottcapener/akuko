@@ -30,9 +30,9 @@ export default function LandingPage() {
         <h1>
           <Image
             src="/logo-L.svg"
-            alt="Hakuko"
-            width={143}
-            height={36}
+            alt="Hot Cocoa"
+            width={150}
+            height={87}
             priority
           />
         </h1>
@@ -73,7 +73,7 @@ export default function LandingPage() {
       <section className="px-6 py-20 border-t border-[#1e1c1b] flex justify-center">
         <div className="max-w-[480px]">
           <p className="text-[#9b9890] text-sm leading-relaxed">
-            Hakuko is an independent writing platform made for people who want
+            Hot Cocoa is an independent writing platform made for people who want
             to write their first book and actually finish it. Your writing is
             private by default, belongs to you completely, and is never used to
             train AI systems.
@@ -84,7 +84,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="px-6 py-10 border-t border-[#1e1c1b] text-center">
-        <p className="text-[#413E3C] text-xs">© 2026 Hakuko</p>
+        <p className="text-[#413E3C] text-xs">© 2026 Hot Cocoa</p>
       </footer>
     </div>
   );

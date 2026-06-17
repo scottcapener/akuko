@@ -86,7 +86,7 @@ export default function AccountPage() {
 
         {/* Back link */}
         <Link href="/write" className="text-xs text-[#413E3C]/60 hover:text-[#413E3C] transition-colors self-start">
-          ← Back to Akuko
+          ← Back to Hot Cocoa
         </Link>
 
         <h1 className="text-[#E1E1DF] text-xl font-semibold">Account</h1>
