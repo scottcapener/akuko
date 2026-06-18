@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Button, Input, Label } from "@/components/ui";
 
 // ── Password strength ───────────────────────────────────────────────────────
 
@@ -20,41 +21,6 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
   if (score <= 2) return { score, label: "Fair", color: "#f59e0b" };
   if (score <= 3) return { score, label: "Good", color: "#84cc16" };
   return { score, label: "Strong", color: "#755C4B" };
-}
-
-// ── Shared UI atoms ─────────────────────────────────────────────────────────
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <label className="block text-[11px] font-medium tracking-wide uppercase text-[#413E3C] mb-1.5">
-      {children}
-    </label>
-  );
-}
-
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={`w-full bg-[#1C1B1B] text-[#E1E1DF] text-base px-3 py-2.5 rounded-lg border border-[#252220] placeholder:text-[#413E3C]/50 focus:outline-none focus:border-[#755C4B]/60 transition-colors ${props.className ?? ""}`}
-    />
-  );
-}
-
-function PrimaryButton({
-  children,
-  loading,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) {
-  return (
-    <button
-      {...props}
-      disabled={loading || props.disabled}
-      className="w-full py-2.5 rounded-lg bg-[#755C4B] text-[#E1E1DF] text-sm font-semibold tracking-wide hover:bg-[#8B6D5A] disabled:opacity-50 transition-colors"
-    >
-      {loading ? "Please wait…" : children}
-    </button>
-  );
 }
 
 function ErrorMsg({ msg }: { msg: string }) {
@@ -258,7 +224,7 @@ export default function SignupPage() {
               )}
             </div>
             <ErrorMsg msg={error} />
-            <PrimaryButton loading={loading} onClick={handleStep1}>Continue</PrimaryButton>
+            <Button loading={loading} onClick={handleStep1}>Continue</Button>
             <p className="text-center text-[#413E3C]/60 text-xs">
               Already have an account?{" "}
               <Link href="/login" className="text-[#413E3C] hover:text-[#755C4B] underline underline-offset-2">Log in</Link>
@@ -287,7 +253,7 @@ export default function SignupPage() {
               />
             </div>
             <ErrorMsg msg={error} />
-            <PrimaryButton loading={loading} onClick={handleStep2}>Verify</PrimaryButton>
+            <Button loading={loading} onClick={handleStep2}>Verify</Button>
             <button
               className="text-xs text-[#413E3C]/60 hover:text-[#413E3C] transition-colors disabled:opacity-40"
               disabled={resendCooldown > 0}
@@ -327,7 +293,7 @@ export default function SignupPage() {
               />
             </div>
             <ErrorMsg msg={error} />
-            <PrimaryButton loading={loading} onClick={handleStep3}>Start writing</PrimaryButton>
+            <Button loading={loading} onClick={handleStep3}>Start writing</Button>
           </div>
         )}
       </div>

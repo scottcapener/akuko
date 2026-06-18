@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import { Button } from "@/components/ui";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -107,13 +108,14 @@ export default function AccountPage() {
               {resetMsg}
             </p>
           )}
-          <button
+          <Button
+            variant="secondary"
             onClick={handleResetPassword}
             disabled={resetLoading}
-            className="self-start px-4 py-2 rounded-lg bg-[#1C1B1B] border border-[#252220] text-[#E1E1DF] text-xs font-medium hover:border-[#755C4B]/40 disabled:opacity-50 transition-colors"
+            className="self-start"
           >
             {resetLoading ? "Sending…" : "Send reset link"}
-          </button>
+          </Button>
         </div>
 
         {/* Log out */}

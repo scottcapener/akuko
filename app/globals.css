@@ -1,15 +1,34 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-bg: #18181a;
-  --color-bg-elevated: #1f1f21;
-  --color-bg-panel: #1c1c1e;
-  --color-border: #2a2a2c;
-  --color-muted: #9b9890;
-  --color-accent: #c4a882;
-  --color-text: #e8e6e3;
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Mono", ui-monospace, monospace;
+  /* Surfaces */
+  --color-base:     var(--hc-base);
+  --color-bg:       var(--hc-bg);
+  --color-panel:    var(--hc-panel);
+  --color-elevated: var(--hc-elevated);
+  --color-hover:    var(--hc-hover);
+
+  /* Text */
+  --color-text:   var(--hc-text);
+  --color-muted:  var(--hc-muted);
+  --color-subtle: var(--hc-subtle);
+
+  /* Accent */
+  --color-accent:    var(--hc-accent);
+  --color-accent-hi: var(--hc-accent-hi);
+
+  /* Border */
+  --color-border:        var(--hc-border);
+  --color-border-subtle: var(--hc-border-subtle);
+
+  /* Semantic */
+  --color-error:   var(--hc-error);
+  --color-warning: var(--hc-warning);
+  --color-success: var(--hc-success);
+
+  /* Typography */
+  --font-sans: var(--hc-font-sans);
+  --font-mono: var(--hc-font-mono);
 }
 
 * {
@@ -19,9 +38,9 @@
 html,
 body {
   height: 100%;
-  background: #18181a;
-  color: #e8e6e3;
-  font-family: "Inter", system-ui, sans-serif;
+  background: var(--hc-bg);
+  color: var(--hc-text);
+  font-family: var(--hc-font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -33,7 +52,7 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a2a2c;
+  background: var(--hc-border);
   border-radius: 2px;
 }
 

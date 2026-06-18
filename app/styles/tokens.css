@@ -1,0 +1,42 @@
+:root {
+  /* ── Surfaces ── */
+  --hc-base:     #100f0f;   /* darkest: editor, auth, landing bg */
+  --hc-bg:       #18181a;   /* app shell background */
+  --hc-panel:    #1c1b1b;   /* cards, inputs, panels */
+  --hc-elevated: #1f1f21;   /* above-panel surfaces */
+  --hc-hover:    #252220;   /* panel hover state */
+
+  /* ── Text ── */
+  --hc-text:   #e8e6e3;   /* primary text */
+  --hc-muted:  #9b9890;   /* secondary/subdued text */
+  --hc-subtle: #413e3c;   /* tertiary/label text */
+
+  /* ── Accent ── */
+  --hc-accent:    #755c4b;   /* primary warm-brown accent */
+  --hc-accent-hi: #8b6d5a;   /* accent hover */
+
+  /* ── Border ── */
+  --hc-border:        #252220;   /* default border */
+  --hc-border-subtle: #1c1b1b;   /* structural/hair border */
+
+  /* ── Semantic ── */
+  --hc-error:   #ef4444;
+  --hc-warning: #f59e0b;
+  --hc-success: #84cc16;
+
+  /* ── Typography ── */
+  --hc-font-sans: "Inter", system-ui, sans-serif;
+  --hc-font-mono: "JetBrains Mono", "Fira Mono", ui-monospace, monospace;
+
+  /* ── Radius ── */
+  --hc-radius-sm:   0.25rem;   /* 4px  — maps to rounded */
+  --hc-radius:      0.5rem;    /* 8px  — maps to rounded-lg */
+  --hc-radius-lg:   0.75rem;   /* 12px — maps to rounded-xl */
+  --hc-radius-xl:   1rem;      /* 16px — maps to rounded-2xl */
+  --hc-radius-full: 9999px;
+
+  /* ── Motion ── */
+  --hc-duration:      150ms;
+  --hc-duration-slow: 300ms;
+  --hc-ease:          ease;
+}

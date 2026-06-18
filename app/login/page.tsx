@@ -5,39 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <label className="block text-[11px] font-medium tracking-wide uppercase text-[#413E3C] mb-1.5">
-      {children}
-    </label>
-  );
-}
-
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={`w-full bg-[#1C1B1B] text-[#E1E1DF] text-base px-3 py-2.5 rounded-lg border border-[#252220] placeholder:text-[#413E3C]/50 focus:outline-none focus:border-[#755C4B]/60 transition-colors ${props.className ?? ""}`}
-    />
-  );
-}
-
-function PrimaryButton({
-  children,
-  loading,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) {
-  return (
-    <button
-      {...props}
-      disabled={loading || props.disabled}
-      className="w-full py-2.5 rounded-lg bg-[#755C4B] text-[#E1E1DF] text-sm font-semibold tracking-wide hover:bg-[#8B6D5A] disabled:opacity-50 transition-colors"
-    >
-      {loading ? "Please wait…" : children}
-    </button>
-  );
-}
+import { Button, Input, Label } from "@/components/ui";
 
 type Step = "credentials" | "otp";
 
@@ -126,7 +94,7 @@ export default function LoginPage() {
               </div>
             </div>
             {error && <p className="text-red-400 text-xs">{error}</p>}
-            <PrimaryButton loading={loading} onClick={handleLogin}>Log in</PrimaryButton>
+            <Button loading={loading} onClick={handleLogin}>Log in</Button>
             <p className="text-center text-[#413E3C]/60 text-xs">
               Don&apos;t have an account?{" "}
               <Link href="/signup" className="text-[#413E3C] hover:text-[#755C4B] underline underline-offset-2">Sign up</Link>
@@ -154,7 +122,7 @@ export default function LoginPage() {
               />
             </div>
             {error && <p className="text-red-400 text-xs">{error}</p>}
-            <PrimaryButton loading={loading} onClick={handleOtp}>Verify</PrimaryButton>
+            <Button loading={loading} onClick={handleOtp}>Verify</Button>
             <button className="text-xs text-[#413E3C]/60 hover:text-[#413E3C]" onClick={() => setStep("credentials")}>
               ← Back
             </button>
