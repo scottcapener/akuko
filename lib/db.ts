@@ -6,11 +6,9 @@
  */
 
 import { createClient } from "./supabase/client";
-import { Book, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink } from "./types";
+import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink } from "./types";
 
 const UNLOCK_THRESHOLDS = [1000, 2000, 5000, 10000, 25000];
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function supabase() {
   return createClient();
@@ -20,11 +18,10 @@ function supabase() {
 
 export async function getOrCreateBook(userId: string): Promise<{
   book: Book;
-  chapters: Chapter[];
+  sections: Section[];
 }> {
   const db = supabase();
 
-  // Try to fetch existing book
   const { data: books } = await db
     .from("books")
     .select("*")
@@ -35,7 +32,6 @@ export async function getOrCreateBook(userId: string): Promise<{
   let dbBook = books?.[0];
 
   if (!dbBook) {
-    // Create default book
     const { data, error } = await db
       .from("books")
       .insert({ user_id: userId, title: "Untitled Book" })
@@ -45,6 +41,15 @@ export async function getOrCreateBook(userId: string): Promise<{
     dbBook = data;
   }
 
+  // Fetch sections
+  const { data: dbSections } = await db
+    .from("sections")
+    .select("*")
+    .eq("book_id", dbBook.id)
+    .order("position", { ascending: true });
+
+  let sectionsData = dbSections ?? [];
+
   // Fetch chapters
   const { data: dbChapters } = await db
     .from("chapters")
@@ -52,25 +57,38 @@ export async function getOrCreateBook(userId: string): Promise<{
     .eq("book_id", dbBook.id)
     .order("position", { ascending: true });
 
-  let chapters = dbChapters ?? [];
+  let chaptersData = dbChapters ?? [];
 
-  if (chapters.length === 0) {
-    // Create default chapter
-    const { data, error } = await db
-      .from("chapters")
-      .insert({ book_id: dbBook.id, title: "Chapter 1", position: 0 })
+  // Bootstrap: no sections yet — create default and assign chapters
+  if (sectionsData.length === 0) {
+    const { data: newSection, error } = await db
+      .from("sections")
+      .insert({ book_id: dbBook.id, label: "Chapters", position: 0 })
       .select()
       .single();
     if (error) throw error;
-    chapters = [data];
+    sectionsData = [newSection];
 
-    // Create default scene for that chapter
-    await db.from("scenes").insert({
-      chapter_id: data.id,
-      label: "",
-      body: "",
-      position: 0,
-    });
+    if (chaptersData.length > 0) {
+      await db
+        .from("chapters")
+        .update({ section_id: newSection.id })
+        .eq("book_id", dbBook.id);
+      chaptersData = chaptersData.map((c) => ({ ...c, section_id: newSection.id }));
+    }
+  }
+
+  // Bootstrap: no chapters — create default in first section
+  if (chaptersData.length === 0) {
+    const firstSection = sectionsData[0];
+    const { data: newChapter, error } = await db
+      .from("chapters")
+      .insert({ book_id: dbBook.id, section_id: firstSection.id, title: "Chapter 1", position: 0 })
+      .select()
+      .single();
+    if (error) throw error;
+    await db.from("scenes").insert({ chapter_id: newChapter.id, label: "", body: "", position: 0 });
+    chaptersData = [newChapter];
   }
 
   const book: Book = {
@@ -78,18 +96,25 @@ export async function getOrCreateBook(userId: string): Promise<{
     title: dbBook.title,
     coverColor: dbBook.cover_color ?? "#2a2a2e",
     coverImage: dbBook.cover_image_path ?? undefined,
-    chapters: [],
-    activeChapterId: chapters[0].id,
+    activeChapterId: chaptersData[0].id,
   };
 
-  const mappedChapters: Chapter[] = chapters.map((c) => ({
-    id: c.id,
-    title: c.title,
-    scenes: [],
-    library: { images: [], notes: [], musicLinks: [] },
+  const sections: Section[] = sectionsData.map((s) => ({
+    id: s.id,
+    label: s.label,
+    position: s.position,
+    chapters: chaptersData
+      .filter((c) => c.section_id === s.id)
+      .map((c) => ({
+        id: c.id,
+        title: c.title,
+        sectionId: s.id,
+        scenes: [],
+        library: { images: [], notes: [], musicLinks: [] },
+      })),
   }));
 
-  return { book, chapters: mappedChapters };
+  return { book, sections };
 }
 
 export async function updateBookTitle(bookId: string, title: string) {
@@ -120,17 +145,44 @@ export async function updateBookWordCount(bookId: string, wordCount: number, cur
   return updatedUnlocks;
 }
 
+// ── Sections ──────────────────────────────────────────────────────────────────
+
+export async function createSection(bookId: string, position: number): Promise<Section> {
+  const { data, error } = await supabase()
+    .from("sections")
+    .insert({ book_id: bookId, label: "New Section", position })
+    .select()
+    .single();
+  if (error) throw error;
+  return { id: data.id, label: data.label, position: data.position, chapters: [] };
+}
+
+export async function updateSectionLabel(sectionId: string, label: string) {
+  await supabase().from("sections").update({ label }).eq("id", sectionId);
+}
+
+export async function reorderSections(sections: { id: string; position: number }[]) {
+  const db = supabase();
+  await Promise.all(
+    sections.map((s) => db.from("sections").update({ position: s.position }).eq("id", s.id))
+  );
+}
+
+export async function deleteSection(sectionId: string) {
+  // Cascades: sections → chapters → scenes + library_items
+  await supabase().from("sections").delete().eq("id", sectionId);
+}
+
 // ── Chapters ──────────────────────────────────────────────────────────────────
 
-export async function createChapter(bookId: string, position: number): Promise<Chapter> {
+export async function createChapter(bookId: string, sectionId: string, position: number): Promise<Chapter> {
   const { data, error } = await supabase()
     .from("chapters")
-    .insert({ book_id: bookId, title: `Chapter ${position + 1}`, position })
+    .insert({ book_id: bookId, section_id: sectionId, title: `Chapter ${position + 1}`, position })
     .select()
     .single();
   if (error) throw error;
 
-  // Create a default scene
   await supabase().from("scenes").insert({
     chapter_id: data.id,
     label: "",
@@ -141,6 +193,7 @@ export async function createChapter(bookId: string, position: number): Promise<C
   return {
     id: data.id,
     title: data.title,
+    sectionId,
     scenes: [],
     library: { images: [], notes: [], musicLinks: [] },
   };
@@ -150,15 +203,16 @@ export async function updateChapterTitle(chapterId: string, title: string) {
   await supabase().from("chapters").update({ title }).eq("id", chapterId);
 }
 
-export async function reorderChapters(
-  chapters: { id: string; position: number }[]
-) {
+export async function reorderChapters(chapters: { id: string; position: number }[]) {
   const db = supabase();
   await Promise.all(
-    chapters.map((c) =>
-      db.from("chapters").update({ position: c.position }).eq("id", c.id)
-    )
+    chapters.map((c) => db.from("chapters").update({ position: c.position }).eq("id", c.id))
   );
+}
+
+export async function deleteChapter(chapterId: string) {
+  // Cascades: chapters → scenes + library_items
+  await supabase().from("chapters").delete().eq("id", chapterId);
 }
 
 // ── Scenes ────────────────────────────────────────────────────────────────────
@@ -288,7 +342,6 @@ export async function addLibraryImageFromDataUrl(
   filename: string,
   position: number
 ): Promise<LibraryImage> {
-  // Convert data URL to blob
   const res = await fetch(dataUrl);
   const blob = await res.blob();
   const file = new File([blob], filename, { type: blob.type });

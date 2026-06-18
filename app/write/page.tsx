@@ -84,15 +84,18 @@ export default function WritePage() {
     setMobilePanel((prev) => (prev === p ? null : p));
   }
 
-  // Merge live chapters array into book so LeftColumn grid renders correctly
-  const bookWithChapters = { ...store.book, chapters: store.chapters };
-
   const leftProps = {
-    book: bookWithChapters,
+    book: store.book,
+    sections: store.sections,
     activeChapter: store.activeChapter,
     onBookTitleChange: store.setBookTitle,
     onCoverImage: store.setCoverImage,
     onReorderChapters: store.reorderChapters,
+    onDeleteChapter: store.deleteChapter,
+    onAddSection: store.addSection,
+    onUpdateSectionLabel: store.updateSectionLabel,
+    onReorderSections: store.reorderSections,
+    onDeleteSection: store.deleteSection,
   };
 
   const rightProps = {
@@ -178,7 +181,12 @@ export default function WritePage() {
         </div>
       )}
       <div className={`md:hidden fixed top-0 bottom-0 left-0 z-40 w-[calc(100%-44px)] transition-transform duration-200 ${mobilePanel === "left" ? "translate-x-0" : "-translate-x-full"}`}>
-        <LeftColumn {...leftProps} onChapterClick={(id) => { store.setActiveChapter(id); setMobilePanel(null); }} onAddChapter={() => { store.addChapter(); setMobilePanel(null); }} />
+        <LeftColumn
+          {...leftProps}
+          onChapterClick={(id) => { store.setActiveChapter(id); setMobilePanel(null); }}
+          onAddChapter={(sectionId) => { store.addChapter(sectionId); setMobilePanel(null); }}
+          onDeleteChapter={store.deleteChapter}
+        />
       </div>
       <div className={`md:hidden fixed top-0 bottom-0 right-0 z-40 w-[85vw] transition-transform duration-200 ${mobilePanel === "right" ? "translate-x-0" : "translate-x-full"}`}>
         <RightColumn {...rightProps} onClose={() => setMobilePanel(null)} />

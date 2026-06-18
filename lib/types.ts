@@ -35,15 +35,22 @@ export interface ChapterLibrary {
 export interface Chapter {
   id: string;
   title: string;
+  sectionId: string;
   scenes: Scene[];
   library: ChapterLibrary;
+}
+
+export interface Section {
+  id: string;
+  label: string;
+  position: number;
+  chapters: Chapter[];
 }
 
 export interface Book {
   id: string;
   title: string;
   coverColor: string;
-  coverImage?: string; // data URL
-  chapters: Chapter[];
+  coverImage?: string;
   activeChapterId: string;
 }
