@@ -5,7 +5,7 @@ const steps = [
   {
     num: "01",
     label: "Create an account",
-    desc: "Sign up with your email. We verify your phone number to keep your account secure.",
+    desc: "Sign up with your email. We send a quick verification code to keep your account secure.",
   },
   {
     num: "02",

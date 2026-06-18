@@ -64,7 +64,7 @@ function ErrorMsg({ msg }: { msg: string }) {
 
 // ── Steps ───────────────────────────────────────────────────────────────────
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3;
 
 export default function SignupPage() {
   const router = useRouter();
@@ -79,10 +79,7 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const strength = passwordStrength(password);
 
-  // Step 2
-  const [phone, setPhone] = useState("");
-
-  // Step 3
+  // Step 2 — email verification code
   const [otp, setOtp] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
   useEffect(() => {
@@ -91,7 +88,7 @@ export default function SignupPage() {
     return () => clearTimeout(t);
   }, [resendCooldown]);
 
-  // Step 4
+  // Step 3 — profile
   const [displayName, setDisplayName] = useState("");
   const [penName, setPenName] = useState("");
 
@@ -110,8 +107,8 @@ export default function SignupPage() {
         router.replace("/write");
         return;
       }
-      // Mid-signup (email confirmed, profile not finished) — resume at phone step.
-      if (step === 1) setStep(2);
+      // Mid-signup (email confirmed, profile not finished) — resume at profile step.
+      if (step === 1) setStep(3);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -123,49 +120,36 @@ export default function SignupPage() {
     if (!email.trim()) { setError("Email is required."); return; }
     if (password.length < 10) { setError("Password must be at least 10 characters."); return; }
     setLoading(true);
-    // Sign up creates the user and sends email confirmation (we'll also enroll phone)
-    const { error: err } = await supabase.auth.signUp({ email, password });
+    // Creates the user and emails a 6-digit confirmation code.
+    const { error: err } = await supabase.auth.signUp({ email: email.trim(), password });
     setLoading(false);
     if (err) { setError(err.message); return; }
+    setResendCooldown(60);
     setStep(2);
   }
 
   async function handleStep2() {
     setError("");
-    // Normalise: ensure starts with +
-    const normalised = phone.trim().startsWith("+") ? phone.trim() : `+${phone.trim()}`;
-    if (normalised.length < 8) { setError("Enter a valid international phone number."); return; }
-    setLoading(true);
-    const { error: err } = await supabase.auth.signInWithOtp({ phone: normalised });
-    setLoading(false);
-    if (err) { setError(err.message); return; }
-    setPhone(normalised);
-    setResendCooldown(60);
-    setStep(3);
-  }
-
-  async function handleStep3() {
-    setError("");
     if (otp.trim().length !== 6) { setError("Enter the 6-digit code."); return; }
     setLoading(true);
     const { error: err } = await supabase.auth.verifyOtp({
-      phone,
+      email: email.trim(),
       token: otp.trim(),
-      type: "sms",
+      type: "signup",
     });
     setLoading(false);
     if (err) { setError(err.message); return; }
-    setStep(4);
+    setStep(3);
   }
 
   async function handleResend() {
     setError("");
-    const { error: err } = await supabase.auth.signInWithOtp({ phone });
+    const { error: err } = await supabase.auth.resend({ type: "signup", email: email.trim() });
     if (err) { setError(err.message); return; }
     setResendCooldown(60);
   }
 
-  async function handleStep4() {
+  async function handleStep3() {
     setError("");
     if (!displayName.trim()) { setError("Display name is required."); return; }
     setLoading(true);
@@ -205,8 +189,8 @@ export default function SignupPage() {
 
   // ── Render ────────────────────────────────────────────────────────────
 
-  const stepLabel = ["", "Account", "Phone", "Verify", "Profile"][step];
-  const stepProgress = (step / 4) * 100;
+  const stepLabel = ["", "Account", "Verify", "Profile"][step];
+  const stepProgress = (step / 3) * 100;
 
   return (
     <div className="min-h-full flex flex-col items-center justify-center bg-[#100F0F] px-6 py-12">
@@ -218,7 +202,7 @@ export default function SignupPage() {
           <div className="w-full">
             <div className="flex justify-between text-[10px] text-[#413E3C] uppercase tracking-wide mb-1.5">
               <span>{stepLabel}</span>
-              <span>{step} / 4</span>
+              <span>{step} / 3</span>
             </div>
             <div className="h-px bg-[#1C1B1B] rounded-full overflow-hidden">
               <div
@@ -282,38 +266,12 @@ export default function SignupPage() {
           </div>
         )}
 
-        {/* Step 2 — Phone */}
+        {/* Step 2 — Email verification code */}
         {step === 2 && (
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="text-[#E1E1DF] text-lg font-semibold">Add your phone</h1>
-              <p className="text-[#413E3C] text-xs mt-1">We'll send a one-time code to verify.</p>
-            </div>
-            <div>
-              <Label>Phone number (international format)</Label>
-              <Input
-                type="tel"
-                autoComplete="tel"
-                placeholder="+1 555 000 0000"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleStep2()}
-              />
-            </div>
-            <ErrorMsg msg={error} />
-            <PrimaryButton loading={loading} onClick={handleStep2}>Send code</PrimaryButton>
-            <p className="text-[#413E3C]/70 text-[11px] leading-relaxed text-center">
-              By tapping Send code, you agree to receive one SMS for verification. Standard message and data rates may apply. We won&apos;t send you any other messages.
-            </p>
-          </div>
-        )}
-
-        {/* Step 3 — OTP */}
-        {step === 3 && (
-          <div className="flex flex-col gap-4">
-            <div>
-              <h1 className="text-[#E1E1DF] text-lg font-semibold">Enter the code</h1>
-              <p className="text-[#413E3C] text-xs mt-1">Sent to {phone}. Valid for 10 minutes.</p>
+              <h1 className="text-[#E1E1DF] text-lg font-semibold">Check your email</h1>
+              <p className="text-[#413E3C] text-xs mt-1">We sent a 6-digit code to {email}. Valid for 1 hour.</p>
             </div>
             <div>
               <Label>6-digit code</Label>
@@ -325,11 +283,11 @@ export default function SignupPage() {
                 maxLength={6}
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                onKeyDown={(e) => e.key === "Enter" && handleStep3()}
+                onKeyDown={(e) => e.key === "Enter" && handleStep2()}
               />
             </div>
             <ErrorMsg msg={error} />
-            <PrimaryButton loading={loading} onClick={handleStep3}>Verify</PrimaryButton>
+            <PrimaryButton loading={loading} onClick={handleStep2}>Verify</PrimaryButton>
             <button
               className="text-xs text-[#413E3C]/60 hover:text-[#413E3C] transition-colors disabled:opacity-40"
               disabled={resendCooldown > 0}
@@ -340,8 +298,8 @@ export default function SignupPage() {
           </div>
         )}
 
-        {/* Step 4 — Display name */}
-        {step === 4 && (
+        {/* Step 3 — Display name */}
+        {step === 3 && (
           <div className="flex flex-col gap-4">
             <div>
               <h1 className="text-[#E1E1DF] text-lg font-semibold">One last thing</h1>
@@ -355,7 +313,7 @@ export default function SignupPage() {
                 placeholder="Your name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleStep4()}
+                onKeyDown={(e) => e.key === "Enter" && handleStep3()}
               />
             </div>
             <div>
@@ -365,11 +323,11 @@ export default function SignupPage() {
                 placeholder="Your writing alias"
                 value={penName}
                 onChange={(e) => setPenName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleStep4()}
+                onKeyDown={(e) => e.key === "Enter" && handleStep3()}
               />
             </div>
             <ErrorMsg msg={error} />
-            <PrimaryButton loading={loading} onClick={handleStep4}>Start writing</PrimaryButton>
+            <PrimaryButton loading={loading} onClick={handleStep3}>Start writing</PrimaryButton>
           </div>
         )}
       </div>
