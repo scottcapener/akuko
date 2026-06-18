@@ -63,12 +63,43 @@ export default function WritePage() {
   const left = useColumnResize(LEFT_DEFAULT, LEFT_MIN, LEFT_MAX, 1);
   const right = useColumnResize(RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX, -1);
 
+  // Stable refs so the paste listener never goes stale
+  const activeChapterRef = useRef(store.activeChapter);
+  activeChapterRef.current = store.activeChapter;
+  const addLibraryImageRef = useRef(store.addLibraryImage);
+  addLibraryImageRef.current = store.addLibraryImage;
+
   // Route guard: unauthenticated users go to /login.
   useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
       if (!user) router.replace("/login");
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Global image paste — fires when focus is outside a text/contenteditable field
+  // (when focus IS in a scene body, CenterColumn's own onPaste handler adds the image)
+  useEffect(() => {
+    function handleGlobalPaste(e: ClipboardEvent) {
+      const target = e.target as HTMLElement;
+      if (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const imageItem = items.find((it) => it.type.startsWith("image/"));
+      if (!imageItem) return;
+      const file = imageItem.getAsFile();
+      if (!file || !activeChapterRef.current) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        addLibraryImageRef.current(activeChapterRef.current!.id, {
+          id: Math.random().toString(36).slice(2, 10),
+          name: `pasted-${Date.now()}.png`,
+          dataUrl: ev.target?.result as string,
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+    document.addEventListener("paste", handleGlobalPaste);
+    return () => document.removeEventListener("paste", handleGlobalPaste);
   }, []);
 
   useEffect(() => {
@@ -143,6 +174,8 @@ export default function WritePage() {
             onChapterTitleChange={store.updateChapterTitle}
             onSceneChange={(chapterId, sceneId, patch) => store.updateScene(chapterId, sceneId, patch as Partial<Scene>)}
             onAddScene={store.addScene}
+            onReorderScenes={store.reorderScenes}
+            onDeleteScene={store.deleteScene}
             onAddImage={store.addLibraryImage}
           />
         </div>
@@ -160,6 +193,8 @@ export default function WritePage() {
           onChapterTitleChange={store.updateChapterTitle}
           onSceneChange={(chapterId, sceneId, patch) => store.updateScene(chapterId, sceneId, patch as Partial<Scene>)}
           onAddScene={store.addScene}
+          onReorderScenes={store.reorderScenes}
+          onDeleteScene={store.deleteScene}
           onAddImage={store.addLibraryImage}
         />
       </div>

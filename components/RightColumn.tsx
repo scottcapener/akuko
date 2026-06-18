@@ -19,6 +19,24 @@ function makeId() {
 
 // ── Image lightbox ────────────────────────────────────────────────────────────
 
+function useLightboxHistory(onClose: () => void) {
+  useEffect(() => {
+    history.pushState({ _lightbox: true }, "", window.location.href);
+    let closedByPop = false;
+    function onPop() {
+      closedByPop = true;
+      onClose();
+    }
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      // If lightbox closed via UI (not back button), undo the history entry we pushed
+      if (!closedByPop) history.go(-1);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}
+
 function ImageLightbox({
   images,
   index,
@@ -30,6 +48,8 @@ function ImageLightbox({
   onClose: () => void;
   onNavigate: (next: number) => void;
 }) {
+  useLightboxHistory(onClose);
+
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "ArrowRight") onNavigate((index + 1) % images.length);
@@ -73,6 +93,8 @@ function NoteLightbox({
 }) {
   const note = notes[index];
   const bodyRef = useRef<HTMLDivElement>(null);
+
+  useLightboxHistory(onClose);
 
   // Sync body HTML whenever the active note changes
   useEffect(() => {
@@ -177,6 +199,122 @@ function NoteLightbox({
   );
 }
 
+// ── Image upload modal ────────────────────────────────────────────────────────
+
+function ImageUploadModal({
+  onFiles,
+  onUrl,
+  onClose,
+}: {
+  onFiles: (files: FileList) => void;
+  onUrl: (url: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [urlError, setUrlError] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const urlInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setTimeout(() => urlInputRef.current?.focus(), 50);
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function handleUrlSubmit() {
+    const trimmed = url.trim();
+    if (!trimmed || urlLoading) return;
+    setUrlError("");
+    setUrlLoading(true);
+    try {
+      await onUrl(trimmed);
+      onClose();
+    } catch {
+      setUrlError("Couldn't load that image. Check the URL and try again.");
+    } finally {
+      setUrlLoading(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#1C1B1B] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4">
+          <p className="text-[11px] font-medium tracking-wide uppercase text-[#9b9890]">Add image</p>
+          <button onClick={onClose} className="text-[#413E3C]/50 hover:text-[#9b9890] transition-colors">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-5 pb-5 flex flex-col gap-3">
+          {/* URL input */}
+          <div className="flex gap-2">
+            <input
+              ref={urlInputRef}
+              type="url"
+              placeholder="https://example.com/image.jpg"
+              value={url}
+              onChange={(e) => { setUrl(e.target.value); setUrlError(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter") handleUrlSubmit(); }}
+              className="flex-1 min-w-0 bg-[#100F0F] text-[#E1E1DF] text-sm px-3 py-2 rounded-lg border border-[#252220] placeholder:text-[#413E3C]/50 focus:outline-none focus:border-[#755C4B]/60 transition-colors"
+            />
+            <button
+              onClick={handleUrlSubmit}
+              disabled={urlLoading || !url.trim()}
+              className="px-3 py-2 rounded-lg bg-[#755C4B] text-[#E1E1DF] text-sm font-semibold hover:bg-[#8B6D5A] disabled:opacity-40 transition-colors flex-shrink-0"
+            >
+              {urlLoading ? "…" : "Add"}
+            </button>
+          </div>
+          {urlError && <p className="text-[11px] text-red-400">{urlError}</p>}
+
+          {/* Drop / upload zone */}
+          <div
+            className={`rounded-xl border-2 border-dashed py-7 flex flex-col items-center gap-2 cursor-pointer transition-colors ${
+              dragging ? "border-[#755C4B] bg-[#755C4B]/5" : "border-[#252220] hover:border-[#413E3C]"
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              if (e.dataTransfer.files.length) { onFiles(e.dataTransfer.files); onClose(); }
+            }}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <svg className="w-5 h-5 text-[#413E3C]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+            <span className="text-[11px] text-[#9b9890] tracking-wide">Drop image here or click to upload</span>
+            <span className="text-[10px] text-[#413E3C]/60">Or paste (⌘V) anywhere</span>
+          </div>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => { if (e.target.files?.length) { onFiles(e.target.files); onClose(); } }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -208,6 +346,7 @@ export default function RightColumn({
   const [noteLightboxIndex, setNoteLightboxIndex] = useState<number | null>(null);
   const [pendingOpenNote, setPendingOpenNote] = useState(false);
   const [draggingOver, setDraggingOver] = useState(false);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
   const [musicModalOpen, setMusicModalOpen] = useState(false);
   const [musicUrl, setMusicUrl] = useState("");
   const [musicLoading, setMusicLoading] = useState(false);
@@ -239,6 +378,24 @@ export default function RightColumn({
         };
         reader.readAsDataURL(file);
       });
+    },
+    [chapter.id, onAddImage]
+  );
+
+  const processImageUrl = useCallback(
+    async (url: string) => {
+      // Proxy through server to avoid CORS
+      const res = await fetch(`/api/image?url=${encodeURIComponent(url)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const filename = url.split("/").pop()?.split("?")[0] || "image.jpg";
+      onAddImage(chapter.id, { id: makeId(), name: filename, dataUrl });
     },
     [chapter.id, onAddImage]
   );
@@ -283,6 +440,16 @@ export default function RightColumn({
 
   return (
     <div className="flex flex-col h-full bg-[#100F0F] border-l border-[#1C1B1B] w-full overflow-y-auto">
+      {imageModalOpen && (
+        <Portal>
+          <ImageUploadModal
+            onFiles={processImageFiles}
+            onUrl={processImageUrl}
+            onClose={() => setImageModalOpen(false)}
+          />
+        </Portal>
+      )}
+
       {imageLightboxIndex !== null && chapter.library.images.length > 0 && (
         <Portal>
           <ImageLightbox
@@ -329,12 +496,12 @@ export default function RightColumn({
         {chapter.library.images.length === 0 ? (
           <div
             className="py-5 flex flex-col items-center gap-2 cursor-pointer"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => setImageModalOpen(true)}
           >
             <svg className="w-5 h-5 text-[#413E3C]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
             </svg>
-            <span className="text-[10px] text-[#413E3C] uppercase tracking-widest">Drop images or click</span>
+            <span className="text-[10px] text-[#9b9890] uppercase tracking-widest">Drop images or click</span>
           </div>
         ) : (
           <div className="p-2 grid grid-cols-3 gap-1.5">
@@ -359,20 +526,12 @@ export default function RightColumn({
             ))}
             <button
               className="aspect-square rounded bg-[#1C1B1B] flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => setImageModalOpen(true)}
             >
               <Image src="/plus.svg" alt="Add image" width={14} height={14} />
             </button>
           </div>
         )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => processImageFiles(e.target.files)}
-        />
       </div>
 
       {/* ── Music modal ── */}
@@ -386,7 +545,7 @@ export default function RightColumn({
             className="bg-[#1C1B1B] rounded-2xl w-full max-w-sm p-5 shadow-2xl flex flex-col gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C]">Add music link</p>
+            <p className="text-[11px] font-medium tracking-wide uppercase text-[#9b9890]">Add music link</p>
             <input
               ref={musicInputRef}
               type="url"
@@ -414,7 +573,7 @@ export default function RightColumn({
       {/* ── Music ── */}
       <div className="px-4 mb-3">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C]">Music</p>
+          <p className="text-[11px] font-medium tracking-wide uppercase text-[#9b9890]">Music</p>
           <button
             className="opacity-40 hover:opacity-100 transition-opacity"
             onClick={() => setMusicModalOpen(true)}
@@ -479,7 +638,7 @@ export default function RightColumn({
       {/* ── Notes ── */}
       <div className="px-4 pb-6">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C]">Notes</p>
+          <p className="text-[11px] font-medium tracking-wide uppercase text-[#9b9890]">Notes</p>
           <button
             className="opacity-40 hover:opacity-100 transition-opacity"
             onClick={handleAddNote}

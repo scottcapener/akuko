@@ -309,6 +309,34 @@ export function useHotCocoaDb() {
     [sections]
   );
 
+  const reorderScenes = useCallback(
+    (chapterId: string, fromIndex: number, toIndex: number) => {
+      setSections((prev) =>
+        mapChapter(prev, chapterId, (c) => {
+          const next = [...c.scenes];
+          const [moved] = next.splice(fromIndex, 1);
+          next.splice(toIndex, 0, moved);
+          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })));
+          return { ...c, scenes: next };
+        })
+      );
+    },
+    []
+  );
+
+  const deleteScene = useCallback(
+    (chapterId: string, sceneId: string) => {
+      setSections((prev) =>
+        mapChapter(prev, chapterId, (c) => ({
+          ...c,
+          scenes: c.scenes.filter((s) => s.id !== sceneId),
+        }))
+      );
+      db.deleteScene(sceneId);
+    },
+    []
+  );
+
   // ── Library actions ───────────────────────────────────────────────────
   const addLibraryImage = useCallback(
     async (chapterId: string, img: LibraryImage) => {
@@ -442,6 +470,8 @@ export function useHotCocoaDb() {
     updateChapterTitle,
     updateScene,
     addScene,
+    reorderScenes,
+    deleteScene,
     addLibraryImage,
     removeLibraryImage,
     addNote,

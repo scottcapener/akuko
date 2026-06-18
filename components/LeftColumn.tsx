@@ -341,12 +341,16 @@ export default function LeftColumn({
         {/* ── Cover + Title ── */}
         <div className="mb-3">
           <div
-            className={`w-full max-w-[140px] md:max-w-none aspect-[2/3] rounded-md relative overflow-hidden cursor-pointer group transition-colors ${
+            className={`w-full max-w-[140px] md:max-w-none rounded-md relative overflow-hidden cursor-pointer group transition-colors ${
+              book.coverImage
+                ? "aspect-[2/3]"
+                : "flex flex-col items-center justify-center py-5 gap-2"
+            } ${
               coverDragging
                 ? "ring-1 ring-[#755C4B] bg-[#755C4B]/5"
                 : book.coverImage
                   ? "bg-[#1C1B1B] hover:ring-1 hover:ring-[#252220]"
-                  : "border border-dashed border-[#252220] hover:border-[#413E3C]"
+                  : "border border-dashed border-[#252220] hover:border-[#9b9890]/40"
             }`}
             onDragOver={(e) => { e.preventDefault(); setCoverDragging(true); }}
             onDragLeave={() => setCoverDragging(false)}
@@ -357,17 +361,17 @@ export default function LeftColumn({
               // eslint-disable-next-line @next/next/no-img-element
               <img src={book.coverImage} alt="Book cover" className="w-full h-full object-cover" />
             ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 select-none">
+              <>
                 <svg
-                  className="w-4 h-4 text-[#413E3C] opacity-50 group-hover:opacity-80 transition-opacity"
+                  className="w-4 h-4 text-[#9b9890] opacity-50 group-hover:opacity-80 transition-opacity"
                   fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                 </svg>
-                <span className="text-[9px] text-[#413E3C] opacity-50 group-hover:opacity-80 uppercase tracking-widest transition-opacity">
+                <span className="text-[9px] text-[#9b9890] opacity-50 group-hover:opacity-80 uppercase tracking-widest transition-opacity select-none">
                   Add cover
                 </span>
-              </div>
+              </>
             )}
             {book.coverImage && (
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
@@ -496,7 +500,7 @@ export default function LeftColumn({
         )}
         <button
           onClick={() => setMenuOpen((o) => !o)}
-          className="text-[#413E3C] hover:text-[#E1E1DF] transition-colors text-base font-bold tracking-widest leading-none px-1"
+          className="text-[#9b9890] hover:text-[#E1E1DF] transition-colors text-base font-bold tracking-widest leading-none px-1"
           title="Account"
         >
           •••

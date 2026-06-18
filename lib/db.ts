@@ -248,6 +248,17 @@ export async function saveScene(sceneId: string, patch: Partial<Pick<Scene, "lab
     .eq("id", sceneId);
 }
 
+export async function reorderScenes(scenes: { id: string; position: number }[]) {
+  const db = supabase();
+  await Promise.all(
+    scenes.map((s) => db.from("scenes").update({ position: s.position }).eq("id", s.id))
+  );
+}
+
+export async function deleteScene(sceneId: string) {
+  await supabase().from("scenes").delete().eq("id", sceneId);
+}
+
 // ── Library ───────────────────────────────────────────────────────────────────
 
 export async function getLibraryForChapter(chapterId: string): Promise<{
