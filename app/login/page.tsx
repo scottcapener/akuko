@@ -71,7 +71,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-full flex flex-col items-center justify-center bg-[#100F0F] px-6 py-12">
+    <div className="min-h-full flex flex-col items-center justify-center bg-bg px-6 py-12">
       <div className="w-full max-w-sm flex flex-col gap-8">
         <div className="flex justify-center">
           <Link href="/">
@@ -81,7 +81,7 @@ export default function LoginPage() {
 
         {step === "credentials" && (
           <div className="flex flex-col gap-4">
-            <h1 className="text-[#E1E1DF] text-lg font-semibold">Welcome back</h1>
+            <h1 className="text-text text-lg font-semibold">Welcome back</h1>
             <div>
               <Label>Email</Label>
               <Input type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
@@ -90,14 +90,14 @@ export default function LoginPage() {
               <Label>Password</Label>
               <Input type="password" autoComplete="current-password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
               <div className="flex justify-end mt-1.5">
-                <Link href="/forgot-password" className="text-[11px] text-[#413E3C]/60 hover:text-[#755C4B] transition-colors">Forgot password?</Link>
+                <Link href="/forgot-password" className="text-[11px] text-subtle/60 hover:text-accent transition-colors">Forgot password?</Link>
               </div>
             </div>
-            {error && <p className="text-red-400 text-xs">{error}</p>}
+            {error && <p className="text-error text-xs">{error}</p>}
             <Button loading={loading} onClick={handleLogin}>Log in</Button>
-            <p className="text-center text-[#413E3C]/60 text-xs">
+            <p className="text-center text-subtle/60 text-xs">
               Don&apos;t have an account?{" "}
-              <Link href="/signup" className="text-[#413E3C] hover:text-[#755C4B] underline underline-offset-2">Sign up</Link>
+              <Link href="/signup" className="text-subtle hover:text-accent underline underline-offset-2">Sign up</Link>
             </p>
           </div>
         )}
@@ -105,8 +105,8 @@ export default function LoginPage() {
         {step === "otp" && (
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="text-[#E1E1DF] text-lg font-semibold">Verify your phone</h1>
-              <p className="text-[#413E3C] text-xs mt-1">A code was sent to {phone}.</p>
+              <h1 className="text-text text-lg font-semibold">Verify your phone</h1>
+              <p className="text-subtle text-xs mt-1">A code was sent to {phone}.</p>
             </div>
             <div>
               <Label>6-digit code</Label>
@@ -121,9 +121,9 @@ export default function LoginPage() {
                 onKeyDown={(e) => e.key === "Enter" && handleOtp()}
               />
             </div>
-            {error && <p className="text-red-400 text-xs">{error}</p>}
+            {error && <p className="text-error text-xs">{error}</p>}
             <Button loading={loading} onClick={handleOtp}>Verify</Button>
-            <button className="text-xs text-[#413E3C]/60 hover:text-[#413E3C]" onClick={() => setStep("credentials")}>
+            <button className="text-xs text-subtle/60 hover:text-subtle" onClick={() => setStep("credentials")}>
               ← Back
             </button>
           </div>

@@ -2,7 +2,6 @@
 
 @theme inline {
   /* Surfaces */
-  --color-base:     var(--hc-base);
   --color-bg:       var(--hc-bg);
   --color-panel:    var(--hc-panel);
   --color-elevated: var(--hc-elevated);
@@ -18,17 +17,50 @@
   --color-accent-hi: var(--hc-accent-hi);
 
   /* Border */
-  --color-border:        var(--hc-border);
   --color-border-subtle: var(--hc-border-subtle);
+
+  /* Scrim */
+  --color-scrim: var(--hc-scrim);
 
   /* Semantic */
   --color-error:   var(--hc-error);
   --color-warning: var(--hc-warning);
   --color-success: var(--hc-success);
 
-  /* Typography */
+  /* Font families */
   --font-sans: var(--hc-font-sans);
   --font-mono: var(--hc-font-mono);
+
+  /* Type scale — named styles from CocoaBar.
+     Usage: text-heading-l, text-body-m, etc. (label-m pairs with `uppercase`). */
+  --text-heading-l: 20px;
+  --text-heading-l--line-height: 1;
+  --text-heading-l--font-weight: 600;
+
+  --text-heading-m: 14px;
+  --text-heading-m--line-height: 1;
+  --text-heading-m--font-weight: 500;
+
+  --text-body-l: 16px;
+  --text-body-l--line-height: 24px;
+  --text-body-l--font-weight: 400;
+
+  --text-body-m: 12px;
+  --text-body-m--line-height: 1;
+  --text-body-m--font-weight: 400;
+
+  --text-body-s: 11px;
+  --text-body-s--line-height: 1;
+  --text-body-s--font-weight: 400;
+
+  --text-body-xs: 9px;
+  --text-body-xs--line-height: 1;
+  --text-body-xs--font-weight: 500;
+
+  --text-label-m: 11px;
+  --text-label-m--line-height: 1;
+  --text-label-m--font-weight: 400;
+  --text-label-m--letter-spacing: 0.03em;
 }
 
 * {
@@ -52,7 +84,7 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--hc-border);
+  background: var(--hc-border-subtle);
   border-radius: 2px;
 }
 

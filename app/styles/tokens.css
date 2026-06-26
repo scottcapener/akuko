@@ -1,28 +1,29 @@
 :root {
   /* ── Surfaces ── */
-  --hc-base:     #100f0f;   /* darkest: editor, auth, landing bg */
-  --hc-bg:       #18181a;   /* app shell background */
-  --hc-panel:    #1c1b1b;   /* cards, inputs, panels */
-  --hc-elevated: #1f1f21;   /* above-panel surfaces */
-  --hc-hover:    #252220;   /* panel hover state */
+  --hc-bg:       #100f0f;   /* page background */
+  --hc-panel:    #18181a;   /* cards, thumbnails, inputs, image backgrounds */
+  --hc-elevated: #1f1f21;   /* active scene/chapter, note background */
+  --hc-hover:    #252220;   /* "+" icons, hover surface */
 
   /* ── Text ── */
-  --hc-text:   #e8e6e3;   /* primary text */
-  --hc-muted:  #9b9890;   /* secondary/subdued text */
-  --hc-subtle: #413e3c;   /* tertiary/label text */
+  --hc-text:   #e8e6e3;   /* primary: book/chapter/song/note titles, body copy */
+  --hc-muted:  #9b9890;   /* active chapter thumbnail title */
+  --hc-subtle: #615e5c;   /* icons, labels, placeholders, small text, song artist */
 
   /* ── Accent ── */
   --hc-accent:    #755c4b;   /* primary warm-brown accent */
   --hc-accent-hi: #8b6d5a;   /* accent hover */
 
   /* ── Border ── */
-  --hc-border:        #252220;   /* default border */
-  --hc-border-subtle: #1c1b1b;   /* structural/hair border */
+  --hc-border-subtle: #1c1b1b;   /* all borders */
 
   /* ── Semantic ── */
   --hc-error:   #ef4444;
   --hc-warning: #f59e0b;
   --hc-success: #84cc16;
+
+  /* ── Scrim ── */
+  --hc-scrim: rgb(16 15 15 / 0.87);   /* --hc-bg @ 87% — modal/panel backdrop */
 
   /* ── Typography ── */
   --hc-font-sans: "Inter", system-ui, sans-serif;

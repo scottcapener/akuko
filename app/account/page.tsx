@@ -10,14 +10,14 @@ import { Button } from "@/components/ui";
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C]">{label}</span>
-      <span className="text-sm text-[#E1E1DF]">{value}</span>
+      <span className="text-[11px] font-medium tracking-wide uppercase text-subtle">{label}</span>
+      <span className="text-sm text-text">{value}</span>
     </div>
   );
 }
 
 function Divider() {
-  return <div className="border-t border-[#1C1B1B]" />;
+  return <div className="border-t border-border-subtle" />;
 }
 
 export default function AccountPage() {
@@ -79,32 +79,32 @@ export default function AccountPage() {
     }
   }
 
-  if (loading) return <div className="min-h-full bg-[#100F0F]" />;
+  if (loading) return <div className="min-h-full bg-bg" />;
 
   return (
-    <div className="min-h-full bg-[#100F0F] px-6 py-10">
+    <div className="min-h-full bg-bg px-6 py-10">
       <div className="max-w-sm mx-auto flex flex-col gap-6">
 
         {/* Back link */}
-        <Link href="/write" className="text-xs text-[#413E3C]/60 hover:text-[#413E3C] transition-colors self-start">
+        <Link href="/write" className="text-xs text-subtle/60 hover:text-subtle transition-colors self-start">
           ← Back to Hot Cocoa
         </Link>
 
-        <h1 className="text-[#E1E1DF] text-xl font-semibold">Account</h1>
+        <h1 className="text-text text-xl font-semibold">Account</h1>
 
         {/* Info */}
-        <div className="border border-[#1C1B1B] rounded-xl p-5 flex flex-col gap-4">
+        <div className="border border-border-subtle rounded-xl p-5 flex flex-col gap-4">
           <Row label="Email" value={user?.email ?? "—"} />
           <Divider />
           <Row label="Member for" value={`${memberDays} ${memberDays === 1 ? "day" : "days"}`} />
         </div>
 
         {/* Password reset */}
-        <div className="border border-[#1C1B1B] rounded-xl p-5 flex flex-col gap-3">
-          <p className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C]">Password</p>
-          <p className="text-xs text-[#413E3C]">We&apos;ll send a reset link to your email address.</p>
+        <div className="border border-border-subtle rounded-xl p-5 flex flex-col gap-3">
+          <p className="text-[11px] font-medium tracking-wide uppercase text-subtle">Password</p>
+          <p className="text-xs text-subtle">We&apos;ll send a reset link to your email address.</p>
           {resetMsg && (
-            <p className={`text-xs ${resetMsg.startsWith("Reset link") ? "text-[#755C4B]" : "text-red-400"}`}>
+            <p className={`text-xs ${resetMsg.startsWith("Reset link") ? "text-accent" : "text-error"}`}>
               {resetMsg}
             </p>
           )}
@@ -119,23 +119,23 @@ export default function AccountPage() {
         </div>
 
         {/* Log out */}
-        <div className="border border-[#1C1B1B] rounded-xl p-5">
+        <div className="border border-border-subtle rounded-xl p-5">
           <button
             onClick={handleSignOut}
-            className="text-sm text-[#755C4B] hover:text-[#8B6D5A] transition-colors font-medium"
+            className="text-sm text-accent hover:text-accent-hi transition-colors font-medium"
           >
             Log out
           </button>
         </div>
 
         {/* Delete account */}
-        <div className="border border-[#1C1B1B] rounded-xl p-5 flex flex-col gap-3">
-          <p className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C]">Danger zone</p>
+        <div className="border border-border-subtle rounded-xl p-5 flex flex-col gap-3">
+          <p className="text-[11px] font-medium tracking-wide uppercase text-subtle">Danger zone</p>
 
           {deleteStep === "idle" && (
             <button
               onClick={() => setDeleteStep("confirm")}
-              className="self-start text-xs text-red-500/70 hover:text-red-400 transition-colors"
+              className="self-start text-xs text-red-500/70 hover:text-error transition-colors"
             >
               Delete account…
             </button>
@@ -143,23 +143,23 @@ export default function AccountPage() {
 
           {deleteStep === "confirm" && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-[#E1E1DF]/80 leading-relaxed">
+              <p className="text-xs text-text/80 leading-relaxed">
                 This will permanently delete your account and{" "}
-                <span className="text-[#E1E1DF] font-medium">all your books, chapters, and scenes</span>.
+                <span className="text-text font-medium">all your books, chapters, and scenes</span>.
                 {" "}There is no way to recover your content after this.
               </p>
-              {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
+              {deleteError && <p className="text-xs text-error">{deleteError}</p>}
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleDeleteAccount}
                   disabled={deleting}
-                  className="px-4 py-2 rounded-lg bg-red-900/40 text-red-400 text-xs font-semibold hover:bg-red-900/60 disabled:opacity-50 transition-colors"
+                  className="px-4 py-2 rounded-lg bg-red-900/40 text-error text-xs font-semibold hover:bg-red-900/60 disabled:opacity-50 transition-colors"
                 >
                   {deleting ? "Deleting…" : "Yes, delete everything"}
                 </button>
                 <button
                   onClick={() => { setDeleteStep("idle"); setDeleteError(""); }}
-                  className="text-xs text-[#413E3C]/60 hover:text-[#413E3C] transition-colors"
+                  className="text-xs text-subtle/60 hover:text-subtle transition-colors"
                 >
                   Cancel
                 </button>

@@ -70,7 +70,9 @@ export default function WritePage() {
   addLibraryImageRef.current = store.addLibraryImage;
 
   // Route guard: unauthenticated users go to /login.
+  // Skipped in development when NEXT_PUBLIC_DEV_USER_ID is set.
   useEffect(() => {
+    if (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_DEV_USER_ID) return;
     createClient().auth.getUser().then(({ data: { user } }) => {
       if (!user) router.replace("/login");
     });
@@ -108,7 +110,7 @@ export default function WritePage() {
   }, [store.book?.title]);
 
   if (!store.hydrated || !store.book || !store.activeChapter) {
-    return <div className="h-full bg-[#100F0F]" />;
+    return <div className="h-full bg-bg" />;
   }
 
   function openPanel(p: MobilePanel) {
@@ -141,14 +143,14 @@ export default function WritePage() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#100F0F] overflow-hidden">
+    <div className="h-full flex flex-col bg-bg overflow-hidden">
       {/* ── Mobile top bar ── */}
-      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-[#1C1B1B] flex-shrink-0">
+      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border-subtle flex-shrink-0">
         <button
           onClick={() => openPanel("left")}
           className={`p-1.5 rounded transition-opacity ${mobilePanel === "left" ? "opacity-100" : "opacity-50 hover:opacity-80"}`}
         >
-          <svg className="w-7 h-7 text-[#413E3C]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <svg className="w-7 h-7 text-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
           </svg>
         </button>
@@ -166,7 +168,7 @@ export default function WritePage() {
         <div className="flex-shrink-0 flex flex-col" style={{ width: left.width }}>
           <LeftColumn {...leftProps} onChapterClick={store.setActiveChapter} onAddChapter={store.addChapter} />
         </div>
-        <div onMouseDown={left.onMouseDown} className="w-px flex-shrink-0 bg-[#1C1B1B] hover:bg-[#755C4B]/40 cursor-col-resize transition-colors active:bg-[#755C4B]/60" />
+        <div onMouseDown={left.onMouseDown} className="w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60" />
         <div className="flex-1 overflow-hidden flex flex-col min-w-0">
           <CenterColumn
             chapter={store.activeChapter}
@@ -179,7 +181,7 @@ export default function WritePage() {
             onAddImage={store.addLibraryImage}
           />
         </div>
-        <div onMouseDown={right.onMouseDown} className="w-px flex-shrink-0 bg-[#1C1B1B] hover:bg-[#755C4B]/40 cursor-col-resize transition-colors active:bg-[#755C4B]/60" />
+        <div onMouseDown={right.onMouseDown} className="w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60" />
         <div className="flex-shrink-0 flex flex-col" style={{ width: right.width }}>
           <RightColumn {...rightProps} />
         </div>
@@ -199,31 +201,20 @@ export default function WritePage() {
         />
       </div>
 
-      {/* ── Mobile slide-in panels ── */}
+      {/* ── Mobile slide-in panels (full-width, per CocoaBar) ── */}
       {mobilePanel && (
-        <div className="md:hidden fixed inset-0 bg-black/50 z-30" onClick={() => setMobilePanel(null)}>
-          {/* X button visible in the backdrop strip beside the left panel */}
-          {mobilePanel === "left" && (
-            <button
-              onClick={() => setMobilePanel(null)}
-              className="absolute top-4 right-3 w-8 h-8 flex items-center justify-center text-white/60 hover:text-white transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
-        </div>
+        <div className="md:hidden fixed inset-0 bg-scrim z-30" onClick={() => setMobilePanel(null)} />
       )}
-      <div className={`md:hidden fixed top-0 bottom-0 left-0 z-40 w-[calc(100%-44px)] transition-transform duration-200 ${mobilePanel === "left" ? "translate-x-0" : "-translate-x-full"}`}>
+      <div className={`md:hidden fixed inset-y-0 left-0 z-40 w-full transition-transform duration-200 ${mobilePanel === "left" ? "translate-x-0" : "-translate-x-full"}`}>
         <LeftColumn
           {...leftProps}
           onChapterClick={(id) => { store.setActiveChapter(id); setMobilePanel(null); }}
           onAddChapter={(sectionId) => { store.addChapter(sectionId); setMobilePanel(null); }}
           onDeleteChapter={store.deleteChapter}
+          onClose={() => setMobilePanel(null)}
         />
       </div>
-      <div className={`md:hidden fixed top-0 bottom-0 right-0 z-40 w-[85vw] transition-transform duration-200 ${mobilePanel === "right" ? "translate-x-0" : "translate-x-full"}`}>
+      <div className={`md:hidden fixed inset-y-0 right-0 z-40 w-full transition-transform duration-200 ${mobilePanel === "right" ? "translate-x-0" : "translate-x-full"}`}>
         <RightColumn {...rightProps} onClose={() => setMobilePanel(null)} />
       </div>
     </div>
