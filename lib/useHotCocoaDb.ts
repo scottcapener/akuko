@@ -54,8 +54,24 @@ export function useHotCocoaDb() {
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
+
     const supabase = createClient();
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+
+    async function bootstrap() {
+      // In dev mode, auto sign-in via server-side credentials if no session exists.
+      // Credentials stay in server-side env vars (no NEXT_PUBLIC_) and never reach the client bundle.
+      if (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_DEV_USER_ID) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          const res = await fetch("/api/dev/session", { method: "POST" });
+          if (res.ok) {
+            const tokens = await res.json();
+            await supabase.auth.setSession(tokens);
+          }
+        }
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setUserId(user.id);
 
@@ -83,7 +99,9 @@ export function useHotCocoaDb() {
         setBook(loadedBook);
       }
       setHydrated(true);
-    });
+    }
+
+    bootstrap();
   }, []);
 
   // ── Load chapter data on switch ───────────────────────────────────────
