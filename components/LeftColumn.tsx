@@ -22,6 +22,7 @@ interface Props {
   onUpdateSectionLabel: (sectionId: string, label: string) => void;
   onReorderSections: (from: number, to: number) => void;
   onDeleteSection: (sectionId: string) => void;
+  onClose?: () => void;
 }
 
 // ── Confirmation modal ────────────────────────────────────────────────────────
@@ -40,11 +41,11 @@ function ConfirmModal({
   return (
     <Modal onClose={onCancel} maxWidth="max-w-sm" backdrop="dark">
       <div className="p-5 flex flex-col gap-4">
-        <p className="text-sm text-[#E1E1DF] leading-relaxed">{message}</p>
+        <p className="text-sm text-text leading-relaxed">{message}</p>
         <div className="flex items-center gap-3">
           <button
             onClick={onConfirm}
-            className="px-4 py-2 rounded-lg bg-red-900/40 text-red-400 text-xs font-semibold hover:bg-red-900/60 transition-colors"
+            className="px-4 py-2 rounded-lg bg-red-900/40 text-error text-xs font-semibold hover:bg-red-900/60 transition-colors"
           >
             {confirmLabel}
           </button>
@@ -129,12 +130,12 @@ function SectionRow({
               if (e.key === "Enter") commitLabel();
               if (e.key === "Escape") { setLabelDraft(section.label); setEditingLabel(false); }
             }}
-            className="flex-1 bg-transparent text-[11px] font-medium tracking-wide uppercase text-[#E1E1DF] focus:outline-none border-b border-[#755C4B] min-w-0"
+            className="flex-1 bg-transparent text-[11px] font-medium tracking-wide uppercase text-text focus:outline-none border-b border-accent min-w-0"
           />
         ) : (
           <button
             onClick={() => { setLabelDraft(section.label); setEditingLabel(true); }}
-            className="flex-1 text-left text-[11px] font-medium tracking-wide uppercase text-[#413E3C] hover:text-[#E1E1DF] transition-colors truncate min-w-0"
+            className="flex-1 text-left text-[11px] font-medium tracking-wide uppercase text-subtle hover:text-text transition-colors truncate min-w-0"
           >
             {section.label}
           </button>
@@ -153,7 +154,7 @@ function SectionRow({
         {sectionCount > 1 && (
           <button
             onClick={() => onDeleteSectionRequest(section)}
-            className="opacity-0 group-hover/section:opacity-30 hover:!opacity-70 transition-opacity flex-shrink-0 text-[#E1E1DF]"
+            className="opacity-0 group-hover/section:opacity-30 hover:!opacity-70 transition-opacity flex-shrink-0 text-text"
             title="Delete section"
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -189,8 +190,8 @@ function SectionRow({
                 flex items-center justify-center px-1
                 transition-colors truncate leading-tight
                 ${ch.id === activeChapterId
-                  ? "bg-[#1C1B1B] text-[#755C4B] ring-1 ring-[#755C4B]/40"
-                  : "bg-[#1C1B1B] text-[#413E3C] hover:bg-[#252220] hover:text-[#E1E1DF]"
+                  ? "bg-elevated text-muted border-[1.5px] border-subtle"
+                  : "bg-panel text-subtle hover:bg-hover hover:text-text"
                 }
               `}
               title={ch.title}
@@ -201,7 +202,7 @@ function SectionRow({
             {/* Circle-× delete on hover */}
             <button
               onClick={(e) => { e.stopPropagation(); onDeleteChapterRequest(ch); }}
-              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#100F0F] border border-[#252220] items-center justify-center hidden group-hover/chapter:flex text-[#413E3C] hover:text-red-400 hover:border-red-400/40 transition-colors z-10"
+              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-bg border border-hover items-center justify-center hidden group-hover/chapter:flex text-subtle hover:text-error hover:border-error/40 transition-colors z-10"
               title="Delete chapter"
             >
               <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -214,7 +215,7 @@ function SectionRow({
         {/* Add chapter */}
         <button
           onClick={() => onAddChapter(section.id)}
-          className="aspect-[3/4] rounded bg-[#1C1B1B] text-[#413E3C] hover:bg-[#252220] hover:text-[#755C4B] transition-colors flex items-center justify-center"
+          className="aspect-[3/4] rounded bg-panel text-subtle hover:bg-hover hover:text-accent transition-colors flex items-center justify-center"
           title="Add chapter"
         >
           <Image src="/plus.svg" alt="Add chapter" width={14} height={14} className="opacity-50 hover:opacity-100 transition-opacity" />
@@ -240,6 +241,7 @@ export default function LeftColumn({
   onUpdateSectionLabel,
   onReorderSections,
   onDeleteSection,
+  onClose,
 }: Props) {
   const router = useRouter();
   const supabase = createClient();
@@ -293,14 +295,14 @@ export default function LeftColumn({
   const sceneLabels = activeChapter?.scenes ?? [];
 
   return (
-    <div className="flex flex-col h-full bg-[#100F0F] border-r border-[#1C1B1B] w-full">
+    <div className="flex flex-col h-full bg-bg border-r border-border-subtle w-full">
 
       {/* Confirmation modals */}
       {confirmDeleteSection && (
         <ConfirmModal
           message={
             <>
-              Delete <strong className="text-[#E1E1DF]">{confirmDeleteSection.label}</strong>?{" "}
+              Delete <strong className="text-text">{confirmDeleteSection.label}</strong>?{" "}
               All chapters in this section will be permanently deleted.
             </>
           }
@@ -313,7 +315,7 @@ export default function LeftColumn({
         <ConfirmModal
           message={
             <>
-              Delete <strong className="text-[#E1E1DF]">{confirmDeleteChapter.title}</strong>?{" "}
+              Delete <strong className="text-text">{confirmDeleteChapter.title}</strong>?{" "}
               All scenes and library items will be permanently deleted.
             </>
           }
@@ -324,7 +326,7 @@ export default function LeftColumn({
       )}
 
       {/* Wordmark */}
-      <div className="px-5 pt-6 pb-5 flex-shrink-0">
+      <div className="px-5 pt-6 pb-5 flex-shrink-0 flex items-center justify-between">
         <Image
           src="/logo-S.svg"
           alt="Hot Cocoa"
@@ -333,6 +335,17 @@ export default function LeftColumn({
           style={{ filter: "brightness(0) invert(1)" }}
           priority
         />
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="md:hidden text-subtle hover:text-text transition-colors"
+            aria-label="Close"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Scrollable body */}
@@ -347,10 +360,10 @@ export default function LeftColumn({
                 : "flex flex-col items-center justify-center py-5 gap-2"
             } ${
               coverDragging
-                ? "ring-1 ring-[#755C4B] bg-[#755C4B]/5"
+                ? "ring-1 ring-accent bg-accent/5"
                 : book.coverImage
-                  ? "bg-[#1C1B1B] hover:ring-1 hover:ring-[#252220]"
-                  : "border border-dashed border-[#252220] hover:border-[#9b9890]/40"
+                  ? "bg-panel hover:ring-1 hover:ring-hover"
+                  : "border border-dashed border-hover hover:border-muted/40"
             }`}
             onDragOver={(e) => { e.preventDefault(); setCoverDragging(true); }}
             onDragLeave={() => setCoverDragging(false)}
@@ -363,12 +376,12 @@ export default function LeftColumn({
             ) : (
               <>
                 <svg
-                  className="w-4 h-4 text-[#9b9890] opacity-50 group-hover:opacity-80 transition-opacity"
+                  className="w-4 h-4 text-subtle opacity-50 group-hover:opacity-80 transition-opacity"
                   fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                 </svg>
-                <span className="text-[9px] text-[#9b9890] opacity-50 group-hover:opacity-80 uppercase tracking-widest transition-opacity select-none">
+                <span className="text-[9px] text-subtle opacity-50 group-hover:opacity-80 uppercase tracking-widest transition-opacity select-none">
                   Add cover
                 </span>
               </>
@@ -403,7 +416,7 @@ export default function LeftColumn({
           {editingTitle ? (
             <input
               autoFocus
-              className="w-full bg-transparent text-sm font-medium text-[#E1E1DF] border-b border-[#755C4B] pb-0.5 mt-2 focus:outline-none"
+              className="w-full bg-transparent text-heading-m text-text border-b border-accent pb-0.5 mt-2 focus:outline-none"
               value={titleDraft}
               onChange={(e) => setTitleDraft(e.target.value)}
               onBlur={commitTitle}
@@ -414,7 +427,7 @@ export default function LeftColumn({
             />
           ) : (
             <button
-              className="w-full text-left text-sm font-medium text-[#E1E1DF] hover:text-[#755C4B] transition-colors truncate mt-2"
+              className="w-full text-left text-heading-m text-text hover:text-accent transition-colors truncate mt-2"
               onClick={() => { setTitleDraft(book.title); setEditingTitle(true); }}
             >
               {book.title}
@@ -428,11 +441,11 @@ export default function LeftColumn({
             onClick={() => setScenesExpanded((v) => !v)}
             className="w-full flex items-center justify-between mb-1.5 group"
           >
-            <span className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C] group-hover:text-[#E1E1DF] transition-colors">
+            <span className="text-[11px] font-medium tracking-wide uppercase text-subtle group-hover:text-text transition-colors">
               Scenes
             </span>
             <svg
-              className={`w-3 h-3 text-[#413E3C] group-hover:text-[#E1E1DF] transition-all ${scenesExpanded ? "rotate-0" : "-rotate-90"}`}
+              className={`w-3 h-3 text-subtle group-hover:text-text transition-all ${scenesExpanded ? "rotate-0" : "-rotate-90"}`}
               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -442,12 +455,12 @@ export default function LeftColumn({
           {scenesExpanded && (
             <div className="flex flex-col gap-0.5">
               {sceneLabels.length === 0 ? (
-                <p className="text-[10px] text-[#413E3C]/40 italic pl-1">No scenes yet</p>
+                <p className="text-[10px] text-subtle/40 italic pl-1">No scenes yet</p>
               ) : (
                 sceneLabels.map((scene) => (
                   <div key={scene.id} className="px-1 py-0.5">
                     <p className={`text-[11px] truncate leading-tight ${
-                      scene.label ? "text-[#9b9890]" : "text-[#413E3C]/40 italic"
+                      scene.label ? "text-muted" : "text-subtle/40 italic"
                     }`}>
                       {scene.label || "—"}
                     </p>
@@ -480,19 +493,19 @@ export default function LeftColumn({
       </div>
 
       {/* ── User menu ── */}
-      <div ref={menuRef} className="px-4 pb-5 flex-shrink-0 border-t border-[#1C1B1B] pt-3 relative">
+      <div ref={menuRef} className="px-4 pb-5 flex-shrink-0 border-t border-border-subtle pt-3 relative">
         {menuOpen && (
-          <div className="absolute bottom-full left-4 mb-2 w-40 bg-[#1C1B1B] border border-[#252220] rounded-lg shadow-lg overflow-hidden">
+          <div className="absolute bottom-full left-4 mb-2 w-40 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden">
             <Link
               href="/account"
               onClick={() => setMenuOpen(false)}
-              className="block w-full text-left px-4 py-2.5 text-xs text-[#E1E1DF] hover:bg-[#252220] transition-colors"
+              className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
             >
               Account
             </Link>
             <button
               onClick={handleSignOut}
-              className="block w-full text-left px-4 py-2.5 text-xs text-[#755C4B] hover:bg-[#252220] transition-colors"
+              className="block w-full text-left px-4 py-2.5 text-xs text-accent hover:bg-hover transition-colors"
             >
               Log out
             </button>
@@ -500,7 +513,7 @@ export default function LeftColumn({
         )}
         <button
           onClick={() => setMenuOpen((o) => !o)}
-          className="text-[#9b9890] hover:text-[#E1E1DF] transition-colors text-base font-bold tracking-widest leading-none px-1"
+          className="text-subtle hover:text-text transition-colors text-base font-bold tracking-widest leading-none px-1"
           title="Account"
         >
           •••

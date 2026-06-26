@@ -82,8 +82,8 @@ function SceneBlock({
   return (
     <div
       className={`rounded-lg mb-2 transition-colors relative group/scene ${
-        isDragOver ? "ring-1 ring-[#755C4B]/40" : ""
-      } ${focused ? "bg-[#1C1B1B]" : "bg-transparent hover:bg-[#1C1B1B]/50"}`}
+        isDragOver ? "ring-1 ring-accent/40" : ""
+      } ${focused ? "bg-elevated" : "bg-transparent hover:bg-panel"}`}
       onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); onDragOver(e); }}
       onDragLeave={() => setIsDragOver(false)}
       onDrop={(e) => { e.preventDefault(); setIsDragOver(false); onDrop(index); }}
@@ -97,7 +97,7 @@ function SceneBlock({
         }}
         className="absolute left-0 top-0 bottom-0 w-5 flex items-start pt-3 justify-center opacity-0 group-hover/scene:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10"
       >
-        <svg className="w-3 h-3 text-[#413E3C]" fill="currentColor" viewBox="0 0 16 16">
+        <svg className="w-3 h-3 text-subtle" fill="currentColor" viewBox="0 0 16 16">
           <circle cx="5" cy="4" r="1.2" />
           <circle cx="5" cy="8" r="1.2" />
           <circle cx="5" cy="12" r="1.2" />
@@ -113,18 +113,18 @@ function SceneBlock({
           {confirmDelete ? (
             // Inline delete confirmation — replaces the label input
             <div className="flex items-center gap-2 flex-1">
-              <span className="text-[11px] font-medium tracking-wide uppercase text-[#9b9890]">
+              <span className="text-[11px] font-medium tracking-wide uppercase text-muted">
                 Delete scene?
               </span>
               <button
                 onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
-                className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C] hover:text-[#9b9890] transition-colors"
+                className="text-[11px] font-medium tracking-wide uppercase text-subtle hover:text-muted transition-colors"
               >
                 No
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onDeleteScene(chapterId, scene.id); }}
-                className="text-[11px] font-medium tracking-wide uppercase text-[#755C4B] hover:text-[#E1E1DF] transition-colors"
+                className="text-[11px] font-medium tracking-wide uppercase text-accent hover:text-text transition-colors"
               >
                 Yes
               </button>
@@ -140,12 +140,12 @@ function SceneBlock({
                 onClick={(e) => e.stopPropagation()}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
-                className="flex-1 min-w-0 bg-transparent text-base font-medium tracking-wide uppercase text-[#9b9890] placeholder:text-[#9b9890]/40 focus:outline-none cursor-text"
+                className="flex-1 min-w-0 bg-transparent text-label-m uppercase text-subtle placeholder:text-subtle/40 focus:outline-none cursor-text"
                 style={{ fontFamily: "inherit" }}
               />
               <button
                 onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
-                className="opacity-0 group-hover/scene:opacity-100 text-[#413E3C] hover:text-red-400 transition-all flex-shrink-0"
+                className="opacity-0 group-hover/scene:opacity-100 text-subtle hover:text-error transition-all flex-shrink-0"
                 title="Delete scene"
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -166,7 +166,7 @@ function SceneBlock({
           onInput={() => onSceneChange(chapterId, scene.id, { body: bodyRef.current?.innerHTML ?? "" })}
           onPaste={handlePaste}
           onKeyDown={handleKeyDown}
-          className="w-full bg-transparent text-[#E1E1DF] text-sm leading-relaxed focus:outline-none empty:before:content-['Write_here…'] empty:before:text-[#413E3C]/30 empty:before:pointer-events-none [&_em]:italic"
+          className="w-full bg-transparent text-text text-body-l focus:outline-none empty:before:content-['Write_here…'] empty:before:text-subtle/30 empty:before:pointer-events-none [&_em]:italic"
           style={{ fontFamily: "inherit", minHeight: "3em" }}
         />
       </div>
@@ -211,14 +211,14 @@ export default function CenterColumn({
 
   return (
     <div
-      className="flex flex-col h-full bg-[#100F0F] w-full relative"
+      className="flex flex-col h-full bg-bg w-full relative"
       onPaste={handlePaste}
     >
       {/* Save indicator */}
       {saveStatus !== "idle" && (
         <div
           className={`absolute top-4 right-4 text-[10px] uppercase tracking-widest transition-opacity z-10 ${
-            saveStatus === "saving" ? "text-[#413E3C]" : "text-[#755C4B]"
+            saveStatus === "saving" ? "text-subtle" : "text-accent"
           }`}
         >
           {saveStatus === "saving" ? "Saving…" : "Saved"}
@@ -226,13 +226,13 @@ export default function CenterColumn({
       )}
 
       {/* Chapter title */}
-      <div className="w-full flex justify-center border-b border-[#1C1B1B] flex-shrink-0">
+      <div className="w-full flex justify-center border-b border-border-subtle flex-shrink-0">
         <div className="w-full max-w-[700px] px-6 pt-6 pb-4">
           <input
             value={chapter.title}
             placeholder="Chapter title…"
             onChange={(e) => onChapterTitleChange(chapter.id, e.target.value)}
-            className="w-full bg-transparent text-xl font-semibold text-[#E1E1DF] placeholder:text-[#413E3C]/40 focus:outline-none"
+            className="w-full bg-transparent text-heading-l text-text placeholder:text-subtle/40 focus:outline-none"
           />
         </div>
       </div>
@@ -271,7 +271,7 @@ export default function CenterColumn({
               height={16}
               className="opacity-40 group-hover:opacity-100 transition-opacity"
             />
-            <span className="text-[11px] font-medium tracking-wide uppercase text-[#413E3C] group-hover:text-[#755C4B] transition-colors">Add scene</span>
+            <span className="text-body-m text-subtle group-hover:text-accent transition-colors">Add scene</span>
           </button>
         </div>
       </div>

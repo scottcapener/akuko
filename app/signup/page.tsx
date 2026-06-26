@@ -17,15 +17,15 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
   if (/[0-9]/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
 
-  if (score <= 1) return { score, label: "Weak", color: "#ef4444" };
-  if (score <= 2) return { score, label: "Fair", color: "#f59e0b" };
-  if (score <= 3) return { score, label: "Good", color: "#84cc16" };
-  return { score, label: "Strong", color: "#755C4B" };
+  if (score <= 1) return { score, label: "Weak", color: "var(--hc-error)" };
+  if (score <= 2) return { score, label: "Fair", color: "var(--hc-warning)" };
+  if (score <= 3) return { score, label: "Good", color: "var(--hc-success)" };
+  return { score, label: "Strong", color: "var(--hc-accent)" };
 }
 
 function ErrorMsg({ msg }: { msg: string }) {
   if (!msg) return null;
-  return <p className="text-red-400 text-xs mt-2">{msg}</p>;
+  return <p className="text-error text-xs mt-2">{msg}</p>;
 }
 
 // ── Steps ───────────────────────────────────────────────────────────────────
@@ -159,20 +159,20 @@ export default function SignupPage() {
   const stepProgress = (step / 3) * 100;
 
   return (
-    <div className="min-h-full flex flex-col items-center justify-center bg-[#100F0F] px-6 py-12">
+    <div className="min-h-full flex flex-col items-center justify-center bg-bg px-6 py-12">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8 gap-4">
           <Link href="/">
             <Image src="/logo-L.svg" alt="Hot Cocoa" width={90} height={52} />
           </Link>
           <div className="w-full">
-            <div className="flex justify-between text-[10px] text-[#413E3C] uppercase tracking-wide mb-1.5">
+            <div className="flex justify-between text-[10px] text-subtle uppercase tracking-wide mb-1.5">
               <span>{stepLabel}</span>
               <span>{step} / 3</span>
             </div>
-            <div className="h-px bg-[#1C1B1B] rounded-full overflow-hidden">
+            <div className="h-px bg-border-subtle rounded-full overflow-hidden">
               <div
-                className="h-full bg-[#755C4B] rounded-full transition-all duration-300"
+                className="h-full bg-accent rounded-full transition-all duration-300"
                 style={{ width: `${stepProgress}%` }}
               />
             </div>
@@ -182,7 +182,7 @@ export default function SignupPage() {
         {/* Step 1 — Email + password */}
         {step === 1 && (
           <div className="flex flex-col gap-4">
-            <h1 className="text-[#E1E1DF] text-lg font-semibold">Create your account</h1>
+            <h1 className="text-text text-lg font-semibold">Create your account</h1>
             <div>
               <Label>Email</Label>
               <Input type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleStep1()} />
@@ -201,14 +201,14 @@ export default function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#413E3C]/60 hover:text-[#413E3C] text-xs"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle/60 hover:text-subtle text-xs"
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
               {password.length > 0 && (
                 <div className="mt-2 flex items-center gap-2">
-                  <div className="flex-1 h-0.5 bg-[#1C1B1B] rounded-full overflow-hidden">
+                  <div className="flex-1 h-0.5 bg-border-subtle rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-300"
                       style={{
@@ -225,9 +225,9 @@ export default function SignupPage() {
             </div>
             <ErrorMsg msg={error} />
             <Button loading={loading} onClick={handleStep1}>Continue</Button>
-            <p className="text-center text-[#413E3C]/60 text-xs">
+            <p className="text-center text-subtle/60 text-xs">
               Already have an account?{" "}
-              <Link href="/login" className="text-[#413E3C] hover:text-[#755C4B] underline underline-offset-2">Log in</Link>
+              <Link href="/login" className="text-subtle hover:text-accent underline underline-offset-2">Log in</Link>
             </p>
           </div>
         )}
@@ -236,8 +236,8 @@ export default function SignupPage() {
         {step === 2 && (
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="text-[#E1E1DF] text-lg font-semibold">Check your email</h1>
-              <p className="text-[#413E3C] text-xs mt-1">We sent a 6-digit code to {email}. Valid for 1 hour.</p>
+              <h1 className="text-text text-lg font-semibold">Check your email</h1>
+              <p className="text-subtle text-xs mt-1">We sent a 6-digit code to {email}. Valid for 1 hour.</p>
             </div>
             <div>
               <Label>6-digit code</Label>
@@ -255,7 +255,7 @@ export default function SignupPage() {
             <ErrorMsg msg={error} />
             <Button loading={loading} onClick={handleStep2}>Verify</Button>
             <button
-              className="text-xs text-[#413E3C]/60 hover:text-[#413E3C] transition-colors disabled:opacity-40"
+              className="text-xs text-subtle/60 hover:text-subtle transition-colors disabled:opacity-40"
               disabled={resendCooldown > 0}
               onClick={handleResend}
             >
@@ -268,8 +268,8 @@ export default function SignupPage() {
         {step === 3 && (
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="text-[#E1E1DF] text-lg font-semibold">One last thing</h1>
-              <p className="text-[#413E3C] text-xs mt-1">How should we call you?</p>
+              <h1 className="text-text text-lg font-semibold">One last thing</h1>
+              <p className="text-subtle text-xs mt-1">How should we call you?</p>
             </div>
             <div>
               <Label>Display name</Label>
@@ -283,7 +283,7 @@ export default function SignupPage() {
               />
             </div>
             <div>
-              <Label>Pen name <span className="normal-case text-[#413E3C]/60">(optional)</span></Label>
+              <Label>Pen name <span className="normal-case text-subtle/60">(optional)</span></Label>
               <Input
                 type="text"
                 placeholder="Your writing alias"

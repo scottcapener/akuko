@@ -18,21 +18,22 @@ Dense reference for AI assistants working on UI. Paste this at the start of any 
 
 | Token var          | Tailwind class     | Value     | Role                                  |
 | ------------------ | ------------------ | --------- | ------------------------------------- |
-| `--hc-base`        | `bg-base`          | `#100f0f` | Darkest surface: editor, auth, landing|
-| `--hc-bg`          | `bg-bg`            | `#18181a` | App shell background                  |
-| `--hc-panel`       | `bg-panel`         | `#1c1b1b` | Cards, inputs, panels, modals         |
-| `--hc-elevated`    | `bg-elevated`      | `#1f1f21` | Above-panel surfaces                  |
-| `--hc-hover`       | `bg-hover`         | `#252220` | Hover state for panels                |
-| `--hc-text`        | `text-text`        | `#e8e6e3` | Primary text                          |
-| `--hc-muted`       | `text-muted`       | `#9b9890` | Secondary/subdued text                |
-| `--hc-subtle`      | `text-subtle`      | `#413e3c` | Tertiary text, labels, icons          |
+| `--hc-bg`          | `bg-bg`            | `#100f0f` | Page background (darkest surface)     |
+| `--hc-panel`       | `bg-panel`         | `#18181a` | Cards, inputs, thumbnails, image bg   |
+| `--hc-elevated`    | `bg-elevated`      | `#1f1f21` | Active scene/chapter, note background |
+| `--hc-hover`       | `bg-hover`         | `#252220` | "+" icons, hover surface              |
+| `--hc-text`        | `text-text`        | `#e8e6e3` | Primary text: titles, body copy       |
+| `--hc-muted`       | `text-muted`       | `#9b9890` | Active chapter thumbnail title        |
+| `--hc-subtle`      | `text-subtle`      | `#615e5c` | Icons, labels, placeholders, small text, song artist |
 | `--hc-accent`      | `bg-accent` / `text-accent` | `#755c4b` | Primary accent (warm brown) |
 | `--hc-accent-hi`   | `bg-accent-hi`     | `#8b6d5a` | Accent hover state                    |
-| `--hc-border`      | `border-border`    | `#252220` | Default border                        |
-| `--hc-border-subtle` | `border-border-subtle` | `#1c1b1b` | Hair/structural border           |
+| `--hc-border-subtle` | `border-border-subtle` | `#1c1b1b` | All borders & dividers          |
+| `--hc-scrim`       | `bg-scrim`         | `rgb(16 15 15 / .87)` | Modal/panel backdrop (`bg` @ 87%) |
 | `--hc-error`       | `text-error`       | `#ef4444` | Error states                          |
 | `--hc-warning`     | `text-warning`     | `#f59e0b` | Warning states                        |
 | `--hc-success`     | `text-success`     | `#84cc16` | Success states                        |
+
+> **Renamed/removed in CocoaBar:** `--hc-base` and `--hc-border` were dropped (unused). The surface scale shifted down a step — what was `base` is now `bg`. Use `border-subtle` for all borders.
 
 Opacity modifier syntax works: `bg-accent/60`, `text-subtle/50`, `border-accent/40`.
 
@@ -41,6 +42,20 @@ Opacity modifier syntax works: `bg-accent/60`, `text-subtle/50`, `border-accent/
 ## Typography
 
 Font families: `--hc-font-sans` (Inter) is the default. `--hc-font-mono` (JetBrains Mono) for code.
+
+### Named type styles (CocoaBar — Tailwind v4 `text-*` utilities)
+
+Defined in `globals.css` via `--text-*` modifiers. Prefer these over ad-hoc `text-[Npx]`.
+
+| Utility          | Size / line-height / weight | Usage                                   |
+| ---------------- | --------------------------- | --------------------------------------- |
+| `text-heading-l` | 20 / 1 / 600 (Semi Bold)    | Chapter title                           |
+| `text-heading-m` | 14 / 1 / 500 (Medium)       | Book title, primary button label        |
+| `text-body-l`    | 16 / 24 / 400               | Scene body, note body                   |
+| `text-body-m`    | 12 / 1 / 400                | Song/note titles, "Add scene"           |
+| `text-body-s`    | 11 / 1 / 400                | Song artist, secondary captions         |
+| `text-body-xs`   | 9 / 1 / 500 (Medium)        | Chapter thumbnail label                 |
+| `text-label-m`   | 11 / 1 / 400, +0.03em       | Uppercase section/scene labels (pair with `uppercase`) |
 
 ### Type scale used in the app
 
