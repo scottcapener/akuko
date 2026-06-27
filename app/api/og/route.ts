@@ -16,12 +16,55 @@ function extractYouTubeId(url: string): string | null {
   return null;
 }
 
+// Apple Music links serve generic placeholder OG tags to bots (the real
+// metadata is rendered client-side), so scrape the page and you get
+// "Apple Music Web Player" + a logo. The credential-free iTunes Lookup API
+// returns clean structured data instead. The `?i=` param is the song id;
+// otherwise the trailing path id is the album/song/artist id.
+function extractAppleMusicId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.replace("www.", "").endsWith("music.apple.com")) return null;
+    const songId = parsed.searchParams.get("i");
+    if (songId && /^\d+$/.test(songId)) return songId;
+    const last = parsed.pathname.split("/").filter(Boolean).pop() ?? "";
+    return /^\d+$/.test(last) ? last : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
   if (!url) return NextResponse.json({ error: "missing url" }, { status: 400 });
 
   let hostname = url;
   try { hostname = new URL(url).hostname.replace("www.", ""); } catch {}
+
+  // Apple Music: use the iTunes Lookup API for accurate title + artist + artwork
+  const appleId = extractAppleMusicId(url);
+  if (appleId) {
+    try {
+      const lookupRes = await fetch(
+        `https://itunes.apple.com/lookup?id=${appleId}`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (lookupRes.ok) {
+        const data = await lookupRes.json();
+        const r = data?.results?.[0];
+        if (r) {
+          // artworkUrl100 is templated — request a larger square instead of the 100px thumb
+          const image = (r.artworkUrl100 || "").replace(/\/\d+x\d+bb\./, "/600x600bb.");
+          return NextResponse.json({
+            title: r.trackName || r.collectionName || r.artistName || hostname,
+            description: r.artistName || "",
+            image,
+          });
+        }
+      }
+    } catch {}
+    // fall through to generic scrape on miss
+  }
 
   // YouTube: use oEmbed for accurate title + channel name + thumbnail
   const ytId = extractYouTubeId(url);
