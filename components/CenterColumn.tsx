@@ -212,6 +212,7 @@ export default function CenterColumn({
   return (
     <div
       className="flex flex-col h-full bg-bg w-full relative"
+      data-paste-scope="center"
       onPaste={handlePaste}
     >
       {/* Save indicator */}

@@ -84,6 +84,11 @@ export default function WritePage() {
   useEffect(() => {
     function handleGlobalPaste(e: ClipboardEvent) {
       const target = e.target as HTMLElement;
+      // CenterColumn has its own onPaste that adds the image for any paste within it.
+      // Skip here so the image isn't added twice — the tag checks below miss focusable
+      // non-editable targets inside CenterColumn (e.g. a focused button), which slipped
+      // through and caused a double-add.
+      if (target.closest?.('[data-paste-scope="center"]')) return;
       if (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
       const items = Array.from(e.clipboardData?.items ?? []);
       const imageItem = items.find((it) => it.type.startsWith("image/"));
