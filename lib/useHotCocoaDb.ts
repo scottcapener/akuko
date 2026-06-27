@@ -49,6 +49,10 @@ export function useHotCocoaDb() {
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialized = useRef(false);
   const loadedChapterIds = useRef(new Set<string>());
+  // State mirror of loadedChapterIds so the UI can render a skeleton until a
+  // chapter's content has arrived. The ref stays the source of truth for dedup.
+  const [loadedChapters, setLoadedChapters] = useState<Set<string>>(new Set());
+  const prefetchStarted = useRef(false);
 
   // ── Bootstrap ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -86,6 +90,7 @@ export function useHotCocoaDb() {
           db.getLibraryForChapter(firstChapter.id),
         ]);
         loadedChapterIds.current.add(firstChapter.id);
+        setLoadedChapters(new Set([firstChapter.id]));
         const updatedSections = mapChapter(loadedSections, firstChapter.id, (c) => ({
           ...c,
           scenes,
@@ -115,7 +120,32 @@ export function useHotCocoaDb() {
     ]);
 
     setSections((prev) => mapChapter(prev, chapterId, (c) => ({ ...c, scenes, library })));
+    setLoadedChapters((prev) => {
+      const next = new Set(prev);
+      next.add(chapterId);
+      return next;
+    });
   }, []);
+
+  // ── Background prefetch ───────────────────────────────────────────────
+  // After the first chapter renders, quietly load every other chapter's
+  // content so switching chapters is instant (no empty flash). Runs once;
+  // loadChapter dedups, so already-loaded chapters are skipped.
+  useEffect(() => {
+    if (!hydrated || prefetchStarted.current) return;
+    prefetchStarted.current = true;
+    let cancelled = false;
+    (async () => {
+      const all = sections.flatMap((s) => s.chapters);
+      for (const ch of all) {
+        if (cancelled) break;
+        await loadChapter(ch.id);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, sections, loadChapter]);
 
   // ── Autosave flush ─────────────────────────────────────────────────────
   const flushSaves = useCallback(async () => {
@@ -465,6 +495,7 @@ export function useHotCocoaDb() {
 
   const allChapters = sections.flatMap((s) => s.chapters);
   const activeChapter = allChapters.find((c) => c.id === activeChapterId) ?? allChapters[0];
+  const activeChapterLoaded = activeChapter ? loadedChapters.has(activeChapter.id) : false;
   const wordCount = wordCountAll(sections);
 
   return {
@@ -472,6 +503,7 @@ export function useHotCocoaDb() {
     hydrated,
     saveStatus,
     activeChapter,
+    activeChapterLoaded,
     sections,
     wordCount,
     unlocks,

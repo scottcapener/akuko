@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./styles/tokens.css";
 import "./globals.css";
+import ScrollbarAutoHide from "@/components/ScrollbarAutoHide";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -25,7 +26,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} h-full`}>
-      <body className="h-full">{children}</body>
+      <body className="h-full">
+        <ScrollbarAutoHide />
+        {children}
+      </body>
     </html>
   );
 }

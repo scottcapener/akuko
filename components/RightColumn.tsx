@@ -329,6 +329,7 @@ function ImageUploadModal({
 
 interface Props {
   chapter: Chapter;
+  loading?: boolean;
   onAddImage: (chapterId: string, img: LibraryImage) => void;
   onRemoveImage: (chapterId: string, imgId: string) => void;
   onAddNote: (chapterId: string) => Promise<void>;
@@ -343,6 +344,7 @@ interface Props {
 
 export default function RightColumn({
   chapter,
+  loading = false,
   onAddImage,
   onRemoveImage,
   onAddNote,
@@ -483,11 +485,13 @@ export default function RightColumn({
         </Portal>
       )}
 
-      <div className="px-4 pt-5 pb-2 flex-shrink-0 flex items-center justify-between">
-        <Image src="/library.svg" alt="Library" width={16} height={16} className="opacity-50" />
+      {/* Panel Header — library icon. Fixed h-16 (sticky) so the Gallery top
+          lines up with the Book Cover and the first Scene. */}
+      <div className="sticky top-0 z-10 bg-bg h-16 px-4 flex-shrink-0 flex items-center justify-between">
+        <Image src="/library.svg" alt="Library" width={20} height={20} />
         {onClose && (
-          <button onClick={onClose} className="text-subtle/50 hover:text-subtle transition-colors">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <button onClick={onClose} className="text-subtle/50 hover:text-subtle transition-colors md:hidden">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -495,8 +499,15 @@ export default function RightColumn({
       </div>
 
       {/* ── Images ── */}
+      {loading ? (
+        <div className="mx-4 mt-4 mb-3 p-2 grid grid-cols-3 gap-1.5" aria-hidden>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="aspect-square rounded bg-panel animate-pulse" />
+          ))}
+        </div>
+      ) : (
       <div
-        className={`mx-4 mb-3 rounded-lg border border-dashed transition-colors ${
+        className={`mx-4 mt-4 mb-3 rounded-lg border border-dashed transition-colors ${
           draggingOver ? "border-accent bg-accent/5" : "border-border-subtle hover:border-hover"
         }`}
         onDragOver={(e) => { e.preventDefault(); setDraggingOver(true); }}
@@ -543,6 +554,7 @@ export default function RightColumn({
           </div>
         )}
       </div>
+      )}
 
       {/* ── Music modal ── */}
       {musicModalOpen && (
@@ -591,9 +603,7 @@ export default function RightColumn({
             <Image src="/plus.svg" alt="Add music link" width={14} height={14} />
           </button>
         </div>
-        {chapter.library.musicLinks.length === 0 ? (
-          <p className="text-[11px] text-subtle/40 italic">No music links yet</p>
-        ) : (
+        {chapter.library.musicLinks.length > 0 && (
           <div className="flex flex-col gap-2">
             {chapter.library.musicLinks.map((link) => (
               <div
@@ -656,9 +666,7 @@ export default function RightColumn({
             <Image src="/plus.svg" alt="Add note" width={14} height={14} />
           </button>
         </div>
-        {chapter.library.notes.length === 0 ? (
-          <p className="text-[11px] text-subtle/40 italic">No notes yet</p>
-        ) : (
+        {chapter.library.notes.length > 0 && (
           <div className="flex flex-col gap-1">
             {chapter.library.notes.map((note, i) => (
               <div

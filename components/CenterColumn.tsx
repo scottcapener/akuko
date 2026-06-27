@@ -14,6 +14,7 @@ interface Props {
   onReorderScenes: (chapterId: string, from: number, to: number) => void;
   onDeleteScene: (chapterId: string, sceneId: string) => void;
   onAddImage: (chapterId: string, img: LibraryImage) => void;
+  loading?: boolean;
 }
 
 function makeId() {
@@ -88,71 +89,58 @@ function SceneBlock({
       onDragLeave={() => setIsDragOver(false)}
       onDrop={(e) => { e.preventDefault(); setIsDragOver(false); onDrop(index); }}
     >
-      {/* Drag handle — left edge, visible on hover */}
-      <div
-        draggable
-        onDragStart={(e) => {
-          e.dataTransfer.effectAllowed = "move";
-          onDragStart(index);
-        }}
-        className="absolute left-0 top-0 bottom-0 w-5 flex items-start pt-3 justify-center opacity-0 group-hover/scene:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10"
-      >
-        <svg className="w-3 h-3 text-subtle" fill="currentColor" viewBox="0 0 16 16">
-          <circle cx="5" cy="4" r="1.2" />
-          <circle cx="5" cy="8" r="1.2" />
-          <circle cx="5" cy="12" r="1.2" />
-          <circle cx="10" cy="4" r="1.2" />
-          <circle cx="10" cy="8" r="1.2" />
-          <circle cx="10" cy="12" r="1.2" />
-        </svg>
-      </div>
-
-      <div className="px-4 py-3 pl-5" onClick={handleWrapperClick}>
-        {/* Label row: input + delete button/confirmation */}
-        <div className="flex items-center gap-1 mb-2 min-h-[1.5rem]">
+      <div className="px-4 py-3" onClick={handleWrapperClick}>
+        {/* Scene Header: description label + delete (×/confirmation) on the right.
+            The row itself is the drag handle for reordering — disabled while the
+            scene is focused so the description text stays selectable. */}
+        <div
+          draggable={!focused}
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = "move";
+            onDragStart(index);
+          }}
+          className="flex items-center gap-2 mb-2 min-h-[1.5rem] cursor-grab active:cursor-grabbing"
+        >
+          <input
+            ref={labelRef}
+            maxLength={260}
+            value={scene.label}
+            placeholder="Scene description…"
+            onChange={(e) => onSceneChange(chapterId, scene.id, { label: e.target.value })}
+            onClick={(e) => e.stopPropagation()}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            className={`flex-1 min-w-0 bg-transparent text-label-m uppercase text-subtle placeholder:text-subtle/40 focus:outline-none ${focused ? "cursor-text" : "cursor-grab"}`}
+            style={{ fontFamily: "inherit" }}
+          />
           {confirmDelete ? (
-            // Inline delete confirmation — replaces the label input
-            <div className="flex items-center gap-2 flex-1">
-              <span className="text-[11px] font-medium tracking-wide uppercase text-muted">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-label-m uppercase text-accent whitespace-nowrap">
                 Delete scene?
               </span>
               <button
                 onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
-                className="text-[11px] font-medium tracking-wide uppercase text-subtle hover:text-muted transition-colors"
+                className="bg-panel rounded px-2 py-1 text-[11px] tracking-[0.33px] uppercase text-text hover:bg-hover transition-colors"
               >
                 No
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onDeleteScene(chapterId, scene.id); }}
-                className="text-[11px] font-medium tracking-wide uppercase text-accent hover:text-text transition-colors"
+                className="bg-panel rounded px-2 py-1 text-[11px] tracking-[0.33px] uppercase text-text hover:bg-hover transition-colors"
               >
                 Yes
               </button>
             </div>
           ) : (
-            <>
-              <input
-                ref={labelRef}
-                maxLength={260}
-                value={scene.label}
-                placeholder="Scene label…"
-                onChange={(e) => onSceneChange(chapterId, scene.id, { label: e.target.value })}
-                onClick={(e) => e.stopPropagation()}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
-                className="flex-1 min-w-0 bg-transparent text-label-m uppercase text-subtle placeholder:text-subtle/40 focus:outline-none cursor-text"
-                style={{ fontFamily: "inherit" }}
-              />
-              <button
-                onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
-                className="opacity-0 group-hover/scene:opacity-100 text-subtle hover:text-error transition-all flex-shrink-0"
-                title="Delete scene"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </>
+            <button
+              onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+              className="opacity-0 group-hover/scene:opacity-100 text-subtle hover:text-error transition-all flex-shrink-0"
+              title="Delete scene"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           )}
         </div>
 
@@ -183,6 +171,7 @@ export default function CenterColumn({
   onReorderScenes,
   onDeleteScene,
   onAddImage,
+  loading = false,
 }: Props) {
   const dragSceneIndex = useRef<number | null>(null);
 
@@ -226,9 +215,10 @@ export default function CenterColumn({
         </div>
       )}
 
-      {/* Chapter title */}
-      <div className="w-full flex justify-center border-b border-border-subtle flex-shrink-0">
-        <div className="w-full max-w-[700px] px-6 pt-6 pb-4">
+      {/* Chapter Header — fixed h-16 so it matches the Book/Library Panel Headers;
+          this keeps Cover, first Scene, and Gallery tops on the same baseline. */}
+      <div className="h-16 flex items-center justify-center border-b border-border-subtle flex-shrink-0">
+        <div className="w-full max-w-[700px] px-6">
           <input
             value={chapter.title}
             placeholder="Chapter title…"
@@ -241,6 +231,19 @@ export default function CenterColumn({
       {/* Scene feed */}
       <div className="flex-1 overflow-y-auto flex justify-center">
         <div className="w-full max-w-[700px] px-4 py-4">
+          {loading ? (
+            <div className="px-4" aria-hidden>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="mb-4 animate-pulse">
+                  <div className="h-2.5 w-24 bg-panel rounded mb-3" />
+                  <div className="h-3.5 w-full bg-panel rounded mb-2" />
+                  <div className="h-3.5 w-11/12 bg-panel rounded mb-2" />
+                  <div className="h-3.5 w-4/6 bg-panel rounded" />
+                </div>
+              ))}
+            </div>
+          ) : (
+          <>
           {chapter.scenes.map((scene, i) => (
             <SceneBlock
               key={scene.id}
@@ -274,6 +277,8 @@ export default function CenterColumn({
             />
             <span className="text-body-m text-subtle group-hover:text-accent transition-colors">Add scene</span>
           </button>
+          </>
+          )}
         </div>
       </div>
     </div>

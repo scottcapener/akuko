@@ -76,16 +76,40 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling — auto-hide: the thumb is invisible at rest and only
+   appears while the element is being scrolled (.is-scrolling, toggled by
+   ScrollbarAutoHide) or while the scroll area is hovered. */
 ::-webkit-scrollbar {
-  width: 4px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease;
+}
+.is-scrolling::-webkit-scrollbar-thumb,
+:hover::-webkit-scrollbar-thumb {
   background: var(--hc-border-subtle);
-  border-radius: 2px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--hc-hover, var(--hc-border-subtle));
+  background-clip: padding-box;
+}
+
+/* Firefox — no hover-reveal, but scroll-driven reveal still works. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.is-scrolling {
+  scrollbar-color: var(--hc-border-subtle) transparent;
 }
 
 /* Remove default textarea/input outlines */
