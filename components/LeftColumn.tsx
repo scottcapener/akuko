@@ -325,31 +325,23 @@ export default function LeftColumn({
         />
       )}
 
-      {/* Wordmark */}
-      <div className="px-5 pt-6 pb-5 flex-shrink-0 flex items-center justify-between">
-        <Image
-          src="/logo-S.svg"
-          alt="Hot Cocoa"
-          width={85}
-          height={22}
-          style={{ filter: "brightness(0) invert(1)" }}
-          priority
-        />
-        {onClose && (
+      {/* Mobile close button */}
+      {onClose && (
+        <div className="px-5 pt-6 pb-2 flex-shrink-0 flex items-center justify-end md:hidden">
           <button
             onClick={onClose}
-            className="md:hidden text-subtle hover:text-text transition-colors"
+            className="text-subtle hover:text-text transition-colors"
             aria-label="Close"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Scrollable body */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
+      <div className="flex-1 overflow-y-auto px-4 pt-5 pb-4">
 
         {/* ── Cover + Title ── */}
         <div className="mb-3">
@@ -492,10 +484,10 @@ export default function LeftColumn({
         ))}
       </div>
 
-      {/* ── User menu ── */}
-      <div ref={menuRef} className="px-4 pb-5 flex-shrink-0 border-t border-border-subtle pt-3 relative">
+      {/* ── Logo + user menu ── */}
+      <div ref={menuRef} className="px-5 py-4 flex-shrink-0 border-t border-border-subtle relative flex items-center justify-between">
         {menuOpen && (
-          <div className="absolute bottom-full left-4 mb-2 w-40 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden">
+          <div className="absolute bottom-full right-4 mb-2 w-40 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden">
             <Link
               href="/account"
               onClick={() => setMenuOpen(false)}
@@ -511,12 +503,24 @@ export default function LeftColumn({
             </button>
           </div>
         )}
+        <Image
+          src="/logo-wordmark.svg"
+          alt="Hot Cocoa"
+          width={93}
+          height={17}
+          priority
+        />
         <button
           onClick={() => setMenuOpen((o) => !o)}
-          className="text-subtle hover:text-text transition-colors text-base font-bold tracking-widest leading-none px-1"
+          className="text-subtle hover:text-text transition-colors leading-none flex items-center justify-center"
           title="Account"
+          aria-label="Account menu"
         >
-          •••
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="5" cy="12" r="1.5" />
+            <circle cx="12" cy="12" r="1.5" />
+            <circle cx="19" cy="12" r="1.5" />
+          </svg>
         </button>
       </div>
     </div>
