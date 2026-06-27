@@ -229,8 +229,8 @@ export default function CenterColumn({
       </div>
 
       {/* Scene feed */}
-      <div className="flex-1 overflow-y-auto flex justify-center">
-        <div className="w-full max-w-[700px] px-4 py-4">
+      <div className="flex-1 overflow-y-auto">
+        <div className="w-full max-w-[700px] mx-auto px-4 pt-4 pb-32">
           {loading ? (
             <div className="px-4" aria-hidden>
               {[0, 1, 2].map((i) => (
@@ -266,7 +266,7 @@ export default function CenterColumn({
           {/* Add scene button */}
           <button
             onClick={() => onAddScene(chapter.id)}
-            className="mt-2 ml-4 mb-16 flex items-center gap-2 transition-colors group"
+            className="mt-2 ml-4 mb-2 flex items-center gap-2 transition-colors group"
           >
             <Image
               src="/plus.svg"
