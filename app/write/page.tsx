@@ -133,6 +133,7 @@ export default function WritePage() {
 
   const rightProps = {
     chapter: store.activeChapter,
+    loading: !store.activeChapterLoaded,
     onAddImage: store.addLibraryImage,
     onRemoveImage: store.removeLibraryImage,
     onAddNote: store.addNote,
@@ -179,6 +180,7 @@ export default function WritePage() {
             onReorderScenes={store.reorderScenes}
             onDeleteScene={store.deleteScene}
             onAddImage={store.addLibraryImage}
+            loading={!store.activeChapterLoaded}
           />
         </div>
         <div onMouseDown={right.onMouseDown} className="w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60" />
@@ -198,6 +200,7 @@ export default function WritePage() {
           onReorderScenes={store.reorderScenes}
           onDeleteScene={store.deleteScene}
           onAddImage={store.addLibraryImage}
+          loading={!store.activeChapterLoaded}
         />
       </div>
 
