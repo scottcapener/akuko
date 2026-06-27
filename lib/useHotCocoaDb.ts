@@ -272,7 +272,15 @@ export function useHotCocoaDb() {
       const newChapter = await db.createChapter(book.id, sectionId, position);
       const scenes = await db.getScenesForChapter(newChapter.id);
       const fullChapter = { ...newChapter, scenes };
+      // The chapter is fully materialized locally (empty scenes/library), so
+      // mark it loaded in both the dedup ref and the state mirror — otherwise
+      // activeChapterLoaded stays false and the skeletons never clear.
       loadedChapterIds.current.add(newChapter.id);
+      setLoadedChapters((prev) => {
+        const next = new Set(prev);
+        next.add(newChapter.id);
+        return next;
+      });
       setSections((prev) =>
         prev.map((s) =>
           s.id === sectionId ? { ...s, chapters: [...s.chapters, fullChapter] } : s
