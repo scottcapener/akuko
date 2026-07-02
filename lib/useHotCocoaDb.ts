@@ -82,23 +82,26 @@ export function useHotCocoaDb() {
       const { book: loadedBook, sections: loadedSections } = await db.getOrCreateBook(user.id);
 
       const allChapters = loadedSections.flatMap((s) => s.chapters);
-      const firstChapter = allChapters[0];
+      // getOrCreateBook resolves activeChapterId to the last-edited chapter
+      // (falling back to the first), so open that one on load.
+      const initialChapter =
+        allChapters.find((c) => c.id === loadedBook.activeChapterId) ?? allChapters[0];
 
-      if (firstChapter) {
+      if (initialChapter) {
         const [scenes, library] = await Promise.all([
-          db.getScenesForChapter(firstChapter.id),
-          db.getLibraryForChapter(firstChapter.id),
+          db.getScenesForChapter(initialChapter.id),
+          db.getLibraryForChapter(initialChapter.id),
         ]);
-        loadedChapterIds.current.add(firstChapter.id);
-        setLoadedChapters(new Set([firstChapter.id]));
-        const updatedSections = mapChapter(loadedSections, firstChapter.id, (c) => ({
+        loadedChapterIds.current.add(initialChapter.id);
+        setLoadedChapters(new Set([initialChapter.id]));
+        const updatedSections = mapChapter(loadedSections, initialChapter.id, (c) => ({
           ...c,
           scenes,
           library,
         }));
         setSections(updatedSections);
-        setActiveChapterId(firstChapter.id);
-        setBook({ ...loadedBook, activeChapterId: firstChapter.id });
+        setActiveChapterId(initialChapter.id);
+        setBook({ ...loadedBook, activeChapterId: initialChapter.id });
       } else {
         setSections(loadedSections);
         setBook(loadedBook);
@@ -198,7 +201,12 @@ export function useHotCocoaDb() {
   const setActiveChapter = useCallback(
     (id: string) => {
       setActiveChapterId(id);
-      setBook((b) => (b ? { ...b, activeChapterId: id } : b));
+      setBook((b) => {
+        if (!b) return b;
+        // Persist so returning to /write reopens this chapter.
+        db.updateBookActiveChapter(b.id, id);
+        return { ...b, activeChapterId: id };
+      });
       loadChapter(id);
     },
     [loadChapter]
@@ -252,7 +260,11 @@ export function useHotCocoaDb() {
           const next = others[0];
           if (next) {
             setActiveChapterId(next.id);
-            setBook((b) => (b ? { ...b, activeChapterId: next.id } : b));
+            setBook((b) => {
+              if (!b) return b;
+              db.updateBookActiveChapter(b.id, next.id);
+              return { ...b, activeChapterId: next.id };
+            });
             loadChapter(next.id);
           }
         }
@@ -279,6 +291,7 @@ export function useHotCocoaDb() {
         )
       );
       setActiveChapterId(newChapter.id);
+      db.updateBookActiveChapter(book.id, newChapter.id);
       setBook((b) => (b ? { ...b, activeChapterId: newChapter.id } : b));
     },
     [book, sections]
@@ -293,7 +306,11 @@ export function useHotCocoaDb() {
         const next = others[0];
         if (next) {
           setActiveChapterId(next.id);
-          setBook((b) => (b ? { ...b, activeChapterId: next.id } : b));
+          setBook((b) => {
+            if (!b) return b;
+            db.updateBookActiveChapter(b.id, next.id);
+            return { ...b, activeChapterId: next.id };
+          });
           loadChapter(next.id);
         }
       }
@@ -401,6 +418,25 @@ export function useHotCocoaDb() {
     },
     [userId, sections]
   );
+
+  // Re-mint an expired signed URL for a stored image and swap it into state.
+  // Triggered by the gallery's <img> onError when a 24h signed URL lapses.
+  const refreshLibraryImageUrl = useCallback(async (chapterId: string, imageId: string) => {
+    const chapter = sections.flatMap((s) => s.chapters).find((c) => c.id === chapterId);
+    const img = chapter?.library.images.find((i) => i.id === imageId);
+    if (!img?.path) return;
+    const dataUrl = await db.signLibraryImageUrl(img.path);
+    if (!dataUrl) return;
+    setSections((prev) =>
+      mapChapter(prev, chapterId, (c) => ({
+        ...c,
+        library: {
+          ...c.library,
+          images: c.library.images.map((i) => (i.id === imageId ? { ...i, dataUrl } : i)),
+        },
+      }))
+    );
+  }, [sections]);
 
   const removeLibraryImage = useCallback(async (chapterId: string, imageId: string) => {
     setSections((prev) =>
@@ -524,6 +560,7 @@ export function useHotCocoaDb() {
     deleteScene,
     addLibraryImage,
     removeLibraryImage,
+    refreshLibraryImageUrl,
     addNote,
     updateNote,
     removeNote,

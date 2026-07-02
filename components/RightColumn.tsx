@@ -332,6 +332,7 @@ interface Props {
   loading?: boolean;
   onAddImage: (chapterId: string, img: LibraryImage) => void;
   onRemoveImage: (chapterId: string, imgId: string) => void;
+  onRefreshImage: (chapterId: string, imgId: string) => void;
   onAddNote: (chapterId: string) => Promise<void>;
   onUpdateNote: (chapterId: string, noteId: string, patch: { title?: string; body?: string }) => void;
   onRemoveNote: (chapterId: string, noteId: string) => void;
@@ -347,6 +348,7 @@ export default function RightColumn({
   loading = false,
   onAddImage,
   onRemoveImage,
+  onRefreshImage,
   onAddNote,
   onUpdateNote,
   onRemoveNote,
@@ -364,6 +366,10 @@ export default function RightColumn({
   const [musicLoading, setMusicLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
+  // Image ids we've already asked to re-sign once, so a still-broken URL can't
+  // loop onError → refresh → onError. Cleared per-image on a successful load,
+  // re-arming it for a future expiry.
+  const retriedImageIds = useRef<Set<string>>(new Set());
 
   // Focus music URL input when modal opens
   useEffect(() => {
@@ -534,6 +540,13 @@ export default function RightColumn({
                   alt={img.name}
                   className="w-full h-full object-cover rounded cursor-pointer"
                   onClick={() => setImageLightboxIndex(i)}
+                  onLoad={() => retriedImageIds.current.delete(img.id)}
+                  onError={() => {
+                    // Likely an expired signed URL — re-mint it once.
+                    if (!img.path || retriedImageIds.current.has(img.id)) return;
+                    retriedImageIds.current.add(img.id);
+                    onRefreshImage(chapter.id, img.id);
+                  }}
                 />
                 <button
                   onClick={(e) => { e.stopPropagation(); onRemoveImage(chapter.id, img.id); }}

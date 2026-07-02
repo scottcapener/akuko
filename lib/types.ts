@@ -8,6 +8,10 @@ export interface LibraryImage {
   id: string;
   name: string;
   dataUrl: string;
+  // Storage path for files in the library-files bucket. Present for uploaded
+  // images (whose dataUrl is a time-limited signed URL); used to re-mint the
+  // URL when it expires. Absent for images stored as an external URL.
+  path?: string;
 }
 
 export interface LibraryNote {
