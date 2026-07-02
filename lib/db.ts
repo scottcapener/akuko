@@ -10,6 +10,11 @@ import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicL
 
 const UNLOCK_THRESHOLDS = [1000, 2000, 5000, 10000, 25000];
 
+// TTL for library-file signed URLs. These expire, so the UI re-mints them on
+// <img> error (see signLibraryImageUrl); a long TTL just keeps churn low for
+// normal sessions. 24 hours.
+const SIGNED_URL_TTL = 60 * 60 * 24;
+
 function supabase() {
   return createClient();
 }
@@ -91,12 +96,18 @@ export async function getOrCreateBook(userId: string): Promise<{
     chaptersData = [newChapter];
   }
 
+  // Reopen the last-edited chapter if it still exists; else first chapter.
+  const savedActiveId = dbBook.active_chapter_id as string | null | undefined;
+  const activeChapterId = chaptersData.some((c) => c.id === savedActiveId)
+    ? savedActiveId!
+    : chaptersData[0].id;
+
   const book: Book = {
     id: dbBook.id,
     title: dbBook.title,
     coverColor: dbBook.cover_color ?? "#2a2a2e",
     coverImage: dbBook.cover_image_path ?? undefined,
-    activeChapterId: chaptersData[0].id,
+    activeChapterId,
   };
 
   const sections: Section[] = sectionsData.map((s) => ({
@@ -119,6 +130,10 @@ export async function getOrCreateBook(userId: string): Promise<{
 
 export async function updateBookTitle(bookId: string, title: string) {
   await supabase().from("books").update({ title }).eq("id", bookId);
+}
+
+export async function updateBookActiveChapter(bookId: string, chapterId: string) {
+  await supabase().from("books").update({ active_chapter_id: chapterId }).eq("id", bookId);
 }
 
 export async function updateBookCover(bookId: string, coverImageUrl: string | undefined) {
@@ -283,10 +298,15 @@ export async function getLibraryForChapter(chapterId: string): Promise<{
       if (item.storage_path) {
         const { data: signed } = await supabase()
           .storage.from("library-files")
-          .createSignedUrl(item.storage_path, 3600);
+          .createSignedUrl(item.storage_path, SIGNED_URL_TTL);
         dataUrl = signed?.signedUrl ?? "";
       }
-      images.push({ id: item.id, name: item.filename ?? "", dataUrl });
+      images.push({
+        id: item.id,
+        name: item.filename ?? "",
+        dataUrl,
+        path: item.storage_path ?? undefined,
+      });
     } else if (item.type === "text") {
       notes.push({
         id: item.id,
@@ -337,13 +357,23 @@ export async function addLibraryImage(
 
   const { data: signed } = await db.storage
     .from("library-files")
-    .createSignedUrl(path, 3600);
+    .createSignedUrl(path, SIGNED_URL_TTL);
 
   return {
     id: data.id,
     name: file.name,
     dataUrl: signed?.signedUrl ?? "",
+    path,
   };
+}
+
+// Re-mint a signed URL for a stored library image. Called by the UI when an
+// image's signed URL has expired (the <img> fails to load).
+export async function signLibraryImageUrl(path: string): Promise<string> {
+  const { data } = await supabase()
+    .storage.from("library-files")
+    .createSignedUrl(path, SIGNED_URL_TTL);
+  return data?.signedUrl ?? "";
 }
 
 export async function addLibraryImageFromDataUrl(

@@ -1,5 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 
 const steps = [
   {
@@ -19,7 +21,12 @@ const steps = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  // Logged-in visitors skip the marketing page and go straight to writing.
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) redirect("/write");
+
   return (
     <div className="min-h-full bg-bg text-text">
       {/* Hero */}

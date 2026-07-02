@@ -141,6 +141,7 @@ export default function WritePage() {
     loading: !store.activeChapterLoaded,
     onAddImage: store.addLibraryImage,
     onRemoveImage: store.removeLibraryImage,
+    onRefreshImage: store.refreshLibraryImageUrl,
     onAddNote: store.addNote,
     onUpdateNote: store.updateNote,
     onRemoveNote: store.removeNote,
