@@ -21,6 +21,58 @@ function supabase() {
 
 // ── Book ──────────────────────────────────────────────────────────────────────
 
+export interface BookSummary {
+  id: string;
+  title: string;
+  coverImage?: string;
+  wordCount: number;
+  isActive: boolean;
+}
+
+/** All of a user's books, most-recently-opened first. The first entry is the active book. */
+export async function listBooks(userId: string): Promise<BookSummary[]> {
+  const { data } = await supabase()
+    .from("books")
+    .select("*")
+    .eq("user_id", userId)
+    .order("last_opened_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: true });
+
+  return (data ?? []).map((b, i) => ({
+    id: b.id,
+    title: b.title,
+    coverImage: b.cover_image_path ?? undefined,
+    wordCount: b.word_count ?? 0,
+    isActive: i === 0,
+  }));
+}
+
+/** Create a new, empty book and make it the active one. Sections/chapters are
+ *  bootstrapped lazily by getOrCreateBook when the book is first opened. */
+export async function createBook(userId: string): Promise<BookSummary> {
+  const { data, error } = await supabase()
+    .from("books")
+    .insert({ user_id: userId, title: "Untitled Book", last_opened_at: new Date().toISOString() })
+    .select()
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    title: data.title,
+    coverImage: data.cover_image_path ?? undefined,
+    wordCount: 0,
+    isActive: true,
+  };
+}
+
+/** Mark a book as the active one (the book the Write page opens). */
+export async function setActiveBook(bookId: string) {
+  await supabase()
+    .from("books")
+    .update({ last_opened_at: new Date().toISOString() })
+    .eq("id", bookId);
+}
+
 export async function getOrCreateBook(userId: string): Promise<{
   book: Book;
   sections: Section[];
@@ -31,6 +83,7 @@ export async function getOrCreateBook(userId: string): Promise<{
     .from("books")
     .select("*")
     .eq("user_id", userId)
+    .order("last_opened_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: true })
     .limit(1);
 
