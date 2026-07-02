@@ -492,6 +492,13 @@ export default function LeftColumn({
         {menuOpen && (
           <div className="absolute bottom-full right-4 mb-2 w-40 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden">
             <Link
+              href="/books"
+              onClick={() => setMenuOpen(false)}
+              className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
+            >
+              Books
+            </Link>
+            <Link
               href="/account"
               onClick={() => setMenuOpen(false)}
               className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
