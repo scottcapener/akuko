@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ensureDevSession } from "@/lib/ensureDevSession";
 import * as db from "@/lib/db";
 import type { BookSummary } from "@/lib/db";
+import { importDocx } from "@/lib/import/docx";
 import { Button, Modal } from "@/components/ui";
 
 // ── Book cover icon (placeholder when no cover image) ───────────────────────────
@@ -146,6 +147,9 @@ export default function BooksPage() {
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<BookSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -176,6 +180,25 @@ export default function BooksPage() {
     await db.createBook(userId);
     router.push("/write");
   }, [userId, creating, switchingId, router]);
+
+  const handleImportFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = ""; // reset so the same file can be picked again
+      if (!file || !userId || importing) return;
+      setImporting(true);
+      setImportError(null);
+      try {
+        // importDocx makes the new book active; drop the user into the writer.
+        await importDocx(userId, file);
+        router.push("/write");
+      } catch (err) {
+        setImportError(err instanceof Error ? err.message : "Couldn’t import that document.");
+        setImporting(false);
+      }
+    },
+    [userId, importing, router]
+  );
 
   const runDelete = useCallback(
     async (backupFirst: boolean) => {
@@ -213,16 +236,38 @@ export default function BooksPage() {
           ← Back to Hot Cocoa
         </Link>
 
-        <div className="flex items-baseline justify-between">
-          <h1 className="text-text text-xl font-semibold">Books</h1>
-          <span className="text-xs text-subtle">
-            {books.length} {books.length === 1 ? "book" : "books"}
-          </span>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-baseline gap-3">
+            <h1 className="text-text text-xl font-semibold">Books</h1>
+            <span className="text-xs text-subtle">
+              {books.length} {books.length === 1 ? "book" : "books"}
+            </span>
+          </div>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={busy || importing}
+            title="Create a new book from a Word (.docx) manuscript"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-panel border border-border-subtle text-xs font-medium text-subtle hover:text-text hover:border-accent/40 disabled:opacity-50 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+            {importing ? "Importing…" : "Import docx"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            onChange={handleImportFile}
+            className="hidden"
+          />
         </div>
 
         <p className="text-xs text-subtle leading-relaxed -mt-3">
           Select a book to open it in the writer. The most recently opened book is your active book.
         </p>
+
+        {importError && <p className="text-xs text-error -mt-3">{importError}</p>}
 
         {/* Book grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
