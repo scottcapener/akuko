@@ -171,6 +171,34 @@ export function useHotCocoaDb() {
     autosaveTimer.current = setTimeout(flushSaves, AUTOSAVE_DELAY);
   }, [flushSaves]);
 
+  // Persist any pending scene/note edits immediately when the writer unmounts
+  // (e.g. navigating to /backups or /books) or the tab is hidden. Autosaves are
+  // otherwise 30s-debounced, so without this a backup taken elsewhere could
+  // snapshot stale text. Fire-and-forget — the requests outlive the unmount.
+  const flushPending = useRef(() => {});
+  flushPending.current = () => {
+    if (pendingSaves.current.size > 0) {
+      const saves = Array.from(pendingSaves.current.entries());
+      pendingSaves.current.clear();
+      saves.forEach(([sceneId, patch]) => db.saveScene(sceneId, patch));
+    }
+    if (pendingNoteSaves.current.size > 0) {
+      pendingNoteSaves.current.forEach((update, noteId) => db.updateNote(noteId, update));
+      pendingNoteSaves.current.clear();
+    }
+  };
+
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flushPending.current();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      flushPending.current();
+    };
+  }, []);
+
   // ── Book actions ──────────────────────────────────────────────────────
   const setBookTitle = useCallback(
     (title: string) => {
