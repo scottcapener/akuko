@@ -588,3 +588,83 @@ export async function deleteBackup(id: string, storagePath: string) {
   await db.storage.from("book-backups").remove([storagePath]);
   await db.from("backups").delete().eq("id", id);
 }
+
+// ── Exports ───────────────────────────────────────────────────────────────────────
+
+export interface ExportSummary {
+  id: string;
+  bookId: string | null;
+  bookTitle: string;
+  storagePath: string;
+  sizeBytes: number;
+  kind: "full" | "partial";
+  chapterCount: number;
+  createdAt: string;
+}
+
+/** A chapter in a book, in reading order — used by the export page's chapter picker. */
+export interface ChapterRef {
+  id: string;
+  title: string;
+  sectionLabel: string;
+}
+
+/** All of a user's manuscript exports across every book, newest first. */
+export async function listExports(userId: string): Promise<ExportSummary[]> {
+  const { data } = await supabase()
+    .from("exports")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  return (data ?? []).map((e) => ({
+    id: e.id,
+    bookId: e.book_id ?? null,
+    bookTitle: e.book_title ?? "Untitled",
+    storagePath: e.storage_path,
+    sizeBytes: e.size_bytes ?? 0,
+    kind: (e.kind ?? "full") as "full" | "partial",
+    chapterCount: e.chapter_count ?? 0,
+    createdAt: e.created_at,
+  }));
+}
+
+/** Chapters of a book in reading order (section position, then chapter position). */
+export async function listChaptersForBook(bookId: string): Promise<ChapterRef[]> {
+  const db = supabase();
+  const [{ data: sections }, { data: chapters }] = await Promise.all([
+    db.from("sections").select("id, label, position").eq("book_id", bookId).order("position"),
+    db.from("chapters").select("id, title, section_id, position").eq("book_id", bookId).order("position"),
+  ]);
+
+  const refs: ChapterRef[] = [];
+  for (const s of sections ?? []) {
+    for (const c of chapters ?? []) {
+      if (c.section_id === s.id) {
+        refs.push({ id: c.id, title: c.title ?? "Untitled Chapter", sectionLabel: s.label ?? "" });
+      }
+    }
+  }
+  // Include any chapter not matched to a section (shouldn't happen) at the end.
+  for (const c of chapters ?? []) {
+    if (!refs.some((r) => r.id === c.id)) {
+      refs.push({ id: c.id, title: c.title ?? "Untitled Chapter", sectionLabel: "" });
+    }
+  }
+  return refs;
+}
+
+/** Re-mint a signed download URL for an export .docx (mirrors signBackupUrl). */
+export async function signExportUrl(storagePath: string): Promise<string> {
+  const { data } = await supabase()
+    .storage.from("book-exports")
+    .createSignedUrl(storagePath, SIGNED_URL_TTL);
+  return data?.signedUrl ?? "";
+}
+
+/** Delete an export: both the DB row and its Storage object. */
+export async function deleteExport(id: string, storagePath: string) {
+  const db = supabase();
+  await db.storage.from("book-exports").remove([storagePath]);
+  await db.from("exports").delete().eq("id", id);
+}
