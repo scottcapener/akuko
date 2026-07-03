@@ -95,12 +95,14 @@ function BookCard({
 function DeleteBookModal({
   book,
   busy,
+  error,
   onConfirm,
   onBackupThenDelete,
   onCancel,
 }: {
   book: BookSummary;
   busy: boolean;
+  error: string | null;
   onConfirm: () => void;
   onBackupThenDelete: () => void;
   onCancel: () => void;
@@ -113,6 +115,7 @@ function DeleteBookModal({
           book and all of its chapters, scenes, and library. Existing backups are kept and can still
           be restored.
         </p>
+        {error && <p className="text-xs text-error leading-relaxed">{error}</p>}
         <div className="flex flex-col gap-2">
           <button
             onClick={onConfirm}
@@ -147,6 +150,7 @@ export default function BooksPage() {
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<BookSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -204,14 +208,23 @@ export default function BooksPage() {
     async (backupFirst: boolean) => {
       if (!userId || !confirmDelete || deleting) return;
       setDeleting(true);
+      setDeleteError(null);
       try {
         if (backupFirst) {
-          // Snapshot the book before it's gone, so it can be restored later.
-          await fetch("/api/backup", {
+          // Snapshot the book before it's gone. If the backup fails (e.g. too
+          // large), abort — deleting without the requested backup would be
+          // silent data loss.
+          const res = await fetch("/api/backup", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ bookId: confirmDelete.id }),
           });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            setDeleteError(`${body.error ?? "Backup failed"} The book was not deleted.`);
+            setDeleting(false);
+            return;
+          }
         }
         await db.deleteBook(confirmDelete.id);
         setConfirmDelete(null);
@@ -303,9 +316,10 @@ export default function BooksPage() {
         <DeleteBookModal
           book={confirmDelete}
           busy={deleting}
+          error={deleteError}
           onConfirm={() => runDelete(false)}
           onBackupThenDelete={() => runDelete(true)}
-          onCancel={() => setConfirmDelete(null)}
+          onCancel={() => { setConfirmDelete(null); setDeleteError(null); }}
         />
       )}
     </div>
