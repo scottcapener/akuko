@@ -21,6 +21,21 @@ const LIBRARY_BUCKET = "library-files";
 const BACKUP_BUCKET = "book-backups";
 const MAX_BACKUPS_PER_USER = 10;
 
+// Per-object ceiling for a backup ZIP. The book-backups bucket is capped at
+// this in 006_backup_bucket_limit.sql (the Supabase Free global limit). We
+// preflight against it here so the user gets a clear message instead of the
+// raw "object exceeded the maximum allowed size" from Storage.
+export const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
+
+/** Thrown when a backup ZIP is larger than the Storage per-object limit. */
+export class BackupTooLargeError extends Error {}
+
+function tooLargeMessage(actualBytes?: number): string {
+  const limitMb = Math.round(MAX_BACKUP_BYTES / 1024 / 1024);
+  const actual = actualBytes ? `${Math.round(actualBytes / 1024 / 1024)} MB, over` : "over";
+  return `This book's backup is ${actual} the ${limitMb} MB limit. Large library images are the usual cause — remove or shrink some, then try again.`;
+}
+
 export interface GenerateResult {
   id: string;
   storagePath: string;
@@ -143,6 +158,11 @@ export async function generateBackup(
   // slice to an exact-length copy before handing it to fetch/Storage.
   const zipBytes = zipped.slice();
 
+  // Preflight: fail with a clear message before attempting a doomed upload.
+  if (zipBytes.length > MAX_BACKUP_BYTES) {
+    throw new BackupTooLargeError(tooLargeMessage(zipBytes.length));
+  }
+
   // ── Upload + record ────────────────────────────────────────────────
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const storagePath = `${userId}/${bookId}/${timestamp}.zip`;
@@ -150,7 +170,13 @@ export async function generateBackup(
   const { error: uploadErr } = await supabase.storage
     .from(BACKUP_BUCKET)
     .upload(storagePath, zipBytes, { contentType: "application/zip", upsert: false });
-  if (uploadErr) throw uploadErr;
+  if (uploadErr) {
+    // Fallback in case Storage's configured limit is lower than our constant.
+    if (/exceeded the maximum allowed size|maximum allowed size|payload too large/i.test(uploadErr.message)) {
+      throw new BackupTooLargeError(tooLargeMessage());
+    }
+    throw uploadErr;
+  }
 
   const { data: row, error: insertErr } = await supabase
     .from("backups")

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { generateBackup } from "@/lib/backup/generate";
+import { generateBackup, BackupTooLargeError } from "@/lib/backup/generate";
 
 // Node runtime: generation reads Storage blobs and zips them with fflate.
 export const runtime = "nodejs";
@@ -44,6 +44,9 @@ export async function POST(request: Request) {
     const result = await generateBackup(supabase, user.id, bookId, "manual");
     return NextResponse.json({ ok: true, backup: result });
   } catch (err) {
+    if (err instanceof BackupTooLargeError) {
+      return NextResponse.json({ error: err.message }, { status: 413 });
+    }
     const message = err instanceof Error ? err.message : "Backup failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
