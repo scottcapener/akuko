@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ensureDevSession } from "@/lib/ensureDevSession";
 import * as db from "@/lib/db";
 import type { BookSummary } from "@/lib/db";
+import { Button, Modal } from "@/components/ui";
 
 // ── Book cover icon (placeholder when no cover image) ───────────────────────────
 
@@ -24,51 +25,112 @@ function BookCard({
   book,
   switching,
   onOpen,
+  onDelete,
 }: {
   book: BookSummary;
   switching: boolean;
   onOpen: () => void;
+  onDelete: () => void;
 }) {
   return (
-    <button
-      onClick={onOpen}
-      disabled={switching}
-      className="group flex flex-col gap-2 text-left focus:outline-none"
-      title={book.isActive ? `${book.title} (active)` : `Open ${book.title}`}
-    >
+    <div className="group flex flex-col gap-2">
       <div className="relative aspect-[2/3] rounded-md overflow-hidden bg-panel border border-border-subtle group-hover:ring-1 group-hover:ring-hover transition-all">
-        {book.coverImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={book.coverImage} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <BookIcon />
+        <button
+          onClick={onOpen}
+          disabled={switching}
+          className="absolute inset-0 w-full h-full focus:outline-none"
+          title={book.isActive ? `${book.title} (active)` : `Open ${book.title}`}
+        >
+          {book.coverImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={book.coverImage} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <BookIcon />
+            </div>
+          )}
+
+          {/* Hover affordance */}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] uppercase tracking-widest">
+              {switching ? "Opening…" : book.isActive ? "Continue" : "Open"}
+            </span>
           </div>
-        )}
+        </button>
 
         {book.isActive && (
-          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-accent text-text text-[10px] font-semibold tracking-wide">
+          <span className="pointer-events-none absolute top-2 left-2 px-2 py-0.5 rounded-full bg-accent text-text text-[10px] font-semibold tracking-wide">
             Active
           </span>
         )}
 
-        {/* Hover affordance */}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
-          <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] uppercase tracking-widest">
-            {switching ? "Opening…" : book.isActive ? "Continue" : "Open"}
-          </span>
-        </div>
+        {/* Delete affordance */}
+        <button
+          onClick={onDelete}
+          title={`Delete ${book.title}`}
+          aria-label={`Delete ${book.title}`}
+          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/50 text-white/80 opacity-0 group-hover:opacity-100 hover:bg-red-900/80 hover:text-white flex items-center justify-center transition-all"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
 
-      <div className="flex flex-col gap-0.5 px-0.5">
+      <button onClick={onOpen} disabled={switching} className="flex flex-col gap-0.5 px-0.5 text-left focus:outline-none">
         <span className="text-sm text-text truncate group-hover:text-accent transition-colors">
           {book.title}
         </span>
         <span className="text-[11px] text-subtle">
           {book.wordCount.toLocaleString()} {book.wordCount === 1 ? "word" : "words"}
         </span>
+      </button>
+    </div>
+  );
+}
+
+// ── Delete confirmation modal ─────────────────────────────────────────────────────
+
+function DeleteBookModal({
+  book,
+  busy,
+  onConfirm,
+  onBackupThenDelete,
+  onCancel,
+}: {
+  book: BookSummary;
+  busy: boolean;
+  onConfirm: () => void;
+  onBackupThenDelete: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Modal onClose={onCancel} maxWidth="max-w-sm" backdrop="dark">
+      <div className="p-5 flex flex-col gap-4">
+        <p className="text-sm text-text leading-relaxed">
+          Delete <span className="font-semibold">{book.title}</span>? This permanently removes the
+          book and all of its chapters, scenes, and library. Existing backups are kept and can still
+          be restored.
+        </p>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg bg-red-900/40 text-error text-xs font-semibold hover:bg-red-900/60 disabled:opacity-50 transition-colors"
+          >
+            {busy ? "Please wait…" : "Delete book"}
+          </button>
+          <button
+            onClick={onBackupThenDelete}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg bg-panel border border-border-subtle text-text text-xs font-medium hover:border-accent/40 disabled:opacity-50 transition-colors"
+          >
+            Back up first, then delete
+          </button>
+          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        </div>
       </div>
-    </button>
+    </Modal>
   );
 }
 
@@ -82,6 +144,8 @@ export default function BooksPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<BookSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -112,6 +176,29 @@ export default function BooksPage() {
     await db.createBook(userId);
     router.push("/write");
   }, [userId, creating, switchingId, router]);
+
+  const runDelete = useCallback(
+    async (backupFirst: boolean) => {
+      if (!userId || !confirmDelete || deleting) return;
+      setDeleting(true);
+      try {
+        if (backupFirst) {
+          // Snapshot the book before it's gone, so it can be restored later.
+          await fetch("/api/backup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bookId: confirmDelete.id }),
+          });
+        }
+        await db.deleteBook(confirmDelete.id);
+        setConfirmDelete(null);
+        setBooks(await db.listBooks(userId));
+      } finally {
+        setDeleting(false);
+      }
+    },
+    [userId, confirmDelete, deleting]
+  );
 
   if (loading) return <div className="min-h-full bg-bg" />;
 
@@ -145,6 +232,7 @@ export default function BooksPage() {
               book={b}
               switching={switchingId === b.id}
               onOpen={() => openBook(b.id)}
+              onDelete={() => setConfirmDelete(b)}
             />
           ))}
 
@@ -165,6 +253,16 @@ export default function BooksPage() {
         </div>
 
       </div>
+
+      {confirmDelete && (
+        <DeleteBookModal
+          book={confirmDelete}
+          busy={deleting}
+          onConfirm={() => runDelete(false)}
+          onBackupThenDelete={() => runDelete(true)}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </div>
   );
 }

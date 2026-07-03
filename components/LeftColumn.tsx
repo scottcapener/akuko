@@ -499,6 +499,13 @@ export default function LeftColumn({
               Books
             </Link>
             <Link
+              href="/backups"
+              onClick={() => setMenuOpen(false)}
+              className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
+            >
+              Backups
+            </Link>
+            <Link
               href="/account"
               onClick={() => setMenuOpen(false)}
               className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"

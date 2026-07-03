@@ -1,0 +1,200 @@
+/**
+ * Server-side backup generation. Shared by the manual backup route and
+ * the automatic cadence sweep. Never import from a client component —
+ * this reads Storage blobs and assembles a ZIP with fflate.
+ *
+ * Retention: at most MAX_BACKUPS_PER_USER rows per user. After each
+ * successful insert, the oldest beyond the cap are evicted (row + object).
+ */
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { zipSync, strToU8 } from "fflate";
+import {
+  SCHEMA_VERSION,
+  MANIFEST_FILENAME,
+  IMAGES_DIR,
+  type BackupManifest,
+  type BackupLibraryItem,
+} from "./manifest";
+
+const LIBRARY_BUCKET = "library-files";
+const BACKUP_BUCKET = "book-backups";
+const MAX_BACKUPS_PER_USER = 10;
+
+export interface GenerateResult {
+  id: string;
+  storagePath: string;
+  sizeBytes: number;
+  bookTitle: string;
+}
+
+/**
+ * Read a book and everything under it, download its bundled library
+ * images, assemble a ZIP, upload it to `book-backups`, record a
+ * `backups` row (with a snapshotted book_title), then enforce retention.
+ *
+ * The caller supplies a Supabase client already scoped to the owner —
+ * either the user's session client (manual) or a service-role client
+ * (cron). `userId` is the backup owner used for the storage path and
+ * the row's user_id.
+ */
+export async function generateBackup(
+  supabase: SupabaseClient,
+  userId: string,
+  bookId: string,
+  trigger: "manual" | "auto"
+): Promise<GenerateResult> {
+  // ── Read the book graph ────────────────────────────────────────────
+  const { data: book, error: bookErr } = await supabase
+    .from("books")
+    .select("*")
+    .eq("id", bookId)
+    .single();
+  if (bookErr || !book) throw new Error("Book not found");
+
+  const [{ data: sections }, { data: chapters }] = await Promise.all([
+    supabase.from("sections").select("*").eq("book_id", bookId).order("position"),
+    supabase.from("chapters").select("*").eq("book_id", bookId).order("position"),
+  ]);
+
+  const chapterIds = (chapters ?? []).map((c) => c.id);
+
+  // scenes + library items are keyed by chapter, not book, so fetch by id set
+  const [{ data: scenes }, { data: libraryItems }] = await Promise.all([
+    chapterIds.length
+      ? supabase.from("scenes").select("*").in("chapter_id", chapterIds).order("position")
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    chapterIds.length
+      ? supabase.from("library_items").select("*").in("chapter_id", chapterIds).order("position")
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+  ]);
+
+  // ── Assemble the ZIP contents ──────────────────────────────────────
+  const files: Record<string, Uint8Array> = {};
+  const manifestItems: BackupLibraryItem[] = [];
+
+  for (const item of libraryItems ?? []) {
+    const base: BackupLibraryItem = {
+      id: item.id,
+      chapterId: item.chapter_id,
+      type: item.type,
+      position: item.position ?? 0,
+      url: item.url ?? undefined,
+      ogTitle: item.og_title ?? undefined,
+      ogDescription: item.og_description ?? undefined,
+      ogImage: item.og_image ?? undefined,
+      filename: item.filename ?? undefined,
+    };
+
+    // Images stored in library-files: download the blob and bundle it.
+    if (item.type === "image" && item.storage_path) {
+      const { data: blob, error } = await supabase.storage
+        .from(LIBRARY_BUCKET)
+        .download(item.storage_path);
+      if (!error && blob) {
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        const entry = `${IMAGES_DIR}/${item.id}`;
+        files[entry] = bytes;
+        base.imageFile = entry;
+        base.contentType = blob.type || undefined;
+      }
+      // If the blob is missing (e.g. already deleted), fall through and
+      // record the item without a bundled file — restore skips it.
+    }
+
+    manifestItems.push(base);
+  }
+
+  const manifest: BackupManifest = {
+    schemaVersion: SCHEMA_VERSION,
+    createdAt: new Date().toISOString(),
+    book: {
+      title: book.title ?? "Untitled",
+      coverColor: book.cover_color ?? "#2a2a2e",
+      coverImagePath: book.cover_image_path ?? undefined,
+      wordCount: book.word_count ?? 0,
+      unlocks: Array.isArray(book.unlocks) ? book.unlocks : [],
+    },
+    sections: (sections ?? []).map((s) => ({
+      id: s.id,
+      label: s.label,
+      position: s.position ?? 0,
+    })),
+    chapters: (chapters ?? []).map((c) => ({
+      id: c.id,
+      sectionId: c.section_id,
+      title: c.title,
+      position: c.position ?? 0,
+    })),
+    scenes: (scenes ?? []).map((s) => ({
+      id: s.id,
+      chapterId: s.chapter_id,
+      label: s.label ?? "",
+      body: s.body ?? "",
+      position: s.position ?? 0,
+    })),
+    libraryItems: manifestItems,
+  };
+
+  files[MANIFEST_FILENAME] = strToU8(JSON.stringify(manifest));
+
+  const zipped = zipSync(files);
+  // fflate returns a Uint8Array that may be a view over a larger buffer;
+  // slice to an exact-length copy before handing it to fetch/Storage.
+  const zipBytes = zipped.slice();
+
+  // ── Upload + record ────────────────────────────────────────────────
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const storagePath = `${userId}/${bookId}/${timestamp}.zip`;
+
+  const { error: uploadErr } = await supabase.storage
+    .from(BACKUP_BUCKET)
+    .upload(storagePath, zipBytes, { contentType: "application/zip", upsert: false });
+  if (uploadErr) throw uploadErr;
+
+  const { data: row, error: insertErr } = await supabase
+    .from("backups")
+    .insert({
+      user_id: userId,
+      book_id: bookId,
+      book_title: book.title ?? "Untitled",
+      storage_path: storagePath,
+      size_bytes: zipBytes.length,
+      trigger,
+      status: "complete",
+    })
+    .select()
+    .single();
+  if (insertErr) {
+    // Roll back the orphaned object so we don't leak storage.
+    await supabase.storage.from(BACKUP_BUCKET).remove([storagePath]);
+    throw insertErr;
+  }
+
+  await enforceRetention(supabase, userId);
+
+  return {
+    id: row.id,
+    storagePath,
+    sizeBytes: zipBytes.length,
+    bookTitle: book.title ?? "Untitled",
+  };
+}
+
+/** Delete this user's oldest backups (row + Storage object) beyond the cap. */
+async function enforceRetention(supabase: SupabaseClient, userId: string) {
+  const { data: all } = await supabase
+    .from("backups")
+    .select("id, storage_path")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  const excess = (all ?? []).slice(MAX_BACKUPS_PER_USER);
+  if (excess.length === 0) return;
+
+  await supabase.storage.from(BACKUP_BUCKET).remove(excess.map((b) => b.storage_path));
+  await supabase
+    .from("backups")
+    .delete()
+    .in("id", excess.map((b) => b.id));
+}

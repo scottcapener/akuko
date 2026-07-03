@@ -503,3 +503,88 @@ export async function addMusicLink(
 
   return { id: data.id, ...link };
 }
+
+// ── Book deletion ───────────────────────────────────────────────────────────────
+
+/** Permanently delete a book. Sections/chapters/scenes/library cascade via FKs.
+ *  The book's `backups` rows are preserved (backups.book_id is ON DELETE SET NULL),
+ *  so a deleted book can still be restored from an existing backup. */
+export async function deleteBook(bookId: string) {
+  await supabase().from("books").delete().eq("id", bookId);
+}
+
+// ── Backups ─────────────────────────────────────────────────────────────────────
+
+export type BackupCadence = "off" | "daily" | "weekly";
+
+export interface BackupSummary {
+  id: string;
+  bookId: string | null;
+  bookTitle: string;
+  storagePath: string;
+  sizeBytes: number;
+  trigger: "manual" | "auto";
+  status: "complete" | "failed";
+  createdAt: string;
+}
+
+/** All of a user's backups across every book, newest first. */
+export async function listBackups(userId: string): Promise<BackupSummary[]> {
+  const { data } = await supabase()
+    .from("backups")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  return (data ?? []).map((b) => ({
+    id: b.id,
+    bookId: b.book_id ?? null,
+    bookTitle: b.book_title ?? "Untitled",
+    storagePath: b.storage_path,
+    sizeBytes: b.size_bytes ?? 0,
+    trigger: b.trigger,
+    status: b.status,
+    createdAt: b.created_at,
+  }));
+}
+
+/** The active (most-recently-opened) book plus its auto-backup cadence,
+ *  used by the Backups page for the "Back up now" target and cadence control. */
+export async function getActiveBookMeta(
+  userId: string
+): Promise<{ id: string; title: string; cadence: BackupCadence } | null> {
+  const { data } = await supabase()
+    .from("books")
+    .select("id, title, auto_backup_cadence")
+    .eq("user_id", userId)
+    .order("last_opened_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  const book = data?.[0];
+  if (!book) return null;
+  return {
+    id: book.id,
+    title: book.title ?? "Untitled",
+    cadence: (book.auto_backup_cadence ?? "off") as BackupCadence,
+  };
+}
+
+export async function setBookCadence(bookId: string, cadence: BackupCadence) {
+  await supabase().from("books").update({ auto_backup_cadence: cadence }).eq("id", bookId);
+}
+
+/** Re-mint a signed download URL for a backup ZIP (mirrors signLibraryImageUrl). */
+export async function signBackupUrl(storagePath: string): Promise<string> {
+  const { data } = await supabase()
+    .storage.from("book-backups")
+    .createSignedUrl(storagePath, SIGNED_URL_TTL);
+  return data?.signedUrl ?? "";
+}
+
+/** Delete a backup: both the DB row and its Storage object. */
+export async function deleteBackup(id: string, storagePath: string) {
+  const db = supabase();
+  await db.storage.from("book-backups").remove([storagePath]);
+  await db.from("backups").delete().eq("id", id);
+}
