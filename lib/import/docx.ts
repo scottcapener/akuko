@@ -141,12 +141,13 @@ export async function importDocx(userId: string, file: File): Promise<ImportResu
   }));
 
   // ── Book ───────────────────────────────────────────────────────────
+  // active_chapter_id is a FK to chapters(id); the chapters don't exist yet,
+  // so it's set below once they're inserted (mirrors restore.ts).
   const { error: bookErr } = await db.from("books").insert({
     id: bookId,
     user_id: userId,
     title,
     word_count: totalWords,
-    active_chapter_id: chapterRows[0].id,
     last_opened_at: new Date().toISOString(),
   });
   if (bookErr) throw bookErr;
@@ -182,6 +183,15 @@ export async function importDocx(userId: string, file: File): Promise<ImportResu
     }))
   );
   if (scenesErr) throw scenesErr;
+
+  // ── Active chapter ─────────────────────────────────────────────────
+  // Now that the chapters exist, point the book at the first one so the
+  // caller can drop the user straight into the writer.
+  const { error: activeErr } = await db
+    .from("books")
+    .update({ active_chapter_id: chapterRows[0].id })
+    .eq("id", bookId);
+  if (activeErr) throw activeErr;
 
   return { bookId, title, chapterCount: chapterRows.length };
 }
