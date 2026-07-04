@@ -6,7 +6,7 @@
   --hc-hover:    #252220;   /* "+" icons, hover surface */
 
   /* ── Text ── */
-  --hc-text:   #e8e6e3;   /* primary: book/chapter/song/note titles, body copy */
+  --hc-text:   #d4d2ce;   /* primary: book/chapter/song/note titles, body copy */
   --hc-muted:  #9b9890;   /* active chapter thumbnail title */
   --hc-subtle: #615e5c;   /* icons, labels, placeholders, small text, song artist */
 
@@ -28,6 +28,7 @@
   /* ── Typography ── */
   --hc-font-sans: "Inter", system-ui, sans-serif;
   --hc-font-mono: "JetBrains Mono", "Fira Mono", ui-monospace, monospace;
+  --hc-font-serif: "Georgia", serif;   /* manuscript / scene body */
 
   /* ── Radius ── */
   --hc-radius-sm:   0.25rem;   /* 4px  — maps to rounded */

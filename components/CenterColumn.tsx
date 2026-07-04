@@ -154,8 +154,8 @@ function SceneBlock({
           onInput={() => onSceneChange(chapterId, scene.id, { body: bodyRef.current?.innerHTML ?? "" })}
           onPaste={handlePaste}
           onKeyDown={handleKeyDown}
-          className="w-full bg-transparent text-text text-body-l focus:outline-none empty:before:content-['Write_here…'] empty:before:text-subtle/30 empty:before:pointer-events-none [&_em]:italic"
-          style={{ fontFamily: "inherit", minHeight: "3em" }}
+          className="w-full bg-transparent text-text text-manuscript-l font-serif indent-9 empty:indent-0 focus:outline-none empty:before:content-['Write_here…'] empty:before:text-subtle/30 empty:before:pointer-events-none [&_em]:italic"
+          style={{ minHeight: "3em" }}
         />
       </div>
     </div>

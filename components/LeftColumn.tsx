@@ -422,7 +422,10 @@ export default function LeftColumn({
             />
           ) : (
             <button
-              className="w-full text-left text-heading-m text-text hover:text-accent transition-colors truncate mt-2"
+              // py-1 -my-1: expands truncate's overflow-hidden clip box so
+              // descenders/caps aren't cropped by the line-height:1 heading token,
+              // while the negative margin keeps layout position unchanged.
+              className="w-full text-left text-heading-m text-text hover:text-accent transition-colors truncate mt-2 py-1 -my-1"
               onClick={() => { setTitleDraft(book.title); setEditingTitle(true); }}
             >
               {book.title}
