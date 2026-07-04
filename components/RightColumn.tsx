@@ -112,14 +112,20 @@ function NoteLightbox({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.id]);
 
-  // Escape to close
+  // Escape to close; ←/→ to cycle notes (only when not typing in a field, so the
+  // arrows still move the caret inside the title input or note body while editing)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") requestClose();
+      if (e.key === "Escape") { requestClose(); return; }
+      if (notes.length < 2) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (e.key === "ArrowLeft") onNavigate((index - 1 + notes.length) % notes.length);
+      if (e.key === "ArrowRight") onNavigate((index + 1) % notes.length);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose]);
+  }, [requestClose, index, notes.length, onNavigate]);
 
   function handlePaste(e: React.ClipboardEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -133,8 +139,6 @@ function NoteLightbox({
       e.preventDefault();
     }
   }
-
-  const multi = notes.length > 1;
 
   return (
     <div
@@ -179,31 +183,6 @@ function NoteLightbox({
           onKeyDown={handleBodyKeyDown}
           className="flex-1 overflow-y-auto px-5 py-4 text-sm text-text leading-relaxed focus:outline-none min-h-[140px] [&_em]:italic"
         />
-
-        {/* Footer: arrows + counter */}
-        {multi && (
-          <div className="flex-shrink-0 border-t border-border-subtle py-2 flex items-center justify-center gap-4">
-            <button
-              onClick={() => onNavigate((index - 1 + notes.length) % notes.length)}
-              className="text-subtle hover:text-text transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-              </svg>
-            </button>
-            <p className="text-[10px] text-subtle/35 tracking-wide tabular-nums">
-              {index + 1} / {notes.length}
-            </p>
-            <button
-              onClick={() => onNavigate((index + 1) % notes.length)}
-              className="text-subtle hover:text-text transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-              </svg>
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -333,7 +312,7 @@ interface Props {
   onAddImage: (chapterId: string, img: LibraryImage) => void;
   onRemoveImage: (chapterId: string, imgId: string) => void;
   onRefreshImage: (chapterId: string, imgId: string) => void;
-  onAddNote: (chapterId: string) => Promise<void>;
+  onAddNote: (chapterId: string) => Promise<LibraryNote>;
   onUpdateNote: (chapterId: string, noteId: string, patch: { title?: string; body?: string }) => void;
   onRemoveNote: (chapterId: string, noteId: string) => void;
   onAddMusicLink: (chapterId: string, link: { id: string; url: string; title: string; description: string; image: string }) => void;
@@ -358,7 +337,7 @@ export default function RightColumn({
 }: Props) {
   const [imageLightboxIndex, setImageLightboxIndex] = useState<number | null>(null);
   const [noteLightboxIndex, setNoteLightboxIndex] = useState<number | null>(null);
-  const [pendingOpenNote, setPendingOpenNote] = useState(false);
+  const [pendingNoteId, setPendingNoteId] = useState<string | null>(null);
   const [draggingOver, setDraggingOver] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [musicModalOpen, setMusicModalOpen] = useState(false);
@@ -376,13 +355,17 @@ export default function RightColumn({
     if (musicModalOpen) setTimeout(() => musicInputRef.current?.focus(), 50);
   }, [musicModalOpen]);
 
-  // Open last note once it appears in the library after creation
+  // Open the newly created note once it appears in the library. Matching by id
+  // (not array length) avoids a race where the effect fires before the note is
+  // appended and opens a pre-existing note instead.
   useEffect(() => {
-    if (pendingOpenNote && chapter.library.notes.length > 0) {
-      setNoteLightboxIndex(chapter.library.notes.length - 1);
-      setPendingOpenNote(false);
+    if (!pendingNoteId) return;
+    const idx = chapter.library.notes.findIndex((n) => n.id === pendingNoteId);
+    if (idx !== -1) {
+      setNoteLightboxIndex(idx);
+      setPendingNoteId(null);
     }
-  }, [chapter.library.notes.length, pendingOpenNote]);
+  }, [chapter.library.notes, pendingNoteId]);
 
   const processImageFiles = useCallback(
     (files: FileList | null) => {
@@ -425,8 +408,8 @@ export default function RightColumn({
   }
 
   async function handleAddNote() {
-    setPendingOpenNote(true);
-    await onAddNote(chapter.id);
+    const saved = await onAddNote(chapter.id);
+    setPendingNoteId(saved.id);
   }
 
   async function handleMusicAdd() {

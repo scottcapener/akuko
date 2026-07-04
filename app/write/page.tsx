@@ -19,11 +19,27 @@ const RIGHT_MAX = 400;
 const LEFT_DEFAULT = 208;
 const RIGHT_DEFAULT = 240;
 
-function useColumnResize(defaultPx: number, min: number, max: number, direction: 1 | -1 = 1) {
-  const [width, setWidth] = useState(defaultPx);
+function useColumnResize(storageKey: string, defaultPx: number, min: number, max: number, direction: 1 | -1 = 1) {
+  // Lazily restore the last-used width. Safe against hydration mismatch: the write
+  // page renders a blank placeholder until `store.hydrated`, so this width never
+  // reaches the DOM during the initial server/client render.
+  const [width, setWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return defaultPx;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw != null) {
+        const n = parseInt(raw, 10);
+        if (!Number.isNaN(n)) return Math.min(max, Math.max(min, n));
+      }
+    } catch {}
+    return defaultPx;
+  });
   const dragging = useRef(false);
   const startX = useRef(0);
   const startW = useRef(0);
+  // Mirrors `width` so the drag-end handler can persist the final value without
+  // re-registering the window listeners on every mousemove.
+  const widthRef = useRef(width);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     dragging.current = true;
@@ -37,13 +53,17 @@ function useColumnResize(defaultPx: number, min: number, max: number, direction:
     function onMouseMove(e: MouseEvent) {
       if (!dragging.current) return;
       const delta = (e.clientX - startX.current) * direction;
-      setWidth(Math.min(max, Math.max(min, startW.current + delta)));
+      const next = Math.min(max, Math.max(min, startW.current + delta));
+      widthRef.current = next;
+      setWidth(next);
     }
     function onMouseUp() {
       if (!dragging.current) return;
       dragging.current = false;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      // Persist only on drag-end, not on every frame.
+      try { localStorage.setItem(storageKey, String(widthRef.current)); } catch {}
     }
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
@@ -51,17 +71,45 @@ function useColumnResize(defaultPx: number, min: number, max: number, direction:
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [min, max, direction]);
+  }, [min, max, direction, storageKey]);
 
   return { width, onMouseDown };
+}
+
+// User-level view preferences (grid/list per section, scene visibility). These are
+// display-only and never touch book structure, so they live in localStorage rather
+// than the DB. Reads happen after mount to avoid a hydration mismatch.
+function useLocalStorageState<T>(key: string, initial: T) {
+  const [value, setValue] = useState<T>(initial);
+  const loaded = useRef(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw != null) setValue(JSON.parse(raw) as T);
+    } catch {}
+    loaded.current = true;
+  }, [key]);
+  useEffect(() => {
+    if (!loaded.current) return;
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {}
+  }, [key, value]);
+  return [value, setValue] as const;
 }
 
 export default function WritePage() {
   const router = useRouter();
   const store = useHotCocoaDb();
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
-  const left = useColumnResize(LEFT_DEFAULT, LEFT_MIN, LEFT_MAX, 1);
-  const right = useColumnResize(RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX, -1);
+  const left = useColumnResize("hc.leftWidth", LEFT_DEFAULT, LEFT_MIN, LEFT_MAX, 1);
+  const right = useColumnResize("hc.rightWidth", RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX, -1);
+
+  const [scenesVisible, setScenesVisible] = useLocalStorageState("hc.scenesVisible", true);
+  const [sectionViews, setSectionViews] = useLocalStorageState<Record<string, "grid" | "list">>("hc.sectionViews", {});
+  const setSectionView = useCallback((sectionId: string, view: "grid" | "list") => {
+    setSectionViews((prev) => ({ ...prev, [sectionId]: view }));
+  }, [setSectionViews]);
 
   // Stable refs so the paste listener never goes stale
   const activeChapterRef = useRef(store.activeChapter);
@@ -134,6 +182,10 @@ export default function WritePage() {
     onUpdateSectionLabel: store.updateSectionLabel,
     onReorderSections: store.reorderSections,
     onDeleteSection: store.deleteSection,
+    scenesVisible,
+    onToggleScenes: () => setScenesVisible((v) => !v),
+    sectionViews,
+    onSetSectionView: setSectionView,
   };
 
   const rightProps = {
@@ -175,7 +227,7 @@ export default function WritePage() {
         <div className="flex-shrink-0 flex flex-col" style={{ width: left.width }}>
           <LeftColumn {...leftProps} onChapterClick={store.setActiveChapter} onAddChapter={store.addChapter} />
         </div>
-        <div onMouseDown={left.onMouseDown} className="w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60" />
+        <div onMouseDown={left.onMouseDown} className="relative z-10 w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60 before:absolute before:inset-y-0 before:-left-1 before:-right-1 before:content-['']" />
         <div className="flex-1 overflow-hidden flex flex-col min-w-0">
           <CenterColumn
             chapter={store.activeChapter}
@@ -187,9 +239,10 @@ export default function WritePage() {
             onDeleteScene={store.deleteScene}
             onAddImage={store.addLibraryImage}
             loading={!store.activeChapterLoaded}
+            scenesVisible={scenesVisible}
           />
         </div>
-        <div onMouseDown={right.onMouseDown} className="w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60" />
+        <div onMouseDown={right.onMouseDown} className="relative z-10 w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60 before:absolute before:inset-y-0 before:-left-1 before:-right-1 before:content-['']" />
         <div className="flex-shrink-0 flex flex-col" style={{ width: right.width }}>
           <RightColumn {...rightProps} />
         </div>
@@ -207,6 +260,7 @@ export default function WritePage() {
           onDeleteScene={store.deleteScene}
           onAddImage={store.addLibraryImage}
           loading={!store.activeChapterLoaded}
+          scenesVisible={scenesVisible}
         />
       </div>
 

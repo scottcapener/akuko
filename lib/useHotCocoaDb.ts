@@ -485,6 +485,7 @@ export function useHotCocoaDb() {
           library: { ...c.library, notes: [...c.library.notes, saved] },
         }))
       );
+      return saved;
     },
     [sections]
   );

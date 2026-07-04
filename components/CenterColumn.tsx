@@ -15,6 +15,7 @@ interface Props {
   onDeleteScene: (chapterId: string, sceneId: string) => void;
   onAddImage: (chapterId: string, img: LibraryImage) => void;
   loading?: boolean;
+  scenesVisible?: boolean;
 }
 
 function makeId() {
@@ -30,6 +31,7 @@ function SceneBlock({
   onDragOver,
   onDrop,
   onDeleteScene,
+  scenesVisible = true,
 }: {
   scene: Scene;
   chapterId: string;
@@ -39,6 +41,7 @@ function SceneBlock({
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (toIndex: number) => void;
   onDeleteScene: (chapterId: string, sceneId: string) => void;
+  scenesVisible?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -92,7 +95,9 @@ function SceneBlock({
       <div className="px-4 py-3" onClick={handleWrapperClick}>
         {/* Scene Header: description label + delete (×/confirmation) on the right.
             The row itself is the drag handle for reordering — disabled while the
-            scene is focused so the description text stays selectable. */}
+            scene is focused so the description text stays selectable. Hidden in the
+            "sceneless" view (structure is untouched — just not shown). */}
+        {scenesVisible && (
         <div
           draggable={!focused}
           onDragStart={(e) => {
@@ -143,6 +148,7 @@ function SceneBlock({
             </button>
           )}
         </div>
+        )}
 
         {/* Scene body */}
         <div
@@ -172,6 +178,7 @@ export default function CenterColumn({
   onDeleteScene,
   onAddImage,
   loading = false,
+  scenesVisible = true,
 }: Props) {
   const dragSceneIndex = useRef<number | null>(null);
 
@@ -260,10 +267,12 @@ export default function CenterColumn({
                 dragSceneIndex.current = null;
               }}
               onDeleteScene={onDeleteScene}
+              scenesVisible={scenesVisible}
             />
           ))}
 
-          {/* Add scene button */}
+          {/* Add scene button — hidden in the sceneless view */}
+          {scenesVisible && (
           <button
             onClick={() => onAddScene(chapter.id)}
             className="mt-2 ml-4 mb-2 flex items-center gap-2 transition-colors group"
@@ -277,6 +286,7 @@ export default function CenterColumn({
             />
             <span className="text-body-m text-subtle group-hover:text-accent transition-colors">Add scene</span>
           </button>
+          )}
           </>
           )}
         </div>
