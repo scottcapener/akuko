@@ -30,6 +30,7 @@
   /* Font families */
   --font-sans: var(--hc-font-sans);
   --font-mono: var(--hc-font-mono);
+  --font-serif: var(--hc-font-serif);
 
   /* Type scale — named styles from CocoaBar.
      Usage: text-heading-l, text-body-m, etc. (label-m pairs with `uppercase`). */
@@ -44,6 +45,12 @@
   --text-body-l: 16px;
   --text-body-l--line-height: 24px;
   --text-body-l--font-weight: 400;
+
+  /* Scene body / manuscript — pair with `font-serif` and `indent-9` (36px
+     first-line indent, which inherits to each paragraph block). */
+  --text-manuscript-l: 16px;
+  --text-manuscript-l--line-height: 144%;
+  --text-manuscript-l--font-weight: 400;
 
   --text-body-m: 12px;
   --text-body-m--line-height: 1;

@@ -41,7 +41,7 @@ Opacity modifier syntax works: `bg-accent/60`, `text-subtle/50`, `border-accent/
 
 ## Typography
 
-Font families: `--hc-font-sans` (Inter) is the default. `--hc-font-mono` (JetBrains Mono) for code.
+Font families: `--hc-font-sans` (Inter, `font-sans`) is the default. `--hc-font-mono` (JetBrains Mono, `font-mono`) for code. `--hc-font-serif` (Georgia, `font-serif`) for manuscript/scene body.
 
 ### Named type styles (CocoaBar — Tailwind v4 `text-*` utilities)
 
@@ -51,7 +51,8 @@ Defined in `globals.css` via `--text-*` modifiers. Prefer these over ad-hoc `tex
 | ---------------- | --------------------------- | --------------------------------------- |
 | `text-heading-l` | 20 / 1 / 600 (Semi Bold)    | Chapter title                           |
 | `text-heading-m` | 14 / 1 / 500 (Medium)       | Book title, primary button label        |
-| `text-body-l`    | 16 / 24 / 400               | Scene body, note body                   |
+| `text-body-l`    | 16 / 24 / 400               | Note body                               |
+| `text-manuscript-l` | 16 / 144% / 400 (Georgia) | Scene body — pair with `font-serif` + `indent-9` (36px first-line indent) |
 | `text-body-m`    | 12 / 1 / 400                | Song/note titles, "Add scene"           |
 | `text-body-s`    | 11 / 1 / 400                | Song artist, secondary captions         |
 | `text-body-xs`   | 9 / 1 / 500 (Medium)        | Chapter thumbnail label                 |
