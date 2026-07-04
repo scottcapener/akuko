@@ -42,3 +42,31 @@
   --hc-duration-slow: 300ms;
   --hc-ease:          ease;
 }
+
+/* ── Light mode ──────────────────────────────────────────────────────────────
+   Only the surface/text/accent/border tokens flip; typography, radius, and
+   motion are theme-agnostic and stay on :root. Applied via data-theme="light"
+   on <html> (set pre-paint by the inline script in layout.tsx). */
+:root[data-theme="light"] {
+  /* Surfaces — panels rise to white off the gray page; elevated/hover go
+     darker than bg so active + hover states still read as "selected". */
+  --hc-bg:       #f5f5f5;
+  --hc-panel:    #ffffff;
+  --hc-elevated: #ebe8e4;
+  --hc-hover:    #e7e2dc;
+
+  /* Text — the dark ramp inverted, kept warm-neutral. */
+  --hc-text:   #2b2926;
+  --hc-muted:  #6f6c66;
+  --hc-subtle: #9a978f;
+
+  /* Accent — same brown; hover darkens (not brightens) on a light surface. */
+  --hc-accent:    #755c4b;
+  --hc-accent-hi: #5e4a3b;
+
+  /* Border */
+  --hc-border-subtle: #e4e1dd;
+
+  /* Scrim — kept a translucent warm dark so modals still dim the light page. */
+  --hc-scrim: rgb(20 18 16 / 0.45);
+}
