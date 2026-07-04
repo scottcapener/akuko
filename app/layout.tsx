@@ -25,7 +25,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} h-full`}>
+    <html lang="en" className={`${inter.variable} h-full`} suppressHydrationWarning>
+      <head>
+        {/* Apply the saved theme before first paint to avoid a flash of the
+            default (dark) palette. Runs synchronously; dark is the default so
+            we only set the attribute when the user chose light. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem("hc.theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="h-full">
         <ScrollbarAutoHide />
         {children}
