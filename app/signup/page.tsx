@@ -130,7 +130,7 @@ export default function SignupPage() {
     });
     if (profileErr) { setError(profileErr.message); setLoading(false); return; }
 
-    // Create first book + chapter
+    // Create first book + section + chapter
     const { data: book, error: bookErr } = await supabase
       .from("books")
       .insert({ user_id: user.id, title: "Untitled Book" })
@@ -138,9 +138,16 @@ export default function SignupPage() {
       .single();
     if (bookErr) { setError(bookErr.message); setLoading(false); return; }
 
+    const { data: section, error: sectionErr } = await supabase
+      .from("sections")
+      .insert({ book_id: book.id, label: "Chapters", position: 0 })
+      .select()
+      .single();
+    if (sectionErr) { setError(sectionErr.message); setLoading(false); return; }
+
     const { data: chapter, error: chapterErr } = await supabase
       .from("chapters")
-      .insert({ book_id: book.id, title: "Chapter 1", position: 0 })
+      .insert({ book_id: book.id, section_id: section.id, title: "Chapter 1", position: 0 })
       .select()
       .single();
     if (chapterErr) { setError(chapterErr.message); setLoading(false); return; }
