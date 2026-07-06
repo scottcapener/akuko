@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { Fragment, useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { Chapter, LibraryImage, LibraryNote } from "@/lib/types";
+import { DropLine } from "@/components/ui/DropLine";
+import { useReorderList } from "@/lib/useReorderList";
+import { useReorderGrid } from "@/lib/useReorderGrid";
+import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
 
 // Renders children into document.body so fixed overlays escape transformed parents
 function Portal({ children }: { children: React.ReactNode }) {
@@ -317,6 +321,9 @@ interface Props {
   onRemoveNote: (chapterId: string, noteId: string) => void;
   onAddMusicLink: (chapterId: string, link: { id: string; url: string; title: string; description: string; image: string }) => void;
   onRemoveMusicLink: (chapterId: string, linkId: string) => void;
+  onReorderImages: (chapterId: string, from: number, to: number) => void;
+  onReorderMusicLinks: (chapterId: string, from: number, to: number) => void;
+  onReorderNotes: (chapterId: string, from: number, to: number) => void;
   onClose?: () => void;
 }
 
@@ -333,8 +340,16 @@ export default function RightColumn({
   onRemoveNote,
   onAddMusicLink,
   onRemoveMusicLink,
+  onReorderImages,
+  onReorderMusicLinks,
+  onReorderNotes,
   onClose,
 }: Props) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useAutoScrollOnDrag(scrollRef);
+  const imageReorder = useReorderGrid((from, to) => onReorderImages(chapter.id, from, to));
+  const musicReorder = useReorderList((from, to) => onReorderMusicLinks(chapter.id, from, to));
+  const noteReorder = useReorderList((from, to) => onReorderNotes(chapter.id, from, to));
   const [imageLightboxIndex, setImageLightboxIndex] = useState<number | null>(null);
   const [noteLightboxIndex, setNoteLightboxIndex] = useState<number | null>(null);
   const [pendingNoteId, setPendingNoteId] = useState<string | null>(null);
@@ -440,7 +455,7 @@ export default function RightColumn({
   }
 
   return (
-    <div className="flex flex-col h-full bg-bg border-l border-border-subtle w-full overflow-y-auto">
+    <div ref={scrollRef} className="flex flex-col h-full bg-bg border-l border-border-subtle w-full overflow-y-auto">
       {imageModalOpen && (
         <Portal>
           <ImageUploadModal
@@ -516,13 +531,20 @@ export default function RightColumn({
         ) : (
           <div className="p-2 grid grid-cols-3 gap-1.5">
             {chapter.library.images.map((img, i) => (
-              <div key={img.id} className="relative group aspect-square">
+              <div
+                key={img.id}
+                {...imageReorder.cellProps(i)}
+                className={`relative group aspect-square rounded ${
+                  imageReorder.overIndex === i ? "ring-2 ring-accent" : ""
+                }`}
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={img.dataUrl}
                   alt={img.name}
                   className="w-full h-full object-cover rounded cursor-pointer"
                   onClick={() => setImageLightboxIndex(i)}
+                  draggable={false}
                   onLoad={() => retriedImageIds.current.delete(img.id)}
                   onError={() => {
                     // Likely an expired signed URL — re-mint it once.
@@ -600,12 +622,15 @@ export default function RightColumn({
           </button>
         </div>
         {chapter.library.musicLinks.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {chapter.library.musicLinks.map((link) => (
-              <div
-                key={link.id}
-                className="flex items-center gap-2.5 group bg-panel rounded-lg px-3 py-2 hover:bg-hover transition-colors"
-              >
+          <div className="flex flex-col">
+            {chapter.library.musicLinks.map((link, i) => (
+              <Fragment key={link.id}>
+                <DropLine active={musicReorder.activeGap === i} />
+                <div
+                  {...musicReorder.dragHandleProps(i)}
+                  {...musicReorder.dropZoneProps(i)}
+                  className="flex items-center gap-2.5 group bg-panel rounded-lg px-3 py-2 mb-2 last:mb-0 hover:bg-hover transition-colors cursor-grab active:cursor-grabbing"
+                >
                 <div className="w-9 h-9 rounded bg-hover flex-shrink-0 overflow-hidden flex items-center justify-center">
                   {link.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -645,8 +670,10 @@ export default function RightColumn({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
-              </div>
+                </div>
+              </Fragment>
             ))}
+            <DropLine active={musicReorder.activeGap === chapter.library.musicLinks.length} />
           </div>
         )}
       </div>
@@ -663,13 +690,16 @@ export default function RightColumn({
           </button>
         </div>
         {chapter.library.notes.length > 0 && (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col">
             {chapter.library.notes.map((note, i) => (
-              <div
-                key={note.id}
-                className="flex items-center gap-2 group px-2 py-1.5 rounded hover:bg-panel transition-colors cursor-pointer"
-                onClick={() => setNoteLightboxIndex(i)}
-              >
+              <Fragment key={note.id}>
+                <DropLine active={noteReorder.activeGap === i} />
+                <div
+                  {...noteReorder.dragHandleProps(i)}
+                  {...noteReorder.dropZoneProps(i)}
+                  className="flex items-center gap-2 group px-2 py-1.5 rounded hover:bg-panel transition-colors cursor-pointer"
+                  onClick={() => setNoteLightboxIndex(i)}
+                >
                 <svg className="w-3.5 h-3.5 text-subtle/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                 </svg>
@@ -687,8 +717,10 @@ export default function RightColumn({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
-              </div>
+                </div>
+              </Fragment>
             ))}
+            <DropLine active={noteReorder.activeGap === chapter.library.notes.length} />
           </div>
         )}
       </div>

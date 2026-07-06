@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Book, Section, Chapter } from "@/lib/types";
 import { Button, Modal } from "@/components/ui";
+import { DropLine } from "@/components/ui/DropLine";
 import { useTheme } from "@/lib/useTheme";
+import { useReorderList } from "@/lib/useReorderList";
+import { useReorderGrid } from "@/lib/useReorderGrid";
+import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
 
 interface Props {
   book: Book;
@@ -74,9 +78,9 @@ function SectionRow({
   onReorderChapters,
   onAddSection,
   onUpdateSectionLabel,
-  onReorderSectionsRequest,
+  onMoveSection,
   onDeleteSectionRequest,
-  dragSectionIndex,
+  sectionDragProps,
   view,
   onSetView,
   scenesVisible,
@@ -91,9 +95,9 @@ function SectionRow({
   onReorderChapters: (sectionId: string, from: number, to: number) => void;
   onAddSection: (afterSectionId: string) => void;
   onUpdateSectionLabel: (sectionId: string, label: string) => void;
-  onReorderSectionsRequest: (from: number, to: number) => void;
+  onMoveSection: (from: number, to: number) => void;
   onDeleteSectionRequest: (section: Section) => void;
-  dragSectionIndex: React.MutableRefObject<number | null>;
+  sectionDragProps: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean };
   view: "grid" | "list";
   onSetView: (sectionId: string, view: "grid" | "list") => void;
   scenesVisible: boolean;
@@ -102,8 +106,12 @@ function SectionRow({
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState(section.label);
   const [menuOpen, setMenuOpen] = useState(false);
-  const dragChapterIndex = useRef<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Chapter reorder — grid view uses cell highlighting, list view an insertion
+  // line. Both hooks are created unconditionally; only one is used per render.
+  const chapterGrid = useReorderGrid((from, to) => onReorderChapters(section.id, from, to));
+  const chapterList = useReorderList((from, to) => onReorderChapters(section.id, from, to));
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -124,22 +132,7 @@ function SectionRow({
   }
 
   return (
-    <div
-      draggable
-      onDragStart={(e) => {
-        dragSectionIndex.current = sectionIndex;
-        e.dataTransfer.effectAllowed = "move";
-      }}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        if (dragSectionIndex.current !== null && dragSectionIndex.current !== sectionIndex) {
-          onReorderSectionsRequest(dragSectionIndex.current, sectionIndex);
-        }
-        dragSectionIndex.current = null;
-      }}
-      className="mb-4"
-    >
+    <div {...sectionDragProps} className="mb-4">
       {/* Section header row */}
       <div className="flex items-center gap-1 mb-2 group/section">
         {editingLabel ? (
@@ -210,6 +203,21 @@ function SectionRow({
             {menuOpen && (
               <div className="absolute right-0 top-full mt-1 w-36 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden z-20">
                 <button
+                  disabled={sectionIndex === 0}
+                  onClick={() => { setMenuOpen(false); onMoveSection(sectionIndex, sectionIndex - 1); }}
+                  className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-default"
+                >
+                  Move up
+                </button>
+                <button
+                  disabled={sectionIndex === sectionCount - 1}
+                  onClick={() => { setMenuOpen(false); onMoveSection(sectionIndex, sectionIndex + 1); }}
+                  className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-default"
+                >
+                  Move down
+                </button>
+                <div className="h-px bg-hover" />
+                <button
                   onClick={() => { setMenuOpen(false); onDeleteSectionRequest(section); }}
                   className="block w-full text-left px-4 py-2.5 text-xs text-error hover:bg-hover transition-colors"
                 >
@@ -227,26 +235,13 @@ function SectionRow({
         {section.chapters.map((ch, i) => (
           <div key={ch.id} className="relative group/chapter">
             <button
-              draggable
-              onDragStart={(e) => {
-                dragChapterIndex.current = i;
-                e.dataTransfer.effectAllowed = "move";
-                e.stopPropagation();
-              }}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (dragChapterIndex.current !== null && dragChapterIndex.current !== i) {
-                  onReorderChapters(section.id, dragChapterIndex.current, i);
-                }
-                dragChapterIndex.current = null;
-              }}
+              {...chapterGrid.cellProps(i)}
               onClick={() => onChapterClick(ch.id)}
               className={`
                 w-full aspect-[3/4] rounded text-[9px] font-medium text-center
                 flex items-center justify-center px-1
                 transition-colors truncate leading-tight
+                ${chapterGrid.overIndex === i ? "ring-2 ring-accent" : ""}
                 ${ch.id === activeChapterId
                   ? "bg-elevated text-muted border-[1.5px] border-subtle"
                   : "bg-panel text-subtle hover:bg-hover hover:text-text"
@@ -286,23 +281,11 @@ function SectionRow({
           const isActive = ch.id === activeChapterId;
           return (
           <div key={ch.id}>
+            <DropLine active={chapterList.activeGap === i} />
             {/* Chapter row — styled like a Note list item (icon + text + hover-reveal delete) */}
             <div
-              draggable
-              onDragStart={(e) => {
-                dragChapterIndex.current = i;
-                e.dataTransfer.effectAllowed = "move";
-                e.stopPropagation();
-              }}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (dragChapterIndex.current !== null && dragChapterIndex.current !== i) {
-                  onReorderChapters(section.id, dragChapterIndex.current, i);
-                }
-                dragChapterIndex.current = null;
-              }}
+              {...chapterList.dragHandleProps(i)}
+              {...chapterList.dropZoneProps(i)}
               onClick={() => onChapterClick(ch.id)}
               title={ch.title}
               className={`flex items-center gap-2 group/chapter px-2 py-1.5 rounded transition-colors cursor-pointer ${
@@ -354,6 +337,7 @@ function SectionRow({
           </div>
           );
         })}
+        <DropLine active={chapterList.activeGap === section.chapters.length} />
 
         {/* Add chapter */}
         <button
@@ -405,7 +389,9 @@ export default function LeftColumn({
 
   const coverInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const dragSectionIndex = useRef<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useAutoScrollOnDrag(scrollRef);
+  const sectionReorder = useReorderList(onReorderSections);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -491,7 +477,7 @@ export default function LeftColumn({
       </div>
 
       {/* Scrollable body */}
-      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-4">
 
         {/* ── Cover + Title ── */}
         <div className="mb-3">
@@ -582,26 +568,29 @@ export default function LeftColumn({
 
         {/* ── Sections ── */}
         {sections.map((section, i) => (
-          <SectionRow
-            key={section.id}
-            section={section}
-            sectionIndex={i}
-            sectionCount={sections.length}
-            activeChapter={activeChapter}
-            onChapterClick={onChapterClick}
-            onAddChapter={onAddChapter}
-            onDeleteChapterRequest={(ch) => setConfirmDeleteChapter(ch)}
-            onReorderChapters={onReorderChapters}
-            onAddSection={onAddSection}
-            onUpdateSectionLabel={onUpdateSectionLabel}
-            onReorderSectionsRequest={onReorderSections}
-            onDeleteSectionRequest={(s) => setConfirmDeleteSection(s)}
-            dragSectionIndex={dragSectionIndex}
-            view={sectionViews[section.id] ?? "grid"}
-            onSetView={onSetSectionView}
-            scenesVisible={scenesVisible}
-          />
+          <Fragment key={section.id}>
+            <DropLine active={sectionReorder.activeGap === i} />
+            <SectionRow
+              section={section}
+              sectionIndex={i}
+              sectionCount={sections.length}
+              activeChapter={activeChapter}
+              onChapterClick={onChapterClick}
+              onAddChapter={onAddChapter}
+              onDeleteChapterRequest={(ch) => setConfirmDeleteChapter(ch)}
+              onReorderChapters={onReorderChapters}
+              onAddSection={onAddSection}
+              onUpdateSectionLabel={onUpdateSectionLabel}
+              onMoveSection={onReorderSections}
+              onDeleteSectionRequest={(s) => setConfirmDeleteSection(s)}
+              sectionDragProps={{ ...sectionReorder.dragHandleProps(i), ...sectionReorder.dropZoneProps(i) }}
+              view={sectionViews[section.id] ?? "grid"}
+              onSetView={onSetSectionView}
+              scenesVisible={scenesVisible}
+            />
+          </Fragment>
         ))}
+        <DropLine active={sectionReorder.activeGap === sections.length} />
       </div>
 
       {/* ── Logo + user menu ── */}

@@ -327,6 +327,15 @@ export async function deleteScene(sceneId: string) {
   await supabase().from("scenes").delete().eq("id", sceneId);
 }
 
+// Persist a new ordering for library items (images, music links, or notes).
+// Positions are per-type within a chapter, mirroring how items are appended.
+export async function reorderLibraryItems(items: { id: string; position: number }[]) {
+  const db = supabase();
+  await Promise.all(
+    items.map((it) => db.from("library_items").update({ position: it.position }).eq("id", it.id))
+  );
+}
+
 // ── Library ───────────────────────────────────────────────────────────────────
 
 export async function getLibraryForChapter(chapterId: string): Promise<{
