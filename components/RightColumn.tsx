@@ -138,8 +138,20 @@ function NoteLightbox({
   }
 
   function handleBodyKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    // Allow Cmd/Ctrl+I for italic; block all other formatting shortcuts
-    if ((e.metaKey || e.ctrlKey) && !["i", "z", "a", "c", "x", "v"].includes(e.key.toLowerCase())) {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const key = e.key.toLowerCase();
+    // Apply italic ourselves rather than relying on the browser default. Some
+    // browsers (e.g. Firefox) bind Cmd/Ctrl+I to a chrome feature ("Page Info")
+    // and never toggle italic in the editor. preventDefault suppresses that so
+    // italics always wins, matching Google Docs' behavior.
+    if (key === "i") {
+      e.preventDefault();
+      document.execCommand("italic");
+      onUpdate(note.id, { body: bodyRef.current?.innerHTML ?? "" });
+      return;
+    }
+    // Block every other formatting shortcut; keep clipboard/undo/select-all.
+    if (!["z", "a", "c", "x", "v"].includes(key)) {
       e.preventDefault();
     }
   }
