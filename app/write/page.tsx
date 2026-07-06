@@ -199,6 +199,9 @@ export default function WritePage() {
     onRemoveNote: store.removeNote,
     onAddMusicLink: store.addMusicLink,
     onRemoveMusicLink: store.removeMusicLink,
+    onReorderImages: store.reorderLibraryImages,
+    onReorderMusicLinks: store.reorderMusicLinks,
+    onReorderNotes: store.reorderNotes,
   };
 
   return (

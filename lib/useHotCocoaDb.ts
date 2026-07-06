@@ -556,6 +556,44 @@ export function useHotCocoaDb() {
     await db.removeLibraryItem(linkId);
   }, []);
 
+  // Reorder a library sub-list (images / music links / notes). Positions are
+  // rewritten 0..n for that list and persisted, mirroring reorderScenes.
+  const reorderLibraryImages = useCallback((chapterId: string, fromIndex: number, toIndex: number) => {
+    setSections((prev) =>
+      mapChapter(prev, chapterId, (c) => {
+        const next = [...c.library.images];
+        const [moved] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, moved);
+        db.reorderLibraryItems(next.map((it, i) => ({ id: it.id, position: i })));
+        return { ...c, library: { ...c.library, images: next } };
+      })
+    );
+  }, []);
+
+  const reorderMusicLinks = useCallback((chapterId: string, fromIndex: number, toIndex: number) => {
+    setSections((prev) =>
+      mapChapter(prev, chapterId, (c) => {
+        const next = [...c.library.musicLinks];
+        const [moved] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, moved);
+        db.reorderLibraryItems(next.map((it, i) => ({ id: it.id, position: i })));
+        return { ...c, library: { ...c.library, musicLinks: next } };
+      })
+    );
+  }, []);
+
+  const reorderNotes = useCallback((chapterId: string, fromIndex: number, toIndex: number) => {
+    setSections((prev) =>
+      mapChapter(prev, chapterId, (c) => {
+        const next = [...c.library.notes];
+        const [moved] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, moved);
+        db.reorderLibraryItems(next.map((it, i) => ({ id: it.id, position: i })));
+        return { ...c, library: { ...c.library, notes: next } };
+      })
+    );
+  }, []);
+
   const allChapters = sections.flatMap((s) => s.chapters);
   const activeChapter = allChapters.find((c) => c.id === activeChapterId) ?? allChapters[0];
   const activeChapterLoaded = activeChapter ? loadedChapters.has(activeChapter.id) : false;
@@ -588,10 +626,13 @@ export function useHotCocoaDb() {
     addLibraryImage,
     removeLibraryImage,
     refreshLibraryImageUrl,
+    reorderLibraryImages,
     addNote,
     updateNote,
     removeNote,
+    reorderNotes,
     addMusicLink,
     removeMusicLink,
+    reorderMusicLinks,
   };
 }

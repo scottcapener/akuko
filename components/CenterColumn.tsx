@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { Fragment, useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { Chapter, Scene, LibraryImage } from "@/lib/types";
 import { SaveStatus } from "@/lib/useHotCocoaDb";
+import { DropLine } from "@/components/ui/DropLine";
+import { useReorderList } from "@/lib/useReorderList";
+import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
 
 interface Props {
   chapter: Chapter;
@@ -27,9 +30,8 @@ function SceneBlock({
   chapterId,
   index,
   onSceneChange,
-  onDragStart,
-  onDragOver,
-  onDrop,
+  dragHandleProps,
+  dropZoneProps,
   onDeleteScene,
   scenesVisible = true,
 }: {
@@ -37,15 +39,13 @@ function SceneBlock({
   chapterId: string;
   index: number;
   onSceneChange: (chapterId: string, sceneId: string, patch: Partial<Scene>) => void;
-  onDragStart: (index: number) => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDrop: (toIndex: number) => void;
+  dragHandleProps: (index: number) => React.HTMLAttributes<HTMLElement> & { draggable?: boolean };
+  dropZoneProps: (index: number) => React.HTMLAttributes<HTMLElement>;
   onDeleteScene: (chapterId: string, sceneId: string) => void;
   scenesVisible?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [isDragOver, setIsDragOver] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLInputElement>(null);
 
@@ -85,12 +85,10 @@ function SceneBlock({
 
   return (
     <div
+      {...dropZoneProps(index)}
       className={`rounded-lg mb-2 transition-colors relative group/scene ${
-        isDragOver ? "ring-1 ring-accent/40" : ""
-      } ${focused ? "bg-elevated" : "bg-transparent hover:bg-panel"}`}
-      onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); onDragOver(e); }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={(e) => { e.preventDefault(); setIsDragOver(false); onDrop(index); }}
+        focused ? "bg-elevated" : "bg-transparent hover:bg-panel"
+      }`}
     >
       <div className="px-4 py-3" onClick={handleWrapperClick}>
         {/* Scene Header: description label + delete (×/confirmation) on the right.
@@ -99,11 +97,8 @@ function SceneBlock({
             "sceneless" view (structure is untouched — just not shown). */}
         {scenesVisible && (
         <div
+          {...dragHandleProps(index)}
           draggable={!focused}
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = "move";
-            onDragStart(index);
-          }}
           className="flex items-center gap-2 mb-2 min-h-[1.5rem] cursor-grab active:cursor-grabbing"
         >
           <input
@@ -180,7 +175,9 @@ export default function CenterColumn({
   loading = false,
   scenesVisible = true,
 }: Props) {
-  const dragSceneIndex = useRef<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useAutoScrollOnDrag(scrollRef);
+  const sceneReorder = useReorderList((from, to) => onReorderScenes(chapter.id, from, to));
 
   // Clipboard paste → library image (when focus is in a scene body)
   const handlePaste = useCallback(
@@ -236,7 +233,7 @@ export default function CenterColumn({
       </div>
 
       {/* Scene feed */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="w-full max-w-[700px] mx-auto px-4 pt-4 pb-32">
           {loading ? (
             <div className="px-4" aria-hidden>
@@ -252,24 +249,21 @@ export default function CenterColumn({
           ) : (
           <>
           {chapter.scenes.map((scene, i) => (
-            <SceneBlock
-              key={scene.id}
-              scene={scene}
-              chapterId={chapter.id}
-              index={i}
-              onSceneChange={onSceneChange}
-              onDragStart={(idx) => { dragSceneIndex.current = idx; }}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(toIdx) => {
-                if (dragSceneIndex.current !== null && dragSceneIndex.current !== toIdx) {
-                  onReorderScenes(chapter.id, dragSceneIndex.current, toIdx);
-                }
-                dragSceneIndex.current = null;
-              }}
-              onDeleteScene={onDeleteScene}
-              scenesVisible={scenesVisible}
-            />
+            <Fragment key={scene.id}>
+              {scenesVisible && <DropLine active={sceneReorder.activeGap === i} />}
+              <SceneBlock
+                scene={scene}
+                chapterId={chapter.id}
+                index={i}
+                onSceneChange={onSceneChange}
+                dragHandleProps={sceneReorder.dragHandleProps}
+                dropZoneProps={sceneReorder.dropZoneProps}
+                onDeleteScene={onDeleteScene}
+                scenesVisible={scenesVisible}
+              />
+            </Fragment>
           ))}
+          {scenesVisible && <DropLine active={sceneReorder.activeGap === chapter.scenes.length} />}
 
           {/* Add scene button — hidden in the sceneless view */}
           {scenesVisible && (
