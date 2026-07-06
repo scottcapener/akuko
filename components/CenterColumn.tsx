@@ -75,10 +75,20 @@ function SceneBlock({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (
-      (e.metaKey || e.ctrlKey) &&
-      !["i", "z", "y", "a", "c", "x", "v"].includes(e.key.toLowerCase())
-    ) {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const key = e.key.toLowerCase();
+    // Apply italic ourselves rather than relying on the browser default. Some
+    // browsers (e.g. Firefox) bind Cmd/Ctrl+I to a chrome feature ("Page Info")
+    // and never toggle italic in the editor. preventDefault suppresses that so
+    // italics always wins, matching Google Docs' behavior.
+    if (key === "i") {
+      e.preventDefault();
+      document.execCommand("italic");
+      onSceneChange(chapterId, scene.id, { body: bodyRef.current?.innerHTML ?? "" });
+      return;
+    }
+    // Block every other formatting shortcut; keep clipboard/undo/select-all.
+    if (!["z", "y", "a", "c", "x", "v"].includes(key)) {
       e.preventDefault();
     }
   }
