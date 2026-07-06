@@ -27,6 +27,9 @@ export function useReorderList(onReorder: (from: number, to: number) => void) {
       onDragStart: (e: React.DragEvent) => {
         dragIndex.current = index;
         e.dataTransfer.effectAllowed = "move";
+        // Stop the event bubbling to an enclosing reorder list (e.g. a chapter
+        // row inside a draggable section) so only this list registers the drag.
+        e.stopPropagation();
       },
       onDragEnd: reset,
     };
