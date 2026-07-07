@@ -276,7 +276,7 @@ export default function SignupPage() {
           <div className="flex flex-col gap-4">
             <div>
               <h1 className="text-text text-lg font-semibold">One last thing</h1>
-              <p className="text-subtle text-xs mt-1">How should we call you?</p>
+              <p className="text-subtle text-xs mt-1">What should we call you?</p>
             </div>
             <div>
               <Label>Display name</Label>
