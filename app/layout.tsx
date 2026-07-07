@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "Hot Cocoa",
-  description: "A writing space for first-time novelists.",
+  description: "A warm, cozy writing space for novelists.",
   manifest: "/site.webmanifest",
   icons: {
     icon: [
