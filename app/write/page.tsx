@@ -117,12 +117,21 @@ export default function WritePage() {
   const addLibraryImageRef = useRef(store.addLibraryImage);
   addLibraryImageRef.current = store.addLibraryImage;
 
-  // Route guard: unauthenticated users go to /login.
+  // Route guard: unauthenticated users go to /login. Users with a session but no
+  // finished profile (e.g. they confirmed their email but never completed the
+  // signup wizard) go back to /signup, which resumes at the profile step.
   // Skipped in development when NEXT_PUBLIC_DEV_USER_ID is set.
   useEffect(() => {
     if (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_DEV_USER_ID) return;
-    createClient().auth.getUser().then(({ data: { user } }) => {
-      if (!user) router.replace("/login");
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { router.replace("/login"); return; }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (!profile?.display_name) router.replace("/signup");
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
