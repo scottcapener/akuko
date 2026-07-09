@@ -34,7 +34,7 @@ export default async function LandingPage() {
           </p>
           <Link
             href="/signup"
-            className="inline-block py-3 px-8 rounded-lg bg-accent text-text text-sm font-semibold tracking-wide hover:bg-accent-hi transition-colors"
+            className="inline-block py-3 px-8 rounded-lg bg-accent text-on-accent text-sm font-semibold tracking-wide hover:bg-accent-hi transition-colors"
           >
             Start writing
           </Link>

@@ -25,6 +25,61 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+// The scene body's first-line indent comes from a CSS class (`indent-9`, 36px)
+// on the editor container, not from the markup itself — so copied HTML carries
+// no indent and pastes flush-left into Google Docs / Word. `indentedParagraphHtml`
+// rebuilds a copied selection into real <p> blocks, each carrying the indent
+// inline, so the paragraph shape survives the paste. Matches `indent-9` (36px).
+const SCENE_INDENT_PX = 36;
+
+function escapeHtmlText(text: string): string {
+  const d = document.createElement("div");
+  d.textContent = text;
+  return d.innerHTML;
+}
+
+// Flatten a copied editor fragment into a list of paragraph inner-HTML strings.
+// Handles both block-based line breaks (Chrome's <div> per line, incl. the
+// <div><br></div> empty line) and inline <br> breaks (Firefox/Safari, Shift+Enter),
+// while preserving inline formatting like <em>.
+function collectParagraphs(root: Node): string[] {
+  const paras: string[] = [];
+  let current = "";
+  let started = false;
+  const flush = () => { paras.push(current); current = ""; started = false; };
+
+  root.childNodes.forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      current += escapeHtmlText(node.textContent ?? "");
+      started = true;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement;
+      const tag = el.tagName;
+      if (tag === "BR") {
+        flush();
+      } else if (tag === "DIV" || tag === "P") {
+        if (started) flush();
+        collectParagraphs(el).forEach((p) => paras.push(p));
+      } else {
+        current += el.outerHTML;
+        started = true;
+      }
+    }
+  });
+  if (started || paras.length === 0) flush();
+  return paras;
+}
+
+function indentedParagraphHtml(fragment: DocumentFragment): string {
+  const container = document.createElement("div");
+  container.appendChild(fragment);
+  const paras = collectParagraphs(container);
+  if (paras.every((p) => p.trim() === "")) return "";
+  return paras
+    .map((p) => `<p style="margin:0;text-indent:${SCENE_INDENT_PX}px;">${p || "<br>"}</p>`)
+    .join("");
+}
+
 function SceneBlock({
   scene,
   chapterId,
@@ -72,6 +127,19 @@ function SceneBlock({
     e.preventDefault();
     const text = e.clipboardData.getData("text/plain");
     document.execCommand("insertText", false, text);
+  }
+
+  // Rewrite the clipboard so the CSS-only first-line indent survives a paste
+  // into Google Docs / Word as a real per-paragraph indent. Plain text is left
+  // as the selection's text so non-rich targets are unaffected.
+  function handleCopy(e: React.ClipboardEvent<HTMLDivElement>) {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+    const html = indentedParagraphHtml(sel.getRangeAt(0).cloneContents());
+    if (!html) return;
+    e.preventDefault();
+    e.clipboardData.setData("text/html", html);
+    e.clipboardData.setData("text/plain", sel.toString());
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -164,6 +232,7 @@ function SceneBlock({
           onBlur={() => setFocused(false)}
           onInput={() => onSceneChange(chapterId, scene.id, { body: bodyRef.current?.innerHTML ?? "" })}
           onPaste={handlePaste}
+          onCopy={handleCopy}
           onKeyDown={handleKeyDown}
           className="w-full bg-transparent text-text text-manuscript-l font-serif indent-9 empty:indent-0 focus:outline-none empty:before:content-['Write_here…'] empty:before:text-subtle/30 empty:before:pointer-events-none [&_em]:italic"
           style={{ minHeight: "3em" }}

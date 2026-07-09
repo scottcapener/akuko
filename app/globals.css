@@ -15,6 +15,7 @@
   /* Accent */
   --color-accent:    var(--hc-accent);
   --color-accent-hi: var(--hc-accent-hi);
+  --color-on-accent: var(--hc-on-accent);
 
   /* Border */
   --color-border-subtle: var(--hc-border-subtle);

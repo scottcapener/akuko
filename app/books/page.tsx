@@ -60,7 +60,7 @@ function BookCard({
         </button>
 
         {book.isActive && (
-          <span className="pointer-events-none absolute top-2 left-2 px-2 py-0.5 rounded-full bg-accent text-text text-[10px] font-semibold tracking-wide">
+          <span className="pointer-events-none absolute top-2 left-2 px-2 py-0.5 rounded-full bg-accent text-on-accent text-[10px] font-semibold tracking-wide">
             Active
           </span>
         )}
@@ -260,7 +260,7 @@ export default function BooksPage() {
             onClick={() => fileInputRef.current?.click()}
             disabled={busy || importing}
             title="Create a new book from a Word (.docx) manuscript"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-text text-xs font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-on-accent text-xs font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />

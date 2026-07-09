@@ -32,7 +32,7 @@ function PrimaryButton({
     <button
       {...props}
       disabled={loading || props.disabled}
-      className="w-full py-2.5 rounded-lg bg-accent text-text text-sm font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors"
+      className="w-full py-2.5 rounded-lg bg-accent text-on-accent text-sm font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors"
     >
       {loading ? "Please wait…" : children}
     </button>

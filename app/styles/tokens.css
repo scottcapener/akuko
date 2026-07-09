@@ -13,6 +13,8 @@
   /* ── Accent ── */
   --hc-accent:    #755c4b;   /* primary warm-brown accent */
   --hc-accent-hi: #8b6d5a;   /* accent hover */
+  --hc-on-accent: #d4d2ce;   /* text/icons on an accent fill — light in both themes
+                                since the accent brown is identical in light and dark */
 
   /* ── Border ── */
   --hc-border-subtle: #1c1b1b;   /* all borders */

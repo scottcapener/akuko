@@ -52,7 +52,7 @@ function ConfirmModal({
           <button
             onClick={onConfirm}
             disabled={busy}
-            className="px-4 py-2 rounded-lg bg-accent text-text text-xs font-semibold hover:bg-accent-hi disabled:opacity-50 transition-colors"
+            className="px-4 py-2 rounded-lg bg-accent text-on-accent text-xs font-semibold hover:bg-accent-hi disabled:opacity-50 transition-colors"
           >
             {busy ? "Please wait…" : confirmLabel}
           </button>
@@ -222,7 +222,7 @@ export default function BackupsPage() {
             <button
               onClick={handleBackupNow}
               disabled={backingUp || !activeBook}
-              className="px-4 py-2 rounded-lg bg-accent text-text text-xs font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors"
+              className="px-4 py-2 rounded-lg bg-accent text-on-accent text-xs font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors"
             >
               {backingUp ? "Backing up…" : "Back up now"}
             </button>

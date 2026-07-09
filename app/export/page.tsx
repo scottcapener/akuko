@@ -51,7 +51,7 @@ function ConfirmModal({
           <button
             onClick={onConfirm}
             disabled={busy}
-            className="px-4 py-2 rounded-lg bg-accent text-text text-xs font-semibold hover:bg-accent-hi disabled:opacity-50 transition-colors"
+            className="px-4 py-2 rounded-lg bg-accent text-on-accent text-xs font-semibold hover:bg-accent-hi disabled:opacity-50 transition-colors"
           >
             {busy ? "Please wait…" : confirmLabel}
           </button>
@@ -242,7 +242,7 @@ export default function ExportPage() {
               <button
                 onClick={() => runExport()}
                 disabled={exporting || !selectedBook || chapters.length === 0}
-                className="px-4 py-2 rounded-lg bg-accent text-text text-xs font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors"
+                className="px-4 py-2 rounded-lg bg-accent text-on-accent text-xs font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors"
               >
                 {exporting ? "Exporting…" : "Export manuscript"}
               </button>
@@ -285,7 +285,7 @@ export default function ExportPage() {
                   <button
                     onClick={() => runExport([...selectedChapters])}
                     disabled={exporting || partialCount === 0}
-                    className="self-start px-4 py-2 rounded-lg bg-accent text-text text-xs font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors"
+                    className="self-start px-4 py-2 rounded-lg bg-accent text-on-accent text-xs font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors"
                   >
                     {exporting
                       ? "Exporting…"
