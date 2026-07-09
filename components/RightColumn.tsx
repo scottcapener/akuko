@@ -137,17 +137,49 @@ function NoteLightbox({
     document.execCommand("insertText", false, text);
   }
 
+  function syncBody() {
+    onUpdate(note.id, { body: bodyRef.current?.innerHTML ?? "" });
+  }
+
   function handleBodyKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // Markdown-style list autodetect: typing a marker ("1.", "-", "*", "+")
+    // followed by a space at the very start of a line turns it into a real
+    // ordered/unordered list, matching Google Docs / Notion.
+    if (e.key === " ") {
+      const sel = window.getSelection();
+      if (sel && sel.isCollapsed && sel.rangeCount) {
+        const range = sel.getRangeAt(0);
+        const node = range.startContainer;
+        if (node.nodeType === Node.TEXT_NODE) {
+          const before = (node.textContent ?? "").slice(0, range.startOffset);
+          const marker = /^(1\.|[-*+])$/.exec(before);
+          if (marker) {
+            e.preventDefault();
+            // Remove the typed marker before converting the line to a list.
+            const del = document.createRange();
+            del.setStart(node, 0);
+            del.setEnd(node, range.startOffset);
+            del.deleteContents();
+            document.execCommand(
+              marker[1] === "1." ? "insertOrderedList" : "insertUnorderedList",
+            );
+            syncBody();
+            return;
+          }
+        }
+      }
+    }
+
     if (!(e.metaKey || e.ctrlKey)) return;
     const key = e.key.toLowerCase();
-    // Apply italic ourselves rather than relying on the browser default. Some
-    // browsers (e.g. Firefox) bind Cmd/Ctrl+I to a chrome feature ("Page Info")
-    // and never toggle italic in the editor. preventDefault suppresses that so
-    // italics always wins, matching Google Docs' behavior.
-    if (key === "i") {
+    // Apply bold/italic ourselves rather than relying on the browser default.
+    // Some browsers (e.g. Firefox) bind Cmd/Ctrl+I to a chrome feature ("Page
+    // Info") and never toggle italic in the editor. preventDefault suppresses
+    // that so formatting always wins, matching Google Docs' behavior.
+    if (key === "i" || key === "b") {
       e.preventDefault();
-      document.execCommand("italic");
-      onUpdate(note.id, { body: bodyRef.current?.innerHTML ?? "" });
+      document.execCommand(key === "i" ? "italic" : "bold");
+      syncBody();
       return;
     }
     // Block every other formatting shortcut; keep clipboard/undo/select-all.
@@ -197,7 +229,7 @@ function NoteLightbox({
           onInput={() => onUpdate(note.id, { body: bodyRef.current?.innerHTML ?? "" })}
           onPaste={handlePaste}
           onKeyDown={handleBodyKeyDown}
-          className="flex-1 overflow-y-auto px-5 py-4 text-sm text-text leading-relaxed focus:outline-none min-h-[140px] [&_em]:italic"
+          className="flex-1 overflow-y-auto px-5 py-4 text-sm text-text leading-relaxed focus:outline-none min-h-[140px] [&_em]:italic [&_i]:italic [&_b]:font-bold [&_strong]:font-bold [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_li]:my-0.5"
         />
       </div>
     </div>
