@@ -30,10 +30,21 @@ export interface LibraryMusicLink {
   loading?: boolean;
 }
 
+// A research link. Rendered as a Link List Item: favicon + page title + site
+// name. Reuses the OG scrape for metadata (title / og:site_name / favicon).
+export interface LibraryLink {
+  id: string;
+  url: string;
+  title: string;     // og:title (falls back to hostname)
+  siteName: string;  // og:site_name (falls back to hostname)
+  favicon: string;   // absolute favicon URL (may be empty)
+}
+
 export interface ChapterLibrary {
   images: LibraryImage[];
   notes: LibraryNote[];
   musicLinks: LibraryMusicLink[];
+  links: LibraryLink[];
 }
 
 export interface Chapter {

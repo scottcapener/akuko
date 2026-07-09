@@ -119,7 +119,24 @@ export async function GET(req: NextRequest) {
     const image =
       og("og:image") || og("twitter:image") || og("twitter:image:src") || "";
 
-    return NextResponse.json({ title, description, image });
+    const siteName = og("og:site_name") || hostname;
+
+    // Favicon: prefer an explicit <link rel="icon"> (incl. shortcut/apple-touch),
+    // resolved against the page URL so relative hrefs work; fall back to the
+    // conventional /favicon.ico at the site origin.
+    const iconHref =
+      root.querySelector('link[rel="icon"]')?.getAttribute("href") ??
+      root.querySelector('link[rel="shortcut icon"]')?.getAttribute("href") ??
+      root.querySelector('link[rel="apple-touch-icon"]')?.getAttribute("href") ??
+      "";
+    let favicon = "";
+    try {
+      favicon = iconHref
+        ? new URL(iconHref, url).href
+        : new URL("/favicon.ico", url).href;
+    } catch {}
+
+    return NextResponse.json({ title, description, image, siteName, favicon });
   } catch (err) {
     // Graceful fallback — card still renders
     return NextResponse.json(
