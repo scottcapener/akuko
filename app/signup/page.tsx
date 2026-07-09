@@ -64,11 +64,14 @@ export default function SignupPage() {
       if (!user) return;
       // Already has a session. If their profile is complete, they're a
       // finished user who shouldn't be here — send them to the editor.
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from("profiles")
         .select("display_name")
         .eq("id", user.id)
         .maybeSingle();
+      // A failed fetch must not be read as "profile incomplete" — bail rather
+      // than dropping a finished user into the profile step.
+      if (error) return;
       if (profile?.display_name) {
         router.replace("/write");
         return;
@@ -129,6 +132,21 @@ export default function SignupPage() {
       pen_name: penName.trim() || null,
     });
     if (profileErr) { setError(profileErr.message); setLoading(false); return; }
+
+    // A returning user (e.g. a legacy account with no display_name, or one
+    // bounced here mid-session) may already have books. Only scaffold a starter
+    // book for genuinely new accounts — never create a duplicate, which would
+    // make an existing user think their library was replaced.
+    const { count: bookCount, error: countErr } = await supabase
+      .from("books")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+    if (countErr) { setError(countErr.message); setLoading(false); return; }
+    if ((bookCount ?? 0) > 0) {
+      setLoading(false);
+      router.push("/write");
+      return;
+    }
 
     // Create first book + section + chapter
     const { data: book, error: bookErr } = await supabase

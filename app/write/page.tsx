@@ -126,12 +126,15 @@ export default function WritePage() {
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { router.replace("/login"); return; }
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from("profiles")
         .select("display_name")
         .eq("id", user.id)
         .maybeSingle();
-      if (!profile?.display_name) router.replace("/signup");
+      // Only bounce to /signup when the fetch *succeeded* and the profile is
+      // genuinely unfinished. A transient/errored fetch must NOT be read as
+      // "incomplete" — doing so traps finished users in the signup wizard.
+      if (!error && !profile?.display_name) router.replace("/signup");
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

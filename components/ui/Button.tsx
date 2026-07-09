@@ -7,7 +7,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
   primary:
-    "w-full py-2.5 rounded-lg bg-accent text-text text-sm font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors",
+    "w-full py-2.5 rounded-lg bg-accent text-on-accent text-sm font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-50 transition-colors",
   secondary:
     "px-4 py-2 rounded-lg bg-panel border border-border-subtle text-text text-xs font-medium hover:border-accent/40 disabled:opacity-50 transition-colors",
   ghost:

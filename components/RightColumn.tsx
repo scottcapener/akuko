@@ -278,7 +278,7 @@ function ImageUploadModal({
             <button
               onClick={handleUrlSubmit}
               disabled={urlLoading || !url.trim()}
-              className="px-3 py-2 rounded-lg bg-accent text-text text-sm font-semibold hover:bg-accent-hi disabled:opacity-40 transition-colors flex-shrink-0"
+              className="px-3 py-2 rounded-lg bg-accent text-on-accent text-sm font-semibold hover:bg-accent-hi disabled:opacity-40 transition-colors flex-shrink-0"
             >
               {urlLoading ? "…" : "Add"}
             </button>
@@ -613,7 +613,7 @@ export default function RightColumn({
             <button
               onClick={handleMusicAdd}
               disabled={musicLoading || !musicUrl.trim()}
-              className="w-full py-2.5 rounded-lg bg-accent text-text text-sm font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-40 transition-colors"
+              className="w-full py-2.5 rounded-lg bg-accent text-on-accent text-sm font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-40 transition-colors"
             >
               {musicLoading ? "Please wait…" : "Add"}
             </button>
