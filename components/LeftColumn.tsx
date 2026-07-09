@@ -29,6 +29,8 @@ interface Props {
   onDeleteSection: (sectionId: string) => void;
   scenesVisible: boolean;
   onToggleScenes: () => void;
+  linksVisible: boolean;
+  onToggleLinks: () => void;
   sectionViews: Record<string, "grid" | "list">;
   onSetSectionView: (sectionId: string, view: "grid" | "list") => void;
   onClose?: () => void;
@@ -372,6 +374,8 @@ export default function LeftColumn({
   onDeleteSection,
   scenesVisible,
   onToggleScenes,
+  linksVisible,
+  onToggleLinks,
   sectionViews,
   onSetSectionView,
   onClose,
@@ -639,6 +643,20 @@ export default function LeftColumn({
               <span>Show scenes</span>
               <span className={`relative w-7 h-4 rounded-full flex-shrink-0 transition-colors ${scenesVisible ? "bg-accent" : "bg-hover"}`}>
                 <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${scenesVisible ? "left-3.5" : "left-0.5"}`} />
+              </span>
+            </button>
+
+            {/* Link visibility — a user-level view preference, mirroring Show
+                scenes. Off hides the Links section in the library panel. */}
+            <button
+              onClick={onToggleLinks}
+              className="flex w-full items-center justify-between px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
+              role="switch"
+              aria-checked={linksVisible}
+            >
+              <span>Show links</span>
+              <span className={`relative w-7 h-4 rounded-full flex-shrink-0 transition-colors ${linksVisible ? "bg-accent" : "bg-hover"}`}>
+                <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${linksVisible ? "left-3.5" : "left-0.5"}`} />
               </span>
             </button>
 

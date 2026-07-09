@@ -3,7 +3,7 @@
 import { Fragment, useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { Chapter, LibraryImage, LibraryNote } from "@/lib/types";
+import { Chapter, LibraryImage, LibraryNote, LibraryLink } from "@/lib/types";
 import { DropLine } from "@/components/ui/DropLine";
 import { useReorderList } from "@/lib/useReorderList";
 import { useReorderGrid } from "@/lib/useReorderGrid";
@@ -320,6 +320,56 @@ function ImageUploadModal({
   );
 }
 
+// ── Link List Item ────────────────────────────────────────────────────────────
+
+// A research link. The whole row is an anchor that opens the URL in a new tab;
+// the favicon (sized to match Note icons), page title, and site name come from
+// the OG scrape. On hover the site name is replaced by a remove button.
+function LinkListItem({ link, onRemove }: { link: LibraryLink; onRemove: () => void }) {
+  const [iconFailed, setIconFailed] = useState(false);
+  const showFavicon = link.favicon && !iconFailed;
+
+  return (
+    <a
+      href={link.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2.5 group px-2 py-1.5 rounded hover:bg-panel transition-colors"
+    >
+      <span className="w-3.5 h-3.5 flex-shrink-0 flex items-center justify-center">
+        {showFavicon ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={link.favicon}
+            alt=""
+            className="w-3.5 h-3.5 rounded-sm object-contain"
+            onError={() => setIconFailed(true)}
+          />
+        ) : (
+          <svg className="w-3.5 h-3.5 text-subtle/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+          </svg>
+        )}
+      </span>
+      <span className="text-body-m text-text flex-1 truncate">
+        {link.title || link.siteName || link.url}
+      </span>
+      <span className="text-body-s text-subtle flex-shrink-0 max-w-[40%] truncate group-hover:hidden">
+        {link.siteName}
+      </span>
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(); }}
+        className="hidden group-hover:flex text-subtle hover:text-error transition-colors flex-shrink-0"
+        aria-label="Remove link"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </a>
+  );
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -333,6 +383,9 @@ interface Props {
   onRemoveNote: (chapterId: string, noteId: string) => void;
   onAddMusicLink: (chapterId: string, link: { id: string; url: string; title: string; description: string; image: string }) => void;
   onRemoveMusicLink: (chapterId: string, linkId: string) => void;
+  onAddLink: (chapterId: string, link: LibraryLink) => void;
+  onRemoveLink: (chapterId: string, linkId: string) => void;
+  linksVisible?: boolean;
   onReorderImages: (chapterId: string, from: number, to: number) => void;
   onReorderMusicLinks: (chapterId: string, from: number, to: number) => void;
   onReorderNotes: (chapterId: string, from: number, to: number) => void;
@@ -352,6 +405,9 @@ export default function RightColumn({
   onRemoveNote,
   onAddMusicLink,
   onRemoveMusicLink,
+  onAddLink,
+  onRemoveLink,
+  linksVisible = true,
   onReorderImages,
   onReorderMusicLinks,
   onReorderNotes,
@@ -370,8 +426,12 @@ export default function RightColumn({
   const [musicModalOpen, setMusicModalOpen] = useState(false);
   const [musicUrl, setMusicUrl] = useState("");
   const [musicLoading, setMusicLoading] = useState(false);
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkLoading, setLinkLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
+  const linkInputRef = useRef<HTMLInputElement>(null);
   // Image ids we've already asked to re-sign once, so a still-broken URL can't
   // loop onError → refresh → onError. Cleared per-image on a successful load,
   // re-arming it for a future expiry.
@@ -381,6 +441,11 @@ export default function RightColumn({
   useEffect(() => {
     if (musicModalOpen) setTimeout(() => musicInputRef.current?.focus(), 50);
   }, [musicModalOpen]);
+
+  // Focus link URL input when modal opens
+  useEffect(() => {
+    if (linkModalOpen) setTimeout(() => linkInputRef.current?.focus(), 50);
+  }, [linkModalOpen]);
 
   // Open the newly created note once it appears in the library. Matching by id
   // (not array length) avoids a race where the effect fires before the note is
@@ -463,6 +528,33 @@ export default function RightColumn({
     } finally {
       setMusicLoading(false);
       setMusicModalOpen(false);
+    }
+  }
+
+  async function handleLinkAdd() {
+    const url = linkUrl.trim();
+    if (!url || linkLoading) return;
+    setLinkUrl("");
+    setLinkLoading(true);
+
+    let hostname = url;
+    try { hostname = new URL(url).hostname.replace("www.", ""); } catch {}
+
+    try {
+      const res = await fetch(`/api/og?url=${encodeURIComponent(url)}`);
+      const data = await res.json();
+      onAddLink(chapter.id, {
+        id: makeId(),
+        url,
+        title: data.title || hostname,
+        siteName: data.siteName || hostname,
+        favicon: data.favicon || "",
+      });
+    } catch {
+      onAddLink(chapter.id, { id: makeId(), url, title: hostname, siteName: hostname, favicon: "" });
+    } finally {
+      setLinkLoading(false);
+      setLinkModalOpen(false);
     }
   }
 
@@ -622,6 +714,42 @@ export default function RightColumn({
         </Portal>
       )}
 
+      {/* ── Link modal ── */}
+      {linkModalOpen && (
+        <Portal>
+        <div
+          className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+          onClick={() => { setLinkModalOpen(false); setLinkUrl(""); }}
+        >
+          <div
+            className="bg-panel rounded-2xl w-full max-w-sm p-5 shadow-2xl flex flex-col gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-[11px] font-medium tracking-wide uppercase text-muted">Add link</p>
+            <input
+              ref={linkInputRef}
+              type="url"
+              placeholder="Paste a link…"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleLinkAdd();
+                if (e.key === "Escape") { setLinkModalOpen(false); setLinkUrl(""); }
+              }}
+              className="w-full bg-bg text-text text-base px-3 py-2.5 rounded-lg border border-hover placeholder:text-subtle/50 focus:outline-none focus:border-accent/60 transition-colors"
+            />
+            <button
+              onClick={handleLinkAdd}
+              disabled={linkLoading || !linkUrl.trim()}
+              className="w-full py-2.5 rounded-lg bg-accent text-on-accent text-sm font-semibold tracking-wide hover:bg-accent-hi disabled:opacity-40 transition-colors"
+            >
+              {linkLoading ? "Please wait…" : "Add"}
+            </button>
+          </div>
+        </div>
+        </Portal>
+      )}
+
       {/* ── Music ── */}
       <div className="px-4 mb-3">
         <div className="flex items-center justify-between mb-2">
@@ -691,7 +819,7 @@ export default function RightColumn({
       </div>
 
       {/* ── Notes ── */}
-      <div className="px-4 pb-6">
+      <div className="px-4 mb-3">
         <div className="flex items-center justify-between mb-2">
           <p className="text-label-m uppercase text-subtle">Notes</p>
           <button
@@ -736,6 +864,32 @@ export default function RightColumn({
           </div>
         )}
       </div>
+
+      {/* ── Links ── */}
+      {linksVisible && (
+      <div className="px-4 pb-6">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-label-m uppercase text-subtle">Links</p>
+          <button
+            className="opacity-40 hover:opacity-100 transition-opacity"
+            onClick={() => setLinkModalOpen(true)}
+          >
+            <Image src="/plus.svg" alt="Add link" width={14} height={14} />
+          </button>
+        </div>
+        {chapter.library.links.length > 0 && (
+          <div className="flex flex-col">
+            {chapter.library.links.map((link) => (
+              <LinkListItem
+                key={link.id}
+                link={link}
+                onRemove={() => onRemoveLink(chapter.id, link.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      )}
     </div>
   );
 }

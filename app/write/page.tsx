@@ -106,6 +106,7 @@ export default function WritePage() {
   const right = useColumnResize("hc.rightWidth", RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX, -1);
 
   const [scenesVisible, setScenesVisible] = useLocalStorageState("hc.scenesVisible", true);
+  const [linksVisible, setLinksVisible] = useLocalStorageState("hc.linksVisible", true);
   const [sectionViews, setSectionViews] = useLocalStorageState<Record<string, "grid" | "list">>("hc.sectionViews", {});
   const setSectionView = useCallback((sectionId: string, view: "grid" | "list") => {
     setSectionViews((prev) => ({ ...prev, [sectionId]: view }));
@@ -196,6 +197,8 @@ export default function WritePage() {
     onDeleteSection: store.deleteSection,
     scenesVisible,
     onToggleScenes: () => setScenesVisible((v) => !v),
+    linksVisible,
+    onToggleLinks: () => setLinksVisible((v) => !v),
     sectionViews,
     onSetSectionView: setSectionView,
   };
@@ -211,6 +214,9 @@ export default function WritePage() {
     onRemoveNote: store.removeNote,
     onAddMusicLink: store.addMusicLink,
     onRemoveMusicLink: store.removeMusicLink,
+    onAddLink: store.addLink,
+    onRemoveLink: store.removeLink,
+    linksVisible,
     onReorderImages: store.reorderLibraryImages,
     onReorderMusicLinks: store.reorderMusicLinks,
     onReorderNotes: store.reorderNotes,

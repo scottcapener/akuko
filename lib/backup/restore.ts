@@ -148,7 +148,7 @@ export async function restoreBackup(
     } else if (item.type === "text") {
       row.og_title = item.ogTitle ?? null;
       row.og_description = item.ogDescription ?? null;
-    } else if (item.type === "music") {
+    } else if (item.type === "music" || item.type === "link") {
       row.url = item.url ?? null;
       row.og_title = item.ogTitle ?? null;
       row.og_description = item.ogDescription ?? null;

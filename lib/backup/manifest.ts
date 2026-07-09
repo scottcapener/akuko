@@ -49,15 +49,16 @@ export interface BackupScene {
 export interface BackupLibraryItem {
   id: string;
   chapterId: string;
-  type: "image" | "text" | "music";
+  type: "image" | "text" | "music" | "link";
   position: number;
   // image
   imageFile?: string;    // path inside the ZIP, e.g. "images/<id>"; blob bundled
   contentType?: string;  // captured from the stored blob, used to re-upload
   filename?: string;
-  // image (external URL only, no bundled blob) / music
+  // image (external URL only, no bundled blob) / music / link
   url?: string;
-  // text (notes) + music (og metadata)
+  // text (notes) + music + link (og metadata; link uses ogDescription for the
+  // site name and ogImage for the favicon)
   ogTitle?: string;
   ogDescription?: string;
   ogImage?: string;

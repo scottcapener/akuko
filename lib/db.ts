@@ -6,7 +6,7 @@
  */
 
 import { createClient } from "./supabase/client";
-import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink } from "./types";
+import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink, LibraryLink } from "./types";
 
 const UNLOCK_THRESHOLDS = [1000, 2000, 5000, 10000, 25000];
 
@@ -174,7 +174,7 @@ export async function getOrCreateBook(userId: string): Promise<{
         title: c.title,
         sectionId: s.id,
         scenes: [],
-        library: { images: [], notes: [], musicLinks: [] },
+        library: { images: [], notes: [], musicLinks: [], links: [] },
       })),
   }));
 
@@ -263,7 +263,7 @@ export async function createChapter(bookId: string, sectionId: string, position:
     title: data.title,
     sectionId,
     scenes: [],
-    library: { images: [], notes: [], musicLinks: [] },
+    library: { images: [], notes: [], musicLinks: [], links: [] },
   };
 }
 
@@ -342,6 +342,7 @@ export async function getLibraryForChapter(chapterId: string): Promise<{
   images: LibraryImage[];
   notes: LibraryNote[];
   musicLinks: LibraryMusicLink[];
+  links: LibraryLink[];
 }> {
   const { data } = await supabase()
     .from("library_items")
@@ -353,6 +354,7 @@ export async function getLibraryForChapter(chapterId: string): Promise<{
   const images: LibraryImage[] = [];
   const notes: LibraryNote[] = [];
   const musicLinks: LibraryMusicLink[] = [];
+  const links: LibraryLink[] = [];
 
   for (const item of items) {
     if (item.type === "image") {
@@ -384,10 +386,18 @@ export async function getLibraryForChapter(chapterId: string): Promise<{
         description: item.og_description ?? "",
         image: item.og_image ?? "",
       });
+    } else if (item.type === "link") {
+      links.push({
+        id: item.id,
+        url: item.url ?? "",
+        title: item.og_title ?? "",
+        siteName: item.og_description ?? "",
+        favicon: item.og_image ?? "",
+      });
     }
   }
 
-  return { images, notes, musicLinks };
+  return { images, notes, musicLinks, links };
 }
 
 export async function addLibraryImage(
@@ -504,6 +514,29 @@ export async function addMusicLink(
       og_title: link.title,
       og_description: link.description,
       og_image: link.image,
+      position,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  return { id: data.id, ...link };
+}
+
+export async function addLink(
+  chapterId: string,
+  link: Omit<LibraryLink, "id">,
+  position: number
+): Promise<LibraryLink> {
+  const { data, error } = await supabase()
+    .from("library_items")
+    .insert({
+      chapter_id: chapterId,
+      type: "link",
+      url: link.url,
+      og_title: link.title,
+      og_description: link.siteName,
+      og_image: link.favicon,
       position,
     })
     .select()

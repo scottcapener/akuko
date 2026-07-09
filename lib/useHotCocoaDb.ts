@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "./supabase/client";
 import { ensureDevSession } from "./ensureDevSession";
 import * as db from "./db";
-import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink } from "./types";
+import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink, LibraryLink } from "./types";
 
 export type SaveStatus = "idle" | "saving" | "saved";
 
@@ -556,6 +556,32 @@ export function useHotCocoaDb() {
     await db.removeLibraryItem(linkId);
   }, []);
 
+  const addLink = useCallback(
+    async (chapterId: string, link: LibraryLink) => {
+      const chapter = sections.flatMap((s) => s.chapters).find((c) => c.id === chapterId);
+      const position = chapter?.library.links.length ?? 0;
+      const { id: _id, ...rest } = link;
+      const saved = await db.addLink(chapterId, rest, position);
+      setSections((prev) =>
+        mapChapter(prev, chapterId, (c) => ({
+          ...c,
+          library: { ...c.library, links: [...c.library.links, saved] },
+        }))
+      );
+    },
+    [sections]
+  );
+
+  const removeLink = useCallback(async (chapterId: string, linkId: string) => {
+    setSections((prev) =>
+      mapChapter(prev, chapterId, (c) => ({
+        ...c,
+        library: { ...c.library, links: c.library.links.filter((l) => l.id !== linkId) },
+      }))
+    );
+    await db.removeLibraryItem(linkId);
+  }, []);
+
   // Reorder a library sub-list (images / music links / notes). Positions are
   // rewritten 0..n for that list and persisted, mirroring reorderScenes.
   const reorderLibraryImages = useCallback((chapterId: string, fromIndex: number, toIndex: number) => {
@@ -634,5 +660,7 @@ export function useHotCocoaDb() {
     addMusicLink,
     removeMusicLink,
     reorderMusicLinks,
+    addLink,
+    removeLink,
   };
 }
