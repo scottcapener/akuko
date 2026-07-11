@@ -20,6 +20,8 @@ interface Props {
   onChapterTitleChange: (id: string, title: string) => void;
   onSceneChange: (chapterId: string, sceneId: string, patch: Partial<Scene>) => void;
   onAddScene: (chapterId: string) => void;
+  onInsertScene: (chapterId: string, index: number) => void;
+  onSplitChapter: (chapterId: string, index: number) => void;
   onReorderScenes: (chapterId: string, from: number, to: number) => void;
   onDeleteScene: (chapterId: string, sceneId: string) => void;
   onAddImage: (chapterId: string, img: LibraryImage) => void;
@@ -326,12 +328,45 @@ function SceneBlock({
   );
 }
 
+// Hover-reveal row shown in the gap between two scenes (Figma "Hover Insert",
+// 159:896): [+ Add scene] —— hairline —— [Split chapter]. The gap reserves a
+// small fixed height; the row floats centered and only appears (and becomes
+// clickable) on hover, so it never intercepts clicks on the scenes around it.
+function HoverInsert({ onAddScene, onSplit }: { onAddScene: () => void; onSplit: () => void }) {
+  return (
+    <div className="group/insert relative h-4">
+      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center gap-2 px-4 opacity-0 pointer-events-none transition-opacity group-hover/insert:opacity-100 group-hover/insert:pointer-events-auto">
+        <button
+          onClick={onAddScene}
+          className="flex items-center gap-1.5 flex-shrink-0 text-subtle hover:text-accent transition-colors"
+        >
+          <Image src="/plus.svg" alt="" width={16} height={16} className="opacity-60" />
+          <span className="text-body-m whitespace-nowrap">Add scene</span>
+        </button>
+        <div className="flex-1 h-px bg-border-subtle" />
+        <button
+          onClick={onSplit}
+          className="flex items-center gap-1.5 flex-shrink-0 text-subtle hover:text-accent transition-colors"
+        >
+          {/* Scissors — "cut the chapter here" */}
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7.848 8.25l1.536.887M7.848 8.25a3 3 0 11-5.196-3 3 3 0 015.196 3zm1.536.887a2.165 2.165 0 011.083 1.839c.005.351.054.695.14 1.024M9.384 9.137l10.062 5.808a3 3 0 01-3 5.196l-1.536-.887m0 0a2.165 2.165 0 00-1.083-1.839 5.998 5.998 0 01-.14-1.024m1.223 2.863l.001-.001m-3.05-1.762l-1.536.887M14.436 14.943a3 3 0 11-5.196 3 3 3 0 015.196-3z" />
+          </svg>
+          <span className="text-body-m whitespace-nowrap">Split chapter</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function CenterColumn({
   chapter,
   saveStatus,
   onChapterTitleChange,
   onSceneChange,
   onAddScene,
+  onInsertScene,
+  onSplitChapter,
   onReorderScenes,
   onDeleteScene,
   onAddImage,
@@ -341,6 +376,7 @@ export default function CenterColumn({
   const scrollRef = useRef<HTMLDivElement>(null);
   useAutoScrollOnDrag(scrollRef);
   const sceneReorder = useReorderList((from, to) => onReorderScenes(chapter.id, from, to));
+  const sceneDrag = useSceneDrag();
 
   // Clipboard paste → library image (when focus is in a scene body)
   const handlePaste = useCallback(
@@ -418,6 +454,15 @@ export default function CenterColumn({
           {chapter.scenes.map((scene, i) => (
             <Fragment key={scene.id}>
               {scenesVisible && <DropLine active={sceneReorder.activeGap === i} />}
+              {/* Hover-insert row in each gap between scenes (not before the
+                  first). Hidden while a scene is being dragged so it can't
+                  compete with the reorder DropLine. */}
+              {scenesVisible && i > 0 && !sceneDrag.payload && (
+                <HoverInsert
+                  onAddScene={() => onInsertScene(chapter.id, i)}
+                  onSplit={() => onSplitChapter(chapter.id, i)}
+                />
+              )}
               <SceneBlock
                 scene={scene}
                 chapterId={chapter.id}

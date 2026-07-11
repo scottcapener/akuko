@@ -14,6 +14,7 @@ import { useReorderList } from "@/lib/useReorderList";
 import { useReorderGrid } from "@/lib/useReorderGrid";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
 import { useSceneDrag } from "@/lib/useSceneDrag";
+import { useChapterDrag } from "@/lib/useChapterDrag";
 
 // Which gap a drag is hovering over an item: before it, or after it (based on
 // whether the pointer is past the item's vertical midpoint). Mirrors the gap math
@@ -35,6 +36,8 @@ interface Props {
   onDeleteChapter: (chapterId: string) => void;
   onReorderChapters: (sectionId: string, from: number, to: number) => void;
   onMoveScene: (sceneId: string, fromChapterId: string, toChapterId: string, toIndex: number) => void;
+  onMoveChapter: (chapterId: string, fromSectionId: string, toSectionId: string, toIndex: number) => void;
+  onDuplicateChapter: (chapterId: string) => void;
   onAddSection: (afterSectionId: string) => void;
   onUpdateSectionLabel: (sectionId: string, label: string) => void;
   onReorderSections: (from: number, to: number) => void;
@@ -91,6 +94,9 @@ function SectionRow({
   onDeleteChapterRequest,
   onReorderChapters,
   onMoveScene,
+  onMoveChapter,
+  onDuplicateChapter,
+  onOpenChapterMenu,
   onAddSection,
   onUpdateSectionLabel,
   onMoveSection,
@@ -103,6 +109,9 @@ function SectionRow({
   dropGap,
   setSceneDropTarget,
   clearSceneDropTarget,
+  chapterDrop,
+  setChapterDropTarget,
+  clearChapterDropTarget,
 }: {
   section: Section;
   sectionIndex: number;
@@ -113,6 +122,9 @@ function SectionRow({
   onDeleteChapterRequest: (chapter: Chapter) => void;
   onReorderChapters: (sectionId: string, from: number, to: number) => void;
   onMoveScene: (sceneId: string, fromChapterId: string, toChapterId: string, toIndex: number) => void;
+  onMoveChapter: (chapterId: string, fromSectionId: string, toSectionId: string, toIndex: number) => void;
+  onDuplicateChapter: (chapterId: string) => void;
+  onOpenChapterMenu: (chapter: Chapter, x: number, y: number) => void;
   onAddSection: (afterSectionId: string) => void;
   onUpdateSectionLabel: (sectionId: string, label: string) => void;
   onMoveSection: (from: number, to: number) => void;
@@ -128,9 +140,14 @@ function SectionRow({
   dropGap: number | null;
   setSceneDropTarget: (chapterId: string, gap: number) => void;
   clearSceneDropTarget: () => void;
+  // Shared cross-section chapter-drop target (lifted like the scene one).
+  chapterDrop: { sectionId: string; gap: number } | null;
+  setChapterDropTarget: (sectionId: string, gap: number) => void;
+  clearChapterDropTarget: () => void;
 }) {
   const activeChapterId = activeChapter?.id ?? "";
   const sceneDrag = useSceneDrag();
+  const chapterDrag = useChapterDrag();
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState(section.label);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -180,6 +197,29 @@ function SectionRow({
     clearSceneDropTarget();
     sceneDrag.end();
   }
+
+  // ── Chapter drag/drop (reorder in-section + move across sections) ──────
+  // Composes with the per-section reorder hook (chapterList/chapterGrid): the
+  // hook handles same-section reorder; the shared chapterDrag payload lets a
+  // chapter be dropped into a *different* section.
+  const chapterFromOther = !!chapterDrag.payload && chapterDrag.payload.fromSectionId !== section.id;
+
+  function chapterDragStart(e: React.DragEvent, hookStart: ((e: React.DragEvent) => void) | undefined, index: number) {
+    hookStart?.(e);
+    chapterDrag.begin({ chapterId: section.chapters[index].id, fromSectionId: section.id, fromIndex: index });
+  }
+  function chapterDragEnd(e: React.DragEvent, hookEnd: ((e: React.DragEvent) => void) | undefined) {
+    hookEnd?.(e);
+    chapterDrag.end();
+  }
+  function dropChapterInto(gap: number) {
+    const p = chapterDrag.peek();
+    if (p) onMoveChapter(p.chapterId, p.fromSectionId, section.id, gap);
+    clearChapterDropTarget();
+    chapterDrag.end();
+  }
+  // Insertion line for an incoming cross-section chapter drop into THIS section.
+  const chapterDropGap = chapterFromOther && chapterDrop?.sectionId === section.id ? chapterDrop.gap : null;
 
   return (
     <div {...sectionDragProps} className="mb-4">
@@ -291,23 +331,26 @@ function SectionRow({
           <div key={ch.id} className="relative group/chapter">
             <button
               draggable={cell.draggable}
-              onDragStart={cell.onDragStart}
-              onDragEnd={cell.onDragEnd}
+              onDragStart={(e) => chapterDragStart(e, cell.onDragStart, i)}
+              onDragEnd={(e) => chapterDragEnd(e, cell.onDragEnd)}
               onDragLeave={cell.onDragLeave}
               onDragOver={(e) => {
                 if (sceneDrag.payload) { e.preventDefault(); setSceneDropTarget(ch.id, ch.scenes.length); return; }
+                if (chapterFromOther) { e.preventDefault(); setChapterDropTarget(section.id, i); return; }
                 cell.onDragOver(e);
               }}
               onDrop={(e) => {
                 if (sceneDrag.payload) { e.preventDefault(); e.stopPropagation(); dropSceneInto(ch.id, ch.scenes.length); return; }
+                if (chapterFromOther) { e.preventDefault(); e.stopPropagation(); dropChapterInto(i); return; }
                 cell.onDrop(e);
               }}
+              onContextMenu={(e) => { e.preventDefault(); onOpenChapterMenu(ch, e.clientX, e.clientY); }}
               onClick={() => onChapterClick(ch.id)}
               className={`
                 w-full aspect-[3/4] rounded text-[9px] font-medium text-center
                 flex items-center justify-center px-1
                 transition-colors truncate leading-tight
-                ${chapterGrid.overIndex === i || isSceneDropChap ? "ring-2 ring-accent" : ""}
+                ${chapterGrid.overIndex === i || isSceneDropChap || chapterDropGap === i ? "ring-2 ring-accent" : ""}
                 ${ch.id === activeChapterId
                   ? "bg-elevated text-muted border-[1.5px] border-subtle"
                   : "bg-panel text-subtle hover:bg-hover hover:text-text"
@@ -332,10 +375,14 @@ function SectionRow({
           );
         })}
 
-        {/* Add chapter */}
+        {/* Add chapter — also the append drop target for a cross-section chapter */}
         <button
           onClick={() => onAddChapter(section.id)}
-          className="aspect-[3/4] rounded bg-panel text-subtle hover:bg-hover hover:text-accent transition-colors flex items-center justify-center"
+          onDragOver={chapterFromOther ? (e) => { e.preventDefault(); setChapterDropTarget(section.id, section.chapters.length); } : undefined}
+          onDrop={chapterFromOther ? (e) => { e.preventDefault(); e.stopPropagation(); dropChapterInto(section.chapters.length); } : undefined}
+          className={`aspect-[3/4] rounded bg-panel text-subtle hover:bg-hover hover:text-accent transition-colors flex items-center justify-center ${
+            chapterDropGap === section.chapters.length ? "ring-2 ring-accent" : ""
+          }`}
           title="Add chapter"
         >
           <Image src="/plus.svg" alt="Add chapter" width={14} height={14} className="opacity-50 hover:opacity-100 transition-opacity" />
@@ -357,22 +404,29 @@ function SectionRow({
           const scenesOpen = scenesVisible && (
             sceneActive ? (dropChapterId ? isSceneDropChap : isActive) : isActive
           );
+          const chDragHandle = chapterList.dragHandleProps(i);
           return (
           <div key={ch.id}>
-            <DropLine active={chapterList.activeGap === i} />
+            <DropLine active={chapterList.activeGap === i || chapterDropGap === i} />
             {/* Chapter row — styled like a Note list item (icon + text + hover-reveal delete) */}
             <div
-              {...chapterList.dragHandleProps(i)}
+              {...chDragHandle}
+              onDragStart={(e) => chapterDragStart(e, chDragHandle.onDragStart, i)}
+              onDragEnd={(e) => chapterDragEnd(e, chDragHandle.onDragEnd)}
               onDragOver={(e) => {
-                // A scene drag opens this chapter and targets the bottom; a chapter
-                // reorder falls through to the list hook (which no-ops for scenes).
+                // A scene drag opens this chapter and targets the bottom; a
+                // cross-section chapter drag inserts here; a same-section chapter
+                // reorder falls through to the list hook.
                 if (sceneDrag.payload) { e.preventDefault(); setSceneDropTarget(ch.id, ch.scenes.length); return; }
+                if (chapterFromOther) { e.preventDefault(); setChapterDropTarget(section.id, gapFromEvent(e, i)); return; }
                 chDrop.onDragOver(e);
               }}
               onDrop={(e) => {
                 if (sceneDrag.payload) { e.preventDefault(); e.stopPropagation(); dropSceneInto(ch.id, dropGap ?? ch.scenes.length); return; }
+                if (chapterFromOther) { e.preventDefault(); e.stopPropagation(); dropChapterInto(gapFromEvent(e, i)); return; }
                 chDrop.onDrop(e);
               }}
+              onContextMenu={(e) => { e.preventDefault(); onOpenChapterMenu(ch, e.clientX, e.clientY); }}
               onClick={() => onChapterClick(ch.id)}
               title={ch.title}
               className={`flex items-center gap-2 group/chapter px-2 py-1.5 rounded transition-colors cursor-pointer ${
@@ -443,11 +497,13 @@ function SectionRow({
           </div>
           );
         })}
-        <DropLine active={chapterList.activeGap === section.chapters.length} />
+        <DropLine active={chapterList.activeGap === section.chapters.length || chapterDropGap === section.chapters.length} />
 
-        {/* Add chapter */}
+        {/* Add chapter — also the append drop target for a cross-section chapter */}
         <button
           onClick={() => onAddChapter(section.id)}
+          onDragOver={chapterFromOther ? (e) => { e.preventDefault(); setChapterDropTarget(section.id, section.chapters.length); } : undefined}
+          onDrop={chapterFromOther ? (e) => { e.preventDefault(); e.stopPropagation(); dropChapterInto(section.chapters.length); } : undefined}
           className="mt-0.5 flex items-center gap-2 rounded px-2 py-1.5 text-subtle hover:bg-hover hover:text-accent transition-colors"
           title="Add chapter"
         >
@@ -474,6 +530,8 @@ export default function LeftColumn({
   onDeleteChapter,
   onReorderChapters,
   onMoveScene,
+  onMoveChapter,
+  onDuplicateChapter,
   onAddSection,
   onUpdateSectionLabel,
   onReorderSections,
@@ -523,6 +581,37 @@ export default function LeftColumn({
     if (!sceneDrag.payload) clearSceneDropTarget();
   }, [sceneDrag.payload]);
 
+  // Shared cross-section chapter-drop target (mirrors the scene one). Only one
+  // section shows an incoming chapter's insertion line at a time.
+  const chapterDrag = useChapterDrag();
+  const [chapterDrop, setChapterDrop] = useState<{ sectionId: string; gap: number } | null>(null);
+  const setChapterDropTarget = (sectionId: string, gap: number) => setChapterDrop({ sectionId, gap });
+  const clearChapterDropTarget = () => setChapterDrop(null);
+  useEffect(() => {
+    if (!chapterDrag.payload) clearChapterDropTarget();
+  }, [chapterDrag.payload]);
+
+  // Right-click chapter menu (Duplicate / Delete), positioned at the cursor.
+  const [chapterMenu, setChapterMenu] = useState<{ chapter: Chapter; x: number; y: number } | null>(null);
+  const openChapterMenu = (chapter: Chapter, x: number, y: number) => setChapterMenu({ chapter, x, y });
+  useEffect(() => {
+    if (!chapterMenu) return;
+    const close = () => setChapterMenu(null);
+    // Close on any outside interaction. mousedown (capture) covers clicks;
+    // scroll/resize/Escape cover the rest. The menu's own buttons close it too.
+    document.addEventListener("mousedown", close);
+    document.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [chapterMenu]);
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -559,6 +648,30 @@ export default function LeftColumn({
 
   return (
     <div className="flex flex-col h-full bg-bg border-r border-border-subtle w-full">
+
+      {/* Chapter right-click menu — positioned at the cursor. Same styling as the
+          section kebab menu. Closes on outside interaction (see effect above). */}
+      {chapterMenu && (
+        <div
+          className="fixed z-50 w-36 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden"
+          style={{ left: chapterMenu.x, top: chapterMenu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => { onDuplicateChapter(chapterMenu.chapter.id); setChapterMenu(null); }}
+            className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
+          >
+            Duplicate
+          </button>
+          <div className="h-px bg-hover" />
+          <button
+            onClick={() => { setConfirmDeleteChapter(chapterMenu.chapter); setChapterMenu(null); }}
+            className="block w-full text-left px-4 py-2.5 text-xs text-error hover:bg-hover transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      )}
 
       {/* Confirmation modals */}
       {confirmDeleteSection && (
@@ -721,6 +834,9 @@ export default function LeftColumn({
               onDeleteChapterRequest={(ch) => setConfirmDeleteChapter(ch)}
               onReorderChapters={onReorderChapters}
               onMoveScene={onMoveScene}
+              onMoveChapter={onMoveChapter}
+              onDuplicateChapter={onDuplicateChapter}
+              onOpenChapterMenu={openChapterMenu}
               onAddSection={onAddSection}
               onUpdateSectionLabel={onUpdateSectionLabel}
               onMoveSection={onReorderSections}
@@ -733,6 +849,9 @@ export default function LeftColumn({
               dropGap={dropGap}
               setSceneDropTarget={setSceneDropTarget}
               clearSceneDropTarget={clearSceneDropTarget}
+              chapterDrop={chapterDrop}
+              setChapterDropTarget={setChapterDropTarget}
+              clearChapterDropTarget={clearChapterDropTarget}
             />
           </Fragment>
         ))}

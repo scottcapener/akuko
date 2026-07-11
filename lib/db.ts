@@ -455,6 +455,80 @@ export async function moveScene(
   ]);
 }
 
+// Insert a chapter row WITHOUT the auto blank scene that `createChapter` adds —
+// split and duplicate supply their own scenes. Returns a bare, sceneless chapter.
+export async function insertChapterRow(
+  bookId: string,
+  sectionId: string,
+  position: number,
+  title: string
+): Promise<Chapter> {
+  const { data, error } = await supabase()
+    .from("chapters")
+    .insert({ book_id: bookId, section_id: sectionId, title, position })
+    .select()
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    title: data.title ?? "",
+    sectionId,
+    scenes: [],
+    library: { images: [], notes: [], musicLinks: [], links: [] },
+  };
+}
+
+// Bulk-insert copied scenes under a chapter (label/body/position), returning them
+// with their freshly-minted ids so local state can match the DB. Used by
+// duplicate-chapter. Preserves the given order via explicit positions.
+export async function duplicateChapterScenes(
+  chapterId: string,
+  scenes: { label: string; body: string }[]
+): Promise<Scene[]> {
+  if (scenes.length === 0) return [];
+  const rows = scenes.map((s, i) => ({ chapter_id: chapterId, label: s.label, body: s.body, position: i }));
+  const { data, error } = await supabase().from("scenes").insert(rows).select();
+  if (error) throw error;
+  // insert().select() doesn't guarantee input order — sort by position.
+  return (data ?? [])
+    .slice()
+    .sort((a, b) => a.position - b.position)
+    .map((s) => ({ id: s.id, label: s.label ?? "", body: s.body ?? "" }));
+}
+
+// Split: reparent `movedSceneIds` onto the new chapter and renumber both lists.
+// `sourcePositions`/`movedPositions` are the full 0..n maps after the split.
+// Mirrors `moveScene`, but moves several scenes at once.
+export async function splitChapter(
+  newChapterId: string,
+  movedSceneIds: string[],
+  sourcePositions: { id: string; position: number }[],
+  movedPositions: { id: string; position: number }[]
+) {
+  const db = supabase();
+  await Promise.all([
+    ...movedSceneIds.map((id) => db.from("scenes").update({ chapter_id: newChapterId }).eq("id", id)),
+    ...sourcePositions.map((s) => db.from("scenes").update({ position: s.position }).eq("id", s.id)),
+    ...movedPositions.map((s) => db.from("scenes").update({ position: s.position }).eq("id", s.id)),
+  ]);
+}
+
+// Move a chapter into a different section and renumber both sections. Mirrors
+// `moveScene` at the chapter/section level.
+export async function moveChapter(
+  chapterId: string,
+  toSectionId: string,
+  fromPositions: { id: string; position: number }[],
+  toPositions: { id: string; position: number }[]
+) {
+  const db = supabase();
+  await Promise.all([
+    db.from("chapters").update({ section_id: toSectionId }).eq("id", chapterId),
+    ...fromPositions.map((c) => db.from("chapters").update({ position: c.position }).eq("id", c.id)),
+    ...toPositions.map((c) => db.from("chapters").update({ position: c.position }).eq("id", c.id)),
+  ]);
+}
+
 // Persist a new ordering for library items (images, music links, or notes).
 // Positions are per-type within a chapter, mirroring how items are appended.
 export async function reorderLibraryItems(items: { id: string; position: number }[]) {

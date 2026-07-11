@@ -43,6 +43,17 @@ function wordCountAll(sections: Section[]): number {
   );
 }
 
+// Build a non-colliding "… Copy" title for a duplicated chapter: "X Copy", then
+// "X Copy 2", "X Copy 3", … skipping any that already exist among `existing`.
+function uniqueCopyTitle(base: string, existing: string[]): string {
+  const taken = new Set(existing);
+  const first = `${base} Copy`;
+  if (!taken.has(first)) return first;
+  let n = 2;
+  while (taken.has(`${base} Copy ${n}`)) n++;
+  return `${base} Copy ${n}`;
+}
+
 // Helper: update a single chapter anywhere in sections
 function mapChapter(sections: Section[], chapterId: string, fn: (c: Chapter) => Chapter): Section[] {
   return sections.map((s) => ({
@@ -557,6 +568,152 @@ export function useHotCocoaDb() {
     []
   );
 
+  // Insert a new empty scene at gap `index` (0..len) within a chapter, rather
+  // than appending. Renumbers the chapter's scenes so positions stay 0..n.
+  const insertScene = useCallback(
+    async (chapterId: string, index: number) => {
+      const newScene = await db.createScene(chapterId, index);
+      setSections((prev) =>
+        mapChapter(prev, chapterId, (c) => {
+          const next = [...c.scenes];
+          const at = Math.max(0, Math.min(index, next.length));
+          next.splice(at, 0, newScene);
+          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })));
+          return { ...c, scenes: next };
+        })
+      );
+    },
+    []
+  );
+
+  // Split a chapter at gap `index`: scenes[index..] move into a brand-new chapter
+  // inserted right after the source in the same section. The editor stays on the
+  // source (top) chapter. `index` is always ≥1 and < scene count (the hover-insert
+  // rows only render between scenes), so neither side ends up empty.
+  const splitChapter = useCallback(
+    async (chapterId: string, index: number) => {
+      if (!book) return;
+      const section = sections.find((s) => s.chapters.some((c) => c.id === chapterId));
+      const source = section?.chapters.find((c) => c.id === chapterId);
+      if (!section || !source) return;
+      if (index <= 0 || index >= source.scenes.length) return;
+
+      const keptScenes = source.scenes.slice(0, index);
+      const movedScenes = source.scenes.slice(index);
+      const sourceIndex = section.chapters.indexOf(source);
+      const newChapter = await db.insertChapterRow(book.id, section.id, sourceIndex + 1, "");
+      const fullNew = { ...newChapter, scenes: movedScenes };
+
+      loadedChapterIds.current.add(newChapter.id);
+      setLoadedChapters((prev) => new Set(prev).add(newChapter.id));
+
+      db.splitChapter(
+        newChapter.id,
+        movedScenes.map((s) => s.id),
+        keptScenes.map((s, i) => ({ id: s.id, position: i })),
+        movedScenes.map((s, i) => ({ id: s.id, position: i }))
+      );
+
+      setSections((prev) =>
+        prev.map((sec) => {
+          if (sec.id !== section.id) return sec;
+          const chapters = sec.chapters.map((c) => (c.id === chapterId ? { ...c, scenes: keptScenes } : c));
+          const idx = chapters.findIndex((c) => c.id === chapterId);
+          chapters.splice(idx + 1, 0, fullNew);
+          db.reorderChapters(chapters.map((c, i) => ({ id: c.id, position: i })));
+          return { ...sec, chapters };
+        })
+      );
+    },
+    [book, sections]
+  );
+
+  // Duplicate a chapter (title + scenes only; library starts empty). The copy is
+  // inserted right after the source and named "… Copy" / "… Copy N". Active
+  // chapter is unchanged.
+  const duplicateChapter = useCallback(
+    async (chapterId: string) => {
+      if (!book) return;
+      const section = sections.find((s) => s.chapters.some((c) => c.id === chapterId));
+      const source = section?.chapters.find((c) => c.id === chapterId);
+      if (!section || !source) return;
+
+      // Source scenes are usually prefetched; if not, read them from the DB
+      // (avoids a stale closure after an await on loadChapter).
+      const srcScenes = source.scenes.length
+        ? source.scenes
+        : await db.getScenesForChapter(chapterId);
+
+      const title = uniqueCopyTitle(source.title, section.chapters.map((c) => c.title));
+      const sourceIndex = section.chapters.indexOf(source);
+      const newChapter = await db.insertChapterRow(book.id, section.id, sourceIndex + 1, title);
+      const copiedScenes = await db.duplicateChapterScenes(
+        newChapter.id,
+        srcScenes.map((s) => ({ label: s.label, body: s.body }))
+      );
+      const fullNew = { ...newChapter, scenes: copiedScenes };
+
+      loadedChapterIds.current.add(newChapter.id);
+      setLoadedChapters((prev) => new Set(prev).add(newChapter.id));
+
+      setSections((prev) =>
+        prev.map((sec) => {
+          if (sec.id !== section.id) return sec;
+          const chapters = [...sec.chapters];
+          const idx = chapters.findIndex((c) => c.id === chapterId);
+          chapters.splice(idx + 1, 0, fullNew);
+          db.reorderChapters(chapters.map((c, i) => ({ id: c.id, position: i })));
+          return { ...sec, chapters };
+        })
+      );
+    },
+    [book, sections]
+  );
+
+  // Move a chapter to a (possibly different) section, inserting at gap `toIndex`
+  // in the target section's current chapter list. Same-section is a reorder;
+  // cross-section also rewrites the chapter's section_id. The chapter id is
+  // stable, so the active chapter (if it's the one moved) keeps its content.
+  const moveChapter = useCallback(
+    (chapterId: string, fromSectionId: string, toSectionId: string, toIndex: number) => {
+      setSections((prev) => {
+        const fromSec = prev.find((s) => s.id === fromSectionId);
+        const chapter = fromSec?.chapters.find((c) => c.id === chapterId);
+        if (!fromSec || !chapter) return prev;
+        const fromIndex = fromSec.chapters.indexOf(chapter);
+
+        if (fromSectionId === toSectionId) {
+          const next = [...fromSec.chapters];
+          next.splice(fromIndex, 1);
+          const insertAt = Math.max(0, Math.min(toIndex > fromIndex ? toIndex - 1 : toIndex, next.length));
+          if (insertAt === fromIndex) return prev;
+          next.splice(insertAt, 0, chapter);
+          db.reorderChapters(next.map((c, i) => ({ id: c.id, position: i })));
+          return prev.map((s) => (s.id === fromSectionId ? { ...s, chapters: next } : s));
+        }
+
+        const toSec = prev.find((s) => s.id === toSectionId);
+        if (!toSec) return prev;
+        const fromChapters = fromSec.chapters.filter((c) => c.id !== chapterId);
+        const toChapters = [...toSec.chapters];
+        const insertAt = Math.max(0, Math.min(toIndex, toChapters.length));
+        toChapters.splice(insertAt, 0, { ...chapter, sectionId: toSectionId });
+        db.moveChapter(
+          chapterId,
+          toSectionId,
+          fromChapters.map((c, i) => ({ id: c.id, position: i })),
+          toChapters.map((c, i) => ({ id: c.id, position: i }))
+        );
+        return prev.map((s) => {
+          if (s.id === fromSectionId) return { ...s, chapters: fromChapters };
+          if (s.id === toSectionId) return { ...s, chapters: toChapters };
+          return s;
+        });
+      });
+    },
+    []
+  );
+
   // ── Library actions ───────────────────────────────────────────────────
   const addLibraryImage = useCallback(
     async (chapterId: string, img: LibraryImage) => {
@@ -787,8 +944,12 @@ export function useHotCocoaDb() {
     updateChapterTitle,
     updateScene,
     addScene,
+    insertScene,
     reorderScenes,
     moveScene,
+    splitChapter,
+    duplicateChapter,
+    moveChapter,
     deleteScene,
     addLibraryImage,
     removeLibraryImage,
