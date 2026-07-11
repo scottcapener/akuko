@@ -341,10 +341,13 @@ export async function createScene(chapterId: string, position: number): Promise<
 }
 
 export async function saveScene(sceneId: string, patch: Partial<Pick<Scene, "label" | "body">>) {
-  await supabase()
+  const { error } = await supabase()
     .from("scenes")
     .update({ ...patch })
     .eq("id", sceneId);
+  // Surface the failure so the autosave loop can re-queue instead of dropping
+  // the edit and reporting success.
+  if (error) throw error;
 }
 
 export async function reorderScenes(scenes: { id: string; position: number }[]) {
@@ -528,7 +531,8 @@ export async function updateNote(
   if (patch.title !== undefined) update.og_title = patch.title;
   if (patch.body !== undefined) update.og_description = patch.body;
   if (Object.keys(update).length === 0) return;
-  await supabase().from("library_items").update(update).eq("id", noteId);
+  const { error } = await supabase().from("library_items").update(update).eq("id", noteId);
+  if (error) throw error;
 }
 
 export async function addMusicLink(

@@ -6,9 +6,14 @@ import { ensureDevSession } from "./ensureDevSession";
 import * as db from "./db";
 import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink, LibraryLink } from "./types";
 
-export type SaveStatus = "idle" | "saving" | "saved";
+export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
-const AUTOSAVE_DELAY = 30_000;
+// Autosave is debounced: a burst of typing collapses into one write DELAY ms
+// after the last keystroke. MAX_WAIT caps how long unsaved edits can sit while
+// someone types continuously (pure debounce would never fire mid-stream), so
+// the unsaved window stays small even without a pause.
+const AUTOSAVE_DELAY = 2_000;
+const AUTOSAVE_MAX_WAIT = 10_000;
 
 function wordCountAll(sections: Section[]): number {
   return sections.reduce(
@@ -48,6 +53,9 @@ export function useHotCocoaDb() {
   const pendingNoteSaves = useRef<Map<string, { title?: string; body?: string }>>(new Map());
   const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Timestamp of the oldest unsaved edit in the current pending batch, so the
+  // debounce can be capped at AUTOSAVE_MAX_WAIT from the first edit.
+  const firstPendingAt = useRef<number | null>(null);
   const initialized = useRef(false);
   const loadedChapterIds = useRef(new Set<string>());
   // State mirror of loadedChapterIds so the UI can render a skeleton until a
@@ -141,13 +149,43 @@ export function useHotCocoaDb() {
   }, [hydrated, sections, loadChapter]);
 
   // ── Autosave flush ─────────────────────────────────────────────────────
+  // Ref indirection breaks the flush ⇄ schedule cycle: scheduleSave stays
+  // stable (no deps) and reads the latest flush through this ref, so flushSaves
+  // can reschedule itself (the failure-retry path) without a dependency loop.
+  const flushSavesRef = useRef<() => void>(() => {});
+
+  const scheduleSave = useCallback(() => {
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    if (firstPendingAt.current === null) firstPendingAt.current = Date.now();
+    const elapsed = Date.now() - firstPendingAt.current;
+    // Debounce to DELAY, but never past MAX_WAIT from the first unsaved edit.
+    const delay = Math.max(0, Math.min(AUTOSAVE_DELAY, AUTOSAVE_MAX_WAIT - elapsed));
+    autosaveTimer.current = setTimeout(() => flushSavesRef.current(), delay);
+  }, []);
+
   const flushSaves = useCallback(async () => {
     if (pendingSaves.current.size === 0) return;
+    firstPendingAt.current = null;
     setSaveStatus("saving");
     const saves = Array.from(pendingSaves.current.entries());
     pendingSaves.current.clear();
 
-    await Promise.all(saves.map(([sceneId, patch]) => db.saveScene(sceneId, patch)));
+    const results = await Promise.allSettled(
+      saves.map(([sceneId, patch]) => db.saveScene(sceneId, patch))
+    );
+
+    // Re-queue any failed scene beneath edits that arrived while saving (newer
+    // typing wins), so a transient failure retries instead of losing the edit.
+    const failed = saves.filter((_, i) => results[i].status === "rejected");
+    if (failed.length > 0) {
+      for (const [sceneId, patch] of failed) {
+        const newer = pendingSaves.current.get(sceneId);
+        pendingSaves.current.set(sceneId, { ...patch, ...newer });
+      }
+      setSaveStatus("error");
+      scheduleSave(); // retry on the normal cadence
+      return;
+    }
 
     setSections((prev) => {
       const wc = wordCountAll(prev);
@@ -164,12 +202,9 @@ export function useHotCocoaDb() {
 
     setSaveStatus("saved");
     setTimeout(() => setSaveStatus("idle"), 2000);
-  }, [book]);
+  }, [book, scheduleSave]);
 
-  const scheduleSave = useCallback(() => {
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = setTimeout(flushSaves, AUTOSAVE_DELAY);
-  }, [flushSaves]);
+  flushSavesRef.current = flushSaves;
 
   // Persist any pending scene/note edits immediately when the writer unmounts
   // (e.g. navigating to /backups or /books) or the tab is hidden. Autosaves are
@@ -177,13 +212,18 @@ export function useHotCocoaDb() {
   // snapshot stale text. Fire-and-forget — the requests outlive the unmount.
   const flushPending = useRef(() => {});
   flushPending.current = () => {
+    firstPendingAt.current = null;
     if (pendingSaves.current.size > 0) {
       const saves = Array.from(pendingSaves.current.entries());
       pendingSaves.current.clear();
-      saves.forEach(([sceneId, patch]) => db.saveScene(sceneId, patch));
+      // Best-effort on unmount/hide — can't re-queue after we're gone, so just
+      // swallow failures (the debounce keeps the unsaved window small anyway).
+      saves.forEach(([sceneId, patch]) => db.saveScene(sceneId, patch).catch(() => {}));
     }
     if (pendingNoteSaves.current.size > 0) {
-      pendingNoteSaves.current.forEach((update, noteId) => db.updateNote(noteId, update));
+      pendingNoteSaves.current.forEach((update, noteId) =>
+        db.updateNote(noteId, update).catch(() => {})
+      );
       pendingNoteSaves.current.clear();
     }
   };
@@ -513,11 +553,15 @@ export function useHotCocoaDb() {
         noteId,
         setTimeout(() => {
           const update = pendingNoteSaves.current.get(noteId);
-          if (update) {
-            db.updateNote(noteId, update);
-            pendingNoteSaves.current.delete(noteId);
-          }
           noteTimers.current.delete(noteId);
+          if (!update) return;
+          pendingNoteSaves.current.delete(noteId);
+          // On failure, restore beneath any newer edit so the note isn't lost;
+          // it retries on the next keystroke or the unmount/hide flush.
+          db.updateNote(noteId, update).catch(() => {
+            const newer = pendingNoteSaves.current.get(noteId);
+            pendingNoteSaves.current.set(noteId, { ...update, ...newer });
+          });
         }, 1500)
       );
     },

@@ -3,8 +3,10 @@
  * the automatic cadence sweep. Never import from a client component —
  * this reads Storage blobs and assembles a ZIP with fflate.
  *
- * Retention: at most MAX_BACKUPS_PER_USER rows per user. After each
- * successful insert, the oldest beyond the cap are evicted (row + object).
+ * Retention: at most MAX_BACKUPS_PER_BOOK rows per book. After each
+ * successful insert, that book's oldest beyond the cap are evicted (row +
+ * object). Scoping per-book (not per-user) keeps a busy auto-cadence on one
+ * book from evicting another book's backups.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -19,7 +21,7 @@ import {
 
 const LIBRARY_BUCKET = "library-files";
 const BACKUP_BUCKET = "book-backups";
-const MAX_BACKUPS_PER_USER = 10;
+const MAX_BACKUPS_PER_BOOK = 10;
 
 // Per-object ceiling for a backup ZIP. The book-backups bucket is capped at
 // this in 006_backup_bucket_limit.sql (the Supabase Free global limit). We
@@ -197,7 +199,7 @@ export async function generateBackup(
     throw insertErr;
   }
 
-  await enforceRetention(supabase, userId);
+  await enforceRetention(supabase, bookId);
 
   return {
     id: row.id,
@@ -207,15 +209,15 @@ export async function generateBackup(
   };
 }
 
-/** Delete this user's oldest backups (row + Storage object) beyond the cap. */
-async function enforceRetention(supabase: SupabaseClient, userId: string) {
+/** Delete this book's oldest backups (row + Storage object) beyond the cap. */
+async function enforceRetention(supabase: SupabaseClient, bookId: string) {
   const { data: all } = await supabase
     .from("backups")
     .select("id, storage_path")
-    .eq("user_id", userId)
+    .eq("book_id", bookId)
     .order("created_at", { ascending: false });
 
-  const excess = (all ?? []).slice(MAX_BACKUPS_PER_USER);
+  const excess = (all ?? []).slice(MAX_BACKUPS_PER_BOOK);
   if (excess.length === 0) return;
 
   await supabase.storage.from(BACKUP_BUCKET).remove(excess.map((b) => b.storage_path));
