@@ -291,10 +291,14 @@ export default function CenterColumn({
       {saveStatus !== "idle" && (
         <div
           className={`absolute top-4 right-4 text-[10px] uppercase tracking-widest transition-opacity z-10 ${
-            saveStatus === "saving" ? "text-subtle" : "text-accent"
+            saveStatus === "saving" ? "text-subtle" : saveStatus === "error" ? "text-error" : "text-accent"
           }`}
         >
-          {saveStatus === "saving" ? "Saving…" : "Saved"}
+          {saveStatus === "saving"
+            ? "Saving…"
+            : saveStatus === "error"
+            ? "Save failed — retrying…"
+            : "Saved"}
         </div>
       )}
 

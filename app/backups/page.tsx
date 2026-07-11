@@ -201,7 +201,7 @@ export default function BackupsPage() {
         <div className="flex items-baseline justify-between">
           <h1 className="text-text text-xl font-semibold">Backups</h1>
           <span className="text-xs text-subtle">
-            {backups.length} {backups.length === 1 ? "backup" : "backups"} · max 10 kept
+            {backups.length} {backups.length === 1 ? "backup" : "backups"} · max 10 per book
           </span>
         </div>
 
