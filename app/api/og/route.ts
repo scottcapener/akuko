@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parse } from "node-html-parser";
+import { createClient } from "@/lib/supabase/server";
+import { fetchPublicUrl, readBodyCapped } from "@/lib/server/publicUrl";
+
+// Node runtime: the public-URL guard resolves hostnames with node:dns.
+export const runtime = "nodejs";
+
+// OG metadata lives in <head>; anything past this is not a page we can use.
+const MAX_HTML_BYTES = 2 * 1024 * 1024;
 
 function extractYouTubeId(url: string): string | null {
   try {
@@ -35,6 +43,10 @@ function extractAppleMusicId(url: string): string | null {
 }
 
 export async function GET(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const url = req.nextUrl.searchParams.get("url");
   if (!url) return NextResponse.json({ error: "missing url" }, { status: 400 });
 
@@ -87,7 +99,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const res = await fetch(url, {
+    // Guarded fetch: refuses non-http(s) URLs, private addresses, and
+    // redirects into them — a scrape target is attacker-chosen input.
+    const res = await fetchPublicUrl(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; HotCocoaBot/1.0)",
         Accept: "text/html,application/xhtml+xml",
@@ -97,7 +111,7 @@ export async function GET(req: NextRequest) {
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-    const html = await res.text();
+    const html = new TextDecoder().decode(await readBodyCapped(res, MAX_HTML_BYTES));
     const root = parse(html);
 
     function og(property: string) {

@@ -213,6 +213,27 @@ export async function updateBookWordCount(bookId: string, wordCount: number, cur
   return updatedUnlocks;
 }
 
+// ── Library storage cleanup ───────────────────────────────────────────────────
+
+/** Storage paths of every stored library file under the given chapters. */
+async function libraryFilePaths(chapterIds: string[]): Promise<string[]> {
+  if (chapterIds.length === 0) return [];
+  const { data } = await supabase()
+    .from("library_items")
+    .select("storage_path")
+    .in("chapter_id", chapterIds)
+    .not("storage_path", "is", null);
+  return (data ?? []).map((item) => item.storage_path as string);
+}
+
+/** Best-effort removal of stored library files. Called after the owning rows
+ *  are deleted — the rows are the source of truth, and a failed removal only
+ *  leaves an orphaned object (never a broken reference). */
+async function removeLibraryFiles(paths: string[]) {
+  if (paths.length === 0) return;
+  await supabase().storage.from("library-files").remove(paths);
+}
+
 // ── Sections ──────────────────────────────────────────────────────────────────
 
 export async function createSection(bookId: string, position: number): Promise<Section> {
@@ -237,8 +258,15 @@ export async function reorderSections(sections: { id: string; position: number }
 }
 
 export async function deleteSection(sectionId: string) {
-  // Cascades: sections → chapters → scenes + library_items
+  // Collect stored library files first — the cascade wipes the rows that
+  // record their paths. Cascades: sections → chapters → scenes + library_items.
+  const { data: chapters } = await supabase()
+    .from("chapters")
+    .select("id")
+    .eq("section_id", sectionId);
+  const paths = await libraryFilePaths((chapters ?? []).map((c) => c.id));
   await supabase().from("sections").delete().eq("id", sectionId);
+  await removeLibraryFiles(paths);
 }
 
 // ── Chapters ──────────────────────────────────────────────────────────────────
@@ -279,8 +307,11 @@ export async function reorderChapters(chapters: { id: string; position: number }
 }
 
 export async function deleteChapter(chapterId: string) {
-  // Cascades: chapters → scenes + library_items
+  // Collect stored library files first — the cascade wipes the rows that
+  // record their paths. Cascades: chapters → scenes + library_items.
+  const paths = await libraryFilePaths([chapterId]);
   await supabase().from("chapters").delete().eq("id", chapterId);
+  await removeLibraryFiles(paths);
 }
 
 // ── Scenes ────────────────────────────────────────────────────────────────────
@@ -548,11 +579,18 @@ export async function addLink(
 
 // ── Book deletion ───────────────────────────────────────────────────────────────
 
-/** Permanently delete a book. Sections/chapters/scenes/library cascade via FKs.
+/** Permanently delete a book. Sections/chapters/scenes/library cascade via FKs,
+ *  then the chapters' stored library files are removed from Storage.
  *  The book's `backups` rows are preserved (backups.book_id is ON DELETE SET NULL),
  *  so a deleted book can still be restored from an existing backup. */
 export async function deleteBook(bookId: string) {
+  const { data: chapters } = await supabase()
+    .from("chapters")
+    .select("id")
+    .eq("book_id", bookId);
+  const paths = await libraryFilePaths((chapters ?? []).map((c) => c.id));
   await supabase().from("books").delete().eq("id", bookId);
+  await removeLibraryFiles(paths);
 }
 
 // ── Backups ─────────────────────────────────────────────────────────────────────
