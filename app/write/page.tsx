@@ -9,6 +9,7 @@ import LeftColumn from "@/components/LeftColumn";
 import CenterColumn from "@/components/CenterColumn";
 import RightColumn from "@/components/RightColumn";
 import { SceneDragProvider } from "@/lib/useSceneDrag";
+import { ChapterDragProvider } from "@/lib/useChapterDrag";
 import { Scene } from "@/lib/types";
 
 type MobilePanel = "left" | "right" | null;
@@ -193,6 +194,8 @@ export default function WritePage() {
     onRefreshCover: store.refreshCoverUrl,
     onReorderChapters: store.reorderChapters,
     onMoveScene: store.moveScene,
+    onMoveChapter: store.moveChapter,
+    onDuplicateChapter: store.duplicateChapter,
     onDeleteChapter: store.deleteChapter,
     onAddSection: store.addSection,
     onUpdateSectionLabel: store.updateSectionLabel,
@@ -227,6 +230,7 @@ export default function WritePage() {
 
   return (
     <SceneDragProvider>
+    <ChapterDragProvider>
     <div className="h-full flex flex-col bg-bg overflow-hidden">
       {/* ── Mobile top bar ── */}
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border-subtle flex-shrink-0">
@@ -260,6 +264,8 @@ export default function WritePage() {
             onChapterTitleChange={store.updateChapterTitle}
             onSceneChange={(chapterId, sceneId, patch) => store.updateScene(chapterId, sceneId, patch as Partial<Scene>)}
             onAddScene={store.addScene}
+            onInsertScene={store.insertScene}
+            onSplitChapter={store.splitChapter}
             onReorderScenes={store.reorderScenes}
             onDeleteScene={store.deleteScene}
             onAddImage={store.addLibraryImage}
@@ -281,6 +287,8 @@ export default function WritePage() {
           onChapterTitleChange={store.updateChapterTitle}
           onSceneChange={(chapterId, sceneId, patch) => store.updateScene(chapterId, sceneId, patch as Partial<Scene>)}
           onAddScene={store.addScene}
+          onInsertScene={store.insertScene}
+          onSplitChapter={store.splitChapter}
           onReorderScenes={store.reorderScenes}
           onDeleteScene={store.deleteScene}
           onAddImage={store.addLibraryImage}
@@ -306,6 +314,7 @@ export default function WritePage() {
         <RightColumn {...rightProps} onClose={() => setMobilePanel(null)} />
       </div>
     </div>
+    </ChapterDragProvider>
     </SceneDragProvider>
   );
 }
