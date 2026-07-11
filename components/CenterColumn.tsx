@@ -7,6 +7,12 @@ import { SaveStatus } from "@/lib/useHotCocoaDb";
 import { DropLine } from "@/components/ui/DropLine";
 import { useReorderList } from "@/lib/useReorderList";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
+import { useSceneDrag } from "@/lib/useSceneDrag";
+
+// A description drag only engages reordering once the pointer travels past this
+// many pixels; a shorter press is treated as a click (enter edit). Set above the
+// browser's native ~4px drag threshold so small-jitter clicks reliably edit.
+const DRAG_THRESHOLD_PX = 6;
 
 interface Props {
   chapter: Chapter;
@@ -100,15 +106,68 @@ function SceneBlock({
   scenesVisible?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
+  const [editingLabel, setEditingLabel] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLInputElement>(null);
+  const sceneDrag = useSceneDrag();
+
+  // Click-vs-drag on the description: `armed` gates the native drag behind a
+  // movement threshold so a plain click edits and a click-and-drag reorders.
+  const [armed, setArmed] = useState(false);
+  const armedRef = useRef(false);
+  const downPoint = useRef<{ x: number; y: number } | null>(null);
+  const draggedRef = useRef(false);
 
   // Set innerHTML on mount and when navigating to a different scene.
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.innerHTML = scene.body;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene.id]);
+
+  function disarm() {
+    setArmed(false);
+    armedRef.current = false;
+    downPoint.current = null;
+  }
+
+  function handleLabelPointerMove(e: PointerEvent) {
+    if (!downPoint.current) return;
+    const dx = e.clientX - downPoint.current.x;
+    const dy = e.clientY - downPoint.current.y;
+    if (dx * dx + dy * dy > DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
+      armedRef.current = true;
+      setArmed(true);
+      window.removeEventListener("pointermove", handleLabelPointerMove);
+    }
+  }
+
+  function handleLabelPointerDown(e: React.PointerEvent) {
+    if (e.button !== 0) return;
+    downPoint.current = { x: e.clientX, y: e.clientY };
+    draggedRef.current = false;
+    window.addEventListener("pointermove", handleLabelPointerMove);
+    window.addEventListener(
+      "pointerup",
+      () => {
+        window.removeEventListener("pointermove", handleLabelPointerMove);
+        downPoint.current = null;
+        // A press that armed but never became a native drag (moved, then released
+        // in place) must un-arm so the next click still edits.
+        if (armedRef.current && !draggedRef.current) disarm();
+      },
+      { once: true }
+    );
+  }
+
+  // A drag suppresses the subsequent click, so this only runs for genuine clicks
+  // (movement stayed under the threshold) — open the inline editor.
+  function handleLabelClick() {
+    if (draggedRef.current) return;
+    setEditingLabel(true);
+  }
+
+  const rowDrag = dragHandleProps(index);
 
   function handleWrapperClick(e: React.MouseEvent<HTMLDivElement>) {
     if (e.target === labelRef.current) return;
@@ -165,7 +224,7 @@ function SceneBlock({
     <div
       {...dropZoneProps(index)}
       className={`rounded-lg mb-2 transition-colors relative group/scene ${
-        focused ? "bg-elevated" : "bg-transparent hover:bg-panel"
+        focused || editingLabel ? "bg-elevated" : "bg-transparent hover:bg-panel"
       }`}
     >
       <div className="px-4 py-3" onClick={handleWrapperClick}>
@@ -174,23 +233,48 @@ function SceneBlock({
             scene is focused so the description text stays selectable. Hidden in the
             "sceneless" view (structure is untouched — just not shown). */}
         {scenesVisible && (
-        <div
-          {...dragHandleProps(index)}
-          draggable={!focused}
-          className="flex items-center gap-2 mb-2 min-h-[1.5rem] cursor-grab active:cursor-grabbing"
-        >
-          <input
-            ref={labelRef}
-            maxLength={260}
-            value={scene.label}
-            placeholder="Scene description…"
-            onChange={(e) => onSceneChange(chapterId, scene.id, { label: e.target.value })}
-            onClick={(e) => e.stopPropagation()}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            className={`flex-1 min-w-0 bg-transparent text-label-m uppercase text-subtle placeholder:text-subtle/40 focus:outline-none ${focused ? "cursor-text" : "cursor-grab"}`}
-            style={{ fontFamily: "inherit" }}
-          />
+        <div className="flex items-center gap-2 mb-2 min-h-[1.5rem]">
+          {editingLabel ? (
+            <input
+              ref={labelRef}
+              autoFocus
+              maxLength={260}
+              value={scene.label}
+              placeholder="Scene description…"
+              onChange={(e) => onSceneChange(chapterId, scene.id, { label: e.target.value })}
+              onClick={(e) => e.stopPropagation()}
+              onFocus={() => setFocused(true)}
+              onBlur={() => { setFocused(false); setEditingLabel(false); }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
+              className="flex-1 min-w-0 bg-transparent text-label-m uppercase text-subtle placeholder:text-subtle/40 focus:outline-none cursor-text"
+              style={{ fontFamily: "inherit" }}
+            />
+          ) : (
+            // Description as a drag surface: a plain click edits (see
+            // handleLabelClick), a click-and-drag past the threshold reorders
+            // and doubles as the cross-chapter drag source (shared payload).
+            <span
+              draggable={armed}
+              onPointerDown={handleLabelPointerDown}
+              onDragStart={(e) => {
+                rowDrag.onDragStart?.(e);
+                draggedRef.current = true;
+                sceneDrag.begin({ sceneId: scene.id, fromChapterId: chapterId, fromIndex: index });
+              }}
+              onDragEnd={(e) => {
+                rowDrag.onDragEnd?.(e);
+                sceneDrag.end();
+                disarm();
+              }}
+              onClick={(e) => { e.stopPropagation(); handleLabelClick(); }}
+              title={scene.label || "Scene description…"}
+              className={`flex-1 min-w-0 truncate text-label-m uppercase select-none active:cursor-grabbing cursor-grab ${
+                scene.label ? "text-subtle" : "text-subtle/40"
+              }`}
+            >
+              {scene.label || "Scene description…"}
+            </span>
+          )}
           {confirmDelete ? (
             <div className="flex items-center gap-2 flex-shrink-0">
               <span className="text-label-m uppercase text-accent whitespace-nowrap">

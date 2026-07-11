@@ -1,17 +1,27 @@
 "use client";
 
 import { Fragment, useState, useRef, useEffect } from "react";
+import type React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Book, Section, Chapter } from "@/lib/types";
+import { Book, Section, Chapter, Scene } from "@/lib/types";
 import { Button, Modal } from "@/components/ui";
 import { DropLine } from "@/components/ui/DropLine";
 import { useTheme } from "@/lib/useTheme";
 import { useReorderList } from "@/lib/useReorderList";
 import { useReorderGrid } from "@/lib/useReorderGrid";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
+import { useSceneDrag } from "@/lib/useSceneDrag";
+
+// Which gap a drag is hovering over an item: before it, or after it (based on
+// whether the pointer is past the item's vertical midpoint). Mirrors the gap math
+// in useReorderList so cross-chapter scene drops read identically.
+function gapFromEvent(e: React.DragEvent, index: number): number {
+  const rect = e.currentTarget.getBoundingClientRect();
+  return e.clientY > rect.top + rect.height / 2 ? index + 1 : index;
+}
 
 interface Props {
   book: Book;
@@ -24,6 +34,7 @@ interface Props {
   onAddChapter: (sectionId: string) => void;
   onDeleteChapter: (chapterId: string) => void;
   onReorderChapters: (sectionId: string, from: number, to: number) => void;
+  onMoveScene: (sceneId: string, fromChapterId: string, toChapterId: string, toIndex: number) => void;
   onAddSection: (afterSectionId: string) => void;
   onUpdateSectionLabel: (sectionId: string, label: string) => void;
   onReorderSections: (from: number, to: number) => void;
@@ -79,6 +90,7 @@ function SectionRow({
   onAddChapter,
   onDeleteChapterRequest,
   onReorderChapters,
+  onMoveScene,
   onAddSection,
   onUpdateSectionLabel,
   onMoveSection,
@@ -87,6 +99,10 @@ function SectionRow({
   view,
   onSetView,
   scenesVisible,
+  dropChapterId,
+  dropGap,
+  setSceneDropTarget,
+  clearSceneDropTarget,
 }: {
   section: Section;
   sectionIndex: number;
@@ -96,6 +112,7 @@ function SectionRow({
   onAddChapter: (sectionId: string) => void;
   onDeleteChapterRequest: (chapter: Chapter) => void;
   onReorderChapters: (sectionId: string, from: number, to: number) => void;
+  onMoveScene: (sceneId: string, fromChapterId: string, toChapterId: string, toIndex: number) => void;
   onAddSection: (afterSectionId: string) => void;
   onUpdateSectionLabel: (sectionId: string, label: string) => void;
   onMoveSection: (from: number, to: number) => void;
@@ -104,8 +121,16 @@ function SectionRow({
   view: "grid" | "list";
   onSetView: (sectionId: string, view: "grid" | "list") => void;
   scenesVisible: boolean;
+  // Shared scene-drop state (lifted to LeftColumn so only one chapter is "open"
+  // for a drop at a time, across all sections). dropChapterId is the chapter the
+  // scene will land in; dropGap is the insertion index within it.
+  dropChapterId: string | null;
+  dropGap: number | null;
+  setSceneDropTarget: (chapterId: string, gap: number) => void;
+  clearSceneDropTarget: () => void;
 }) {
   const activeChapterId = activeChapter?.id ?? "";
+  const sceneDrag = useSceneDrag();
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState(section.label);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -132,6 +157,28 @@ function SectionRow({
     setEditingLabel(false);
     const trimmed = labelDraft.trim() || "Untitled";
     if (trimmed !== section.label) onUpdateSectionLabel(section.id, trimmed);
+  }
+
+  // ── Scene drag/drop within the Book Panel ─────────────────────────────
+  // Every rendered scene (list view) is a drag source carrying the shared
+  // payload, so it can be dropped on any chapter here or reordered in place.
+  function sceneSourceProps(scene: Scene, chapterId: string, index: number) {
+    return {
+      draggable: true,
+      onDragStart: (e: React.DragEvent) => {
+        e.stopPropagation();
+        e.dataTransfer.effectAllowed = "move";
+        sceneDrag.begin({ sceneId: scene.id, fromChapterId: chapterId, fromIndex: index });
+      },
+      onDragEnd: () => sceneDrag.end(),
+    };
+  }
+
+  function dropSceneInto(chapterId: string, gap: number) {
+    const p = sceneDrag.peek();
+    if (p) onMoveScene(p.sceneId, p.fromChapterId, chapterId, gap);
+    clearSceneDropTarget();
+    sceneDrag.end();
   }
 
   return (
@@ -235,16 +282,32 @@ function SectionRow({
       {/* Chapter grid */}
       {view === "grid" ? (
       <div className="grid grid-cols-3 gap-1.5">
-        {section.chapters.map((ch, i) => (
+        {section.chapters.map((ch, i) => {
+          const cell = chapterGrid.cellProps(i);
+          // A scene drag can't be shown between scenes in grid view, so a cell
+          // just accepts a drop that appends the scene to that chapter.
+          const isSceneDropChap = !!sceneDrag.payload && dropChapterId === ch.id;
+          return (
           <div key={ch.id} className="relative group/chapter">
             <button
-              {...chapterGrid.cellProps(i)}
+              draggable={cell.draggable}
+              onDragStart={cell.onDragStart}
+              onDragEnd={cell.onDragEnd}
+              onDragLeave={cell.onDragLeave}
+              onDragOver={(e) => {
+                if (sceneDrag.payload) { e.preventDefault(); setSceneDropTarget(ch.id, ch.scenes.length); return; }
+                cell.onDragOver(e);
+              }}
+              onDrop={(e) => {
+                if (sceneDrag.payload) { e.preventDefault(); e.stopPropagation(); dropSceneInto(ch.id, ch.scenes.length); return; }
+                cell.onDrop(e);
+              }}
               onClick={() => onChapterClick(ch.id)}
               className={`
                 w-full aspect-[3/4] rounded text-[9px] font-medium text-center
                 flex items-center justify-center px-1
                 transition-colors truncate leading-tight
-                ${chapterGrid.overIndex === i ? "ring-2 ring-accent" : ""}
+                ${chapterGrid.overIndex === i || isSceneDropChap ? "ring-2 ring-accent" : ""}
                 ${ch.id === activeChapterId
                   ? "bg-elevated text-muted border-[1.5px] border-subtle"
                   : "bg-panel text-subtle hover:bg-hover hover:text-text"
@@ -266,7 +329,8 @@ function SectionRow({
               </svg>
             </button>
           </div>
-        ))}
+          );
+        })}
 
         {/* Add chapter */}
         <button
@@ -282,18 +346,38 @@ function SectionRow({
       <div className="flex flex-col gap-0.5">
         {section.chapters.map((ch, i) => {
           const isActive = ch.id === activeChapterId;
+          const chDrop = chapterList.dropZoneProps(i);
+          const sceneActive = !!sceneDrag.payload;
+          // This chapter is the current scene-drop target (its scene list is open
+          // and shows insertion lines).
+          const isSceneDropChap = sceneActive && dropChapterId === ch.id;
+          // Which chapters show their scenes: while a scene is being dragged, only
+          // the hovered target opens (falling back to the active chapter until you
+          // hover one) so the source list "closes"; otherwise the active chapter.
+          const scenesOpen = scenesVisible && (
+            sceneActive ? (dropChapterId ? isSceneDropChap : isActive) : isActive
+          );
           return (
           <div key={ch.id}>
             <DropLine active={chapterList.activeGap === i} />
             {/* Chapter row — styled like a Note list item (icon + text + hover-reveal delete) */}
             <div
               {...chapterList.dragHandleProps(i)}
-              {...chapterList.dropZoneProps(i)}
+              onDragOver={(e) => {
+                // A scene drag opens this chapter and targets the bottom; a chapter
+                // reorder falls through to the list hook (which no-ops for scenes).
+                if (sceneDrag.payload) { e.preventDefault(); setSceneDropTarget(ch.id, ch.scenes.length); return; }
+                chDrop.onDragOver(e);
+              }}
+              onDrop={(e) => {
+                if (sceneDrag.payload) { e.preventDefault(); e.stopPropagation(); dropSceneInto(ch.id, dropGap ?? ch.scenes.length); return; }
+                chDrop.onDrop(e);
+              }}
               onClick={() => onChapterClick(ch.id)}
               title={ch.title}
               className={`flex items-center gap-2 group/chapter px-2 py-1.5 rounded transition-colors cursor-pointer ${
-                isActive ? "bg-elevated" : "hover:bg-panel"
-              }`}
+                isSceneDropChap ? "ring-1 ring-accent" : ""
+              } ${isActive ? "bg-elevated" : "hover:bg-panel"}`}
             >
               {/* Chapter marker — a small rectangle echoing the grid-view cell:
                   active gets a border + fill, inactive is a solid fill. */}
@@ -318,22 +402,41 @@ function SectionRow({
               </button>
             </div>
 
-            {/* Scene descriptions for the active chapter — nested under the chapter,
-                text-only (no marker), tightly spaced. */}
-            {isActive && scenesVisible && (
+            {/* Scene descriptions — nested under the chapter, text-only, tightly
+                spaced. Each is a drag source; while this chapter is the drop
+                target, they're also drop zones with insertion lines. */}
+            {scenesOpen && (
               <div className="flex flex-col">
-                {(activeChapter?.scenes ?? []).length === 0 ? (
-                  <p className="text-xs text-subtle/40 italic pl-8 py-0.5">No scenes yet</p>
+                {ch.scenes.length === 0 ? (
+                  <div
+                    onDragOver={isSceneDropChap ? (e) => { if (!sceneDrag.payload) return; e.preventDefault(); setSceneDropTarget(ch.id, 0); } : undefined}
+                    onDrop={isSceneDropChap ? (e) => { e.preventDefault(); e.stopPropagation(); dropSceneInto(ch.id, 0); } : undefined}
+                  >
+                    {isSceneDropChap && <DropLine active={dropGap === 0} />}
+                    <p className="text-xs text-subtle/40 italic pl-8 py-0.5">No scenes yet</p>
+                  </div>
                 ) : (
-                  (activeChapter?.scenes ?? []).map((scene) => (
-                    <div key={scene.id} className="px-2 py-0.5 pl-8">
-                      <span className={`block text-xs truncate ${
-                        scene.label ? "text-subtle" : "text-subtle/35 italic"
-                      }`}>
-                        {scene.label || "Untitled scene"}
-                      </span>
-                    </div>
-                  ))
+                  <>
+                    {ch.scenes.map((scene, si) => (
+                      <Fragment key={scene.id}>
+                        {isSceneDropChap && <DropLine active={dropGap === si} />}
+                        <div
+                          {...sceneSourceProps(scene, ch.id, si)}
+                          onDragOver={isSceneDropChap ? (e) => { if (!sceneDrag.payload) return; e.preventDefault(); setSceneDropTarget(ch.id, gapFromEvent(e, si)); } : undefined}
+                          onDrop={isSceneDropChap ? (e) => { e.preventDefault(); e.stopPropagation(); dropSceneInto(ch.id, dropGap ?? gapFromEvent(e, si)); } : undefined}
+                          title={scene.label || "Untitled scene"}
+                          className="px-2 py-0.5 pl-8 cursor-grab active:cursor-grabbing"
+                        >
+                          <span className={`block text-xs truncate ${
+                            scene.label ? "text-subtle" : "text-subtle/35 italic"
+                          }`}>
+                            {scene.label || "Untitled scene"}
+                          </span>
+                        </div>
+                      </Fragment>
+                    ))}
+                    {isSceneDropChap && <DropLine active={dropGap === ch.scenes.length} />}
+                  </>
                 )}
               </div>
             )}
@@ -370,6 +473,7 @@ export default function LeftColumn({
   onAddChapter,
   onDeleteChapter,
   onReorderChapters,
+  onMoveScene,
   onAddSection,
   onUpdateSectionLabel,
   onReorderSections,
@@ -401,6 +505,23 @@ export default function LeftColumn({
   const scrollRef = useRef<HTMLDivElement>(null);
   useAutoScrollOnDrag(scrollRef);
   const sectionReorder = useReorderList(onReorderSections);
+
+  // Shared scene-drop target across every section, so at most one chapter's
+  // scene list is open for a drop at a time. Cleared whenever a scene drag ends.
+  const sceneDrag = useSceneDrag();
+  const [dropChapterId, setDropChapterId] = useState<string | null>(null);
+  const [dropGap, setDropGap] = useState<number | null>(null);
+  const setSceneDropTarget = (chapterId: string, gap: number) => {
+    setDropChapterId(chapterId);
+    setDropGap(gap);
+  };
+  const clearSceneDropTarget = () => {
+    setDropChapterId(null);
+    setDropGap(null);
+  };
+  useEffect(() => {
+    if (!sceneDrag.payload) clearSceneDropTarget();
+  }, [sceneDrag.payload]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -599,6 +720,7 @@ export default function LeftColumn({
               onAddChapter={onAddChapter}
               onDeleteChapterRequest={(ch) => setConfirmDeleteChapter(ch)}
               onReorderChapters={onReorderChapters}
+              onMoveScene={onMoveScene}
               onAddSection={onAddSection}
               onUpdateSectionLabel={onUpdateSectionLabel}
               onMoveSection={onReorderSections}
@@ -607,6 +729,10 @@ export default function LeftColumn({
               view={sectionViews[section.id] ?? "grid"}
               onSetView={onSetSectionView}
               scenesVisible={scenesVisible}
+              dropChapterId={dropChapterId}
+              dropGap={dropGap}
+              setSceneDropTarget={setSceneDropTarget}
+              clearSceneDropTarget={clearSceneDropTarget}
             />
           </Fragment>
         ))}
