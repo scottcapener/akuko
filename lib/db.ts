@@ -37,8 +37,10 @@ function coverIsStoragePath(value: string | null | undefined): value is string {
   return !!value && !value.startsWith("data:") && !/^https?:/.test(value);
 }
 
-/** Batch-mint signed URLs for cover storage paths (one request, not N). */
-async function signCoverPaths(paths: string[]): Promise<Map<string, string>> {
+/** Batch-mint signed URLs for a set of library-files paths (one request, not
+ *  N). Returns a path → signed-URL map; keyed by the path each entry reports,
+ *  so it's robust to ordering. Shared by cover and library-image loading. */
+async function signStoragePaths(paths: string[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   if (paths.length === 0) return map;
   const { data } = await supabase()
@@ -69,7 +71,7 @@ export async function listBooks(userId: string): Promise<BookSummary[]> {
 
   const rows = data ?? [];
   // Sign every stored cover in a single request rather than one-per-book.
-  const signed = await signCoverPaths(
+  const signed = await signStoragePaths(
     rows.map((b) => b.cover_image_path).filter(coverIsStoragePath)
   );
 
@@ -463,15 +465,15 @@ export async function getLibraryForChapter(chapterId: string): Promise<{
   const musicLinks: LibraryMusicLink[] = [];
   const links: LibraryLink[] = [];
 
+  // Sign every stored image in one request rather than awaiting one per image.
+  const signed = await signStoragePaths(
+    items.filter((it) => it.type === "image" && it.storage_path).map((it) => it.storage_path)
+  );
+
   for (const item of items) {
     if (item.type === "image") {
-      let dataUrl = item.url ?? "";
-      if (item.storage_path) {
-        const { data: signed } = await supabase()
-          .storage.from("library-files")
-          .createSignedUrl(item.storage_path, SIGNED_URL_TTL);
-        dataUrl = signed?.signedUrl ?? "";
-      }
+      // Stored images get a signed URL; images added as an external URL use it.
+      const dataUrl = item.storage_path ? signed.get(item.storage_path) ?? "" : item.url ?? "";
       images.push({
         id: item.id,
         name: item.filename ?? "",
