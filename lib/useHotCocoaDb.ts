@@ -465,14 +465,18 @@ export function useHotCocoaDb() {
   }, [sections]);
 
   const removeLibraryImage = useCallback(async (chapterId: string, imageId: string) => {
+    // Grab the storage path before the image leaves state, so the stored
+    // blob is deleted along with the row instead of leaking in the bucket.
+    const chapter = sections.flatMap((s) => s.chapters).find((c) => c.id === chapterId);
+    const path = chapter?.library.images.find((i) => i.id === imageId)?.path;
     setSections((prev) =>
       mapChapter(prev, chapterId, (c) => ({
         ...c,
         library: { ...c.library, images: c.library.images.filter((i) => i.id !== imageId) },
       }))
     );
-    await db.removeLibraryItem(imageId);
-  }, []);
+    await db.removeLibraryItem(imageId, path);
+  }, [sections]);
 
   const addNote = useCallback(
     async (chapterId: string) => {

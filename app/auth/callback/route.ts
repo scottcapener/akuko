@@ -5,7 +5,14 @@ import { NextResponse } from "next/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  // Only same-origin paths: a bare `${origin}${next}` with a crafted `next`
+  // (e.g. "@evil.com", or "//" / "/\" which browsers read as scheme-relative)
+  // becomes an open redirect on the URL emails land on.
+  const rawNext = searchParams.get("next") ?? "/";
+  const next =
+    rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\")
+      ? rawNext
+      : "/";
 
   if (code) {
     const cookieStore = await cookies();
