@@ -25,8 +25,37 @@ export interface BookSummary {
   id: string;
   title: string;
   coverImage?: string;
+  coverImagePath?: string;
   wordCount: number;
   isActive: boolean;
+}
+
+// A cover_image_path is a bucket storage path (needs signing) unless it's a
+// legacy inline cover (a data: URL) or an external http(s) URL — those are
+// used verbatim. New covers are always storage paths.
+function coverIsStoragePath(value: string | null | undefined): value is string {
+  return !!value && !value.startsWith("data:") && !/^https?:/.test(value);
+}
+
+/** Batch-mint signed URLs for cover storage paths (one request, not N). */
+async function signCoverPaths(paths: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (paths.length === 0) return map;
+  const { data } = await supabase()
+    .storage.from("library-files")
+    .createSignedUrls(paths, SIGNED_URL_TTL);
+  for (const entry of data ?? []) {
+    if (entry.path && entry.signedUrl) map.set(entry.path, entry.signedUrl);
+  }
+  return map;
+}
+
+/** Re-mint a signed URL for a stored cover (mirrors signLibraryImageUrl). */
+export async function signBookCoverUrl(path: string): Promise<string> {
+  const { data } = await supabase()
+    .storage.from("library-files")
+    .createSignedUrl(path, SIGNED_URL_TTL);
+  return data?.signedUrl ?? "";
 }
 
 /** All of a user's books, most-recently-opened first. The first entry is the active book. */
@@ -38,13 +67,23 @@ export async function listBooks(userId: string): Promise<BookSummary[]> {
     .order("last_opened_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: true });
 
-  return (data ?? []).map((b, i) => ({
-    id: b.id,
-    title: b.title,
-    coverImage: b.cover_image_path ?? undefined,
-    wordCount: b.word_count ?? 0,
-    isActive: i === 0,
-  }));
+  const rows = data ?? [];
+  // Sign every stored cover in a single request rather than one-per-book.
+  const signed = await signCoverPaths(
+    rows.map((b) => b.cover_image_path).filter(coverIsStoragePath)
+  );
+
+  return rows.map((b, i) => {
+    const raw = b.cover_image_path as string | null;
+    return {
+      id: b.id,
+      title: b.title,
+      coverImage: coverIsStoragePath(raw) ? signed.get(raw) : raw ?? undefined,
+      coverImagePath: coverIsStoragePath(raw) ? raw : undefined,
+      wordCount: b.word_count ?? 0,
+      isActive: i === 0,
+    };
+  });
 }
 
 /** Create a new, empty book and make it the active one. Sections/chapters are
@@ -155,11 +194,15 @@ export async function getOrCreateBook(userId: string): Promise<{
     ? savedActiveId!
     : chaptersData[0].id;
 
+  const rawCover = dbBook.cover_image_path as string | null;
   const book: Book = {
     id: dbBook.id,
     title: dbBook.title,
     coverColor: dbBook.cover_color ?? "#2a2a2e",
-    coverImage: dbBook.cover_image_path ?? undefined,
+    coverImage: coverIsStoragePath(rawCover)
+      ? await signBookCoverUrl(rawCover)
+      : rawCover ?? undefined,
+    coverImagePath: coverIsStoragePath(rawCover) ? rawCover : undefined,
     activeChapterId,
   };
 
@@ -189,11 +232,41 @@ export async function updateBookActiveChapter(bookId: string, chapterId: string)
   await supabase().from("books").update({ active_chapter_id: chapterId }).eq("id", bookId);
 }
 
-export async function updateBookCover(bookId: string, coverImageUrl: string | undefined) {
+/** Set (or clear) the stored cover path/value on the book row. */
+export async function updateBookCover(bookId: string, coverPath: string | null) {
   await supabase()
     .from("books")
-    .update({ cover_image_path: coverImageUrl ?? null })
+    .update({ cover_image_path: coverPath })
     .eq("id", bookId);
+}
+
+/** Upload a cover image to the library-files bucket and return its storage
+ *  path plus a ready-to-display signed URL. Path convention keeps covers under
+ *  the owner's folder so the bucket's owner-scoped RLS applies. */
+export async function uploadBookCover(
+  userId: string,
+  bookId: string,
+  file: File
+): Promise<{ path: string; signedUrl: string }> {
+  const path = `${userId}/covers/${bookId}/${Date.now()}-${file.name}`;
+  const db = supabase();
+
+  const { error: uploadError } = await db.storage
+    .from("library-files")
+    .upload(path, file);
+  if (uploadError) throw uploadError;
+
+  const { data: signed } = await db.storage
+    .from("library-files")
+    .createSignedUrl(path, SIGNED_URL_TTL);
+
+  return { path, signedUrl: signed?.signedUrl ?? "" };
+}
+
+/** Remove a stored cover object. Legacy data-URL covers have no object, so
+ *  callers should only pass a real storage path (see coverIsStoragePath). */
+export async function removeBookCoverFile(path: string) {
+  await supabase().storage.from("library-files").remove([path]);
 }
 
 export async function updateBookWordCount(bookId: string, wordCount: number, currentUnlocks: number[]) {
@@ -588,11 +661,13 @@ export async function addLink(
  *  The book's `backups` rows are preserved (backups.book_id is ON DELETE SET NULL),
  *  so a deleted book can still be restored from an existing backup. */
 export async function deleteBook(bookId: string) {
-  const { data: chapters } = await supabase()
-    .from("chapters")
-    .select("id")
-    .eq("book_id", bookId);
+  const [{ data: chapters }, { data: book }] = await Promise.all([
+    supabase().from("chapters").select("id").eq("book_id", bookId),
+    supabase().from("books").select("cover_image_path").eq("id", bookId).single(),
+  ]);
   const paths = await libraryFilePaths((chapters ?? []).map((c) => c.id));
+  // The book's uploaded cover lives in the same bucket but isn't a library_item.
+  if (coverIsStoragePath(book?.cover_image_path)) paths.push(book!.cover_image_path);
   await supabase().from("books").delete().eq("id", bookId);
   await removeLibraryFiles(paths);
 }

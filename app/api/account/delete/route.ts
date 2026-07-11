@@ -13,10 +13,19 @@ async function collectStoragePaths(
   admin: SupabaseClient,
   userId: string
 ): Promise<Record<string, string[]>> {
-  const { data: books } = await admin.from("books").select("id").eq("user_id", userId);
+  const { data: books } = await admin
+    .from("books")
+    .select("id, cover_image_path")
+    .eq("user_id", userId);
   const bookIds = (books ?? []).map((b) => b.id);
 
-  let libraryPaths: string[] = [];
+  const libraryPaths: string[] = [];
+  // Uploaded covers live in library-files but aren't library_items; a stored
+  // cover is a path (legacy data/http URL covers have no object to remove).
+  for (const b of books ?? []) {
+    const cover = b.cover_image_path as string | null;
+    if (cover && !cover.startsWith("data:") && !/^https?:/.test(cover)) libraryPaths.push(cover);
+  }
   if (bookIds.length) {
     const { data: chapters } = await admin.from("chapters").select("id").in("book_id", bookIds);
     const chapterIds = (chapters ?? []).map((c) => c.id);
@@ -26,7 +35,7 @@ async function collectStoragePaths(
         .select("storage_path")
         .in("chapter_id", chapterIds)
         .not("storage_path", "is", null);
-      libraryPaths = (items ?? []).map((i) => i.storage_path as string);
+      for (const i of items ?? []) libraryPaths.push(i.storage_path as string);
     }
   }
 

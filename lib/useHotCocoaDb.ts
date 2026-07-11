@@ -248,13 +248,37 @@ export function useHotCocoaDb() {
     [book]
   );
 
+  // Set or clear the book cover. A file is uploaded to Storage (not inlined
+  // into the row); previewDataUrl shows it instantly while the upload runs.
   const setCoverImage = useCallback(
-    (dataUrl: string | undefined) => {
-      setBook((b) => (b ? { ...b, coverImage: dataUrl } : b));
-      if (book) db.updateBookCover(book.id, dataUrl);
+    async (file: File | undefined, previewDataUrl?: string) => {
+      if (!book || !userId) return;
+      const oldPath = book.coverImagePath;
+
+      if (!file) {
+        setBook((b) => (b ? { ...b, coverImage: undefined, coverImagePath: undefined } : b));
+        await db.updateBookCover(book.id, null);
+        if (oldPath) db.removeBookCoverFile(oldPath).catch(() => {});
+        return;
+      }
+
+      // Optimistic preview from the local data URL, replaced by the signed URL.
+      if (previewDataUrl) setBook((b) => (b ? { ...b, coverImage: previewDataUrl } : b));
+      const { path, signedUrl } = await db.uploadBookCover(userId, book.id, file);
+      await db.updateBookCover(book.id, path);
+      setBook((b) => (b ? { ...b, coverImage: signedUrl, coverImagePath: path } : b));
+      // Evict the cover this one replaced so it doesn't leak in the bucket.
+      if (oldPath && oldPath !== path) db.removeBookCoverFile(oldPath).catch(() => {});
     },
-    [book]
+    [book, userId]
   );
+
+  // Re-mint an expired signed cover URL (mirrors refreshLibraryImageUrl).
+  const refreshCoverUrl = useCallback(async () => {
+    if (!book?.coverImagePath) return;
+    const signedUrl = await db.signBookCoverUrl(book.coverImagePath);
+    if (signedUrl) setBook((b) => (b ? { ...b, coverImage: signedUrl } : b));
+  }, [book]);
 
   const setActiveChapter = useCallback(
     (id: string) => {
@@ -684,6 +708,7 @@ export function useHotCocoaDb() {
     unlocks,
     setBookTitle,
     setCoverImage,
+    refreshCoverUrl,
     setActiveChapter,
     addSection,
     updateSectionLabel,
