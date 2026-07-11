@@ -490,6 +490,60 @@ export function useHotCocoaDb() {
     []
   );
 
+  // Move a scene to a (possibly different) chapter, inserting at gap `toIndex`
+  // in the target chapter's *current* scene list (0..len, where g means "before
+  // scene g"). Same-chapter moves are just a reorder; cross-chapter moves also
+  // rewrite the scene's chapter_id. The scene id is stable across the move, so
+  // any pending body/label edits (keyed by id) still land correctly.
+  const moveScene = useCallback(
+    async (sceneId: string, fromChapterId: string, toChapterId: string, toIndex: number) => {
+      // The target's scenes drive the new position map; if it hasn't loaded yet
+      // its array is empty, so hydrate it before splicing to avoid clobbering.
+      if (fromChapterId !== toChapterId && !loadedChapterIds.current.has(toChapterId)) {
+        await loadChapter(toChapterId);
+      }
+      setSections((prev) => {
+        const allChapters = prev.flatMap((s) => s.chapters);
+        const source = allChapters.find((c) => c.id === fromChapterId);
+        const scene = source?.scenes.find((s) => s.id === sceneId);
+        if (!source || !scene) return prev;
+        const fromIndex = source.scenes.indexOf(scene);
+
+        if (fromChapterId === toChapterId) {
+          const next = [...source.scenes];
+          next.splice(fromIndex, 1);
+          const insertAt = Math.max(0, Math.min(toIndex > fromIndex ? toIndex - 1 : toIndex, next.length));
+          if (insertAt === fromIndex) return prev; // no-op drop onto itself
+          next.splice(insertAt, 0, scene);
+          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })));
+          return mapChapter(prev, fromChapterId, (c) => ({ ...c, scenes: next }));
+        }
+
+        const target = allChapters.find((c) => c.id === toChapterId);
+        if (!target) return prev;
+        const fromScenes = source.scenes.filter((s) => s.id !== sceneId);
+        const toScenes = [...target.scenes];
+        const insertAt = Math.max(0, Math.min(toIndex, toScenes.length));
+        toScenes.splice(insertAt, 0, scene);
+        db.moveScene(
+          sceneId,
+          toChapterId,
+          fromScenes.map((s, i) => ({ id: s.id, position: i })),
+          toScenes.map((s, i) => ({ id: s.id, position: i }))
+        );
+        return prev.map((sec) => ({
+          ...sec,
+          chapters: sec.chapters.map((c) => {
+            if (c.id === fromChapterId) return { ...c, scenes: fromScenes };
+            if (c.id === toChapterId) return { ...c, scenes: toScenes };
+            return c;
+          }),
+        }));
+      });
+    },
+    [loadChapter]
+  );
+
   const deleteScene = useCallback(
     (chapterId: string, sceneId: string) => {
       setSections((prev) =>
@@ -734,6 +788,7 @@ export function useHotCocoaDb() {
     updateScene,
     addScene,
     reorderScenes,
+    moveScene,
     deleteScene,
     addLibraryImage,
     removeLibraryImage,

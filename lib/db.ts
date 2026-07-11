@@ -436,6 +436,25 @@ export async function deleteScene(sceneId: string) {
   await supabase().from("scenes").delete().eq("id", sceneId);
 }
 
+// Move a scene into a different chapter and renumber both lists. `toChapter` is
+// the moved scene's new chapter; `fromPositions`/`toPositions` are the full
+// 0..n position maps for the source and destination chapters *after* the move
+// (the destination map includes the moved scene). Mirrors `reorderScenes`'
+// parallel-update shape; the moved row's `chapter_id` is set in the same batch.
+export async function moveScene(
+  sceneId: string,
+  toChapterId: string,
+  fromPositions: { id: string; position: number }[],
+  toPositions: { id: string; position: number }[]
+) {
+  const db = supabase();
+  await Promise.all([
+    db.from("scenes").update({ chapter_id: toChapterId }).eq("id", sceneId),
+    ...fromPositions.map((s) => db.from("scenes").update({ position: s.position }).eq("id", s.id)),
+    ...toPositions.map((s) => db.from("scenes").update({ position: s.position }).eq("id", s.id)),
+  ]);
+}
+
 // Persist a new ordering for library items (images, music links, or notes).
 // Positions are per-type within a chapter, mirroring how items are appended.
 export async function reorderLibraryItems(items: { id: string; position: number }[]) {
