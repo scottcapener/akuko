@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createClient } from "./supabase/client";
 import { ensureDevSession } from "./ensureDevSession";
 import * as db from "./db";
@@ -15,19 +15,30 @@ export type SaveStatus = "idle" | "saving" | "saved" | "error";
 const AUTOSAVE_DELAY = 2_000;
 const AUTOSAVE_MAX_WAIT = 10_000;
 
+// Whitespace-token count of a scene body. (Bodies are contentEditable HTML, so
+// this is the same crude tokenizer the app has always used — unchanged here.)
+function countWords(body: string): number {
+  const trimmed = body.trim();
+  return trimmed ? trimmed.split(/\s+/).length : 0;
+}
+
+// Per-chapter word-count cache keyed on the chapter's `scenes` array reference.
+// Editing a scene yields a new scenes array for only that chapter (mapChapter
+// keeps the others referentially stable), so a keystroke recomputes one
+// chapter instead of re-splitting every scene of every chapter each render.
+const chapterWordCounts = new WeakMap<Scene[], number>();
+
+function chapterWordCount(scenes: Scene[]): number {
+  const cached = chapterWordCounts.get(scenes);
+  if (cached !== undefined) return cached;
+  const total = scenes.reduce((st, sc) => st + countWords(sc.body), 0);
+  chapterWordCounts.set(scenes, total);
+  return total;
+}
+
 function wordCountAll(sections: Section[]): number {
   return sections.reduce(
-    (total, s) =>
-      total +
-      s.chapters.reduce(
-        (ct, ch) =>
-          ct +
-          ch.scenes.reduce(
-            (st, sc) => st + sc.body.trim().split(/\s+/).filter(Boolean).length,
-            0
-          ),
-        0
-      ),
+    (total, s) => total + s.chapters.reduce((ct, ch) => ct + chapterWordCount(ch.scenes), 0),
     0
   );
 }
@@ -695,7 +706,9 @@ export function useHotCocoaDb() {
   const allChapters = sections.flatMap((s) => s.chapters);
   const activeChapter = allChapters.find((c) => c.id === activeChapterId) ?? allChapters[0];
   const activeChapterLoaded = activeChapter ? loadedChapters.has(activeChapter.id) : false;
-  const wordCount = wordCountAll(sections);
+  // Recomputes only when `sections` changes identity; the per-chapter cache
+  // then makes that recompute touch just the edited chapter.
+  const wordCount = useMemo(() => wordCountAll(sections), [sections]);
 
   return {
     book,
