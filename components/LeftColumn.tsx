@@ -19,7 +19,8 @@ interface Props {
   activeChapter: Chapter;
   onBookTitleChange: (t: string) => void;
   onChapterClick: (id: string) => void;
-  onCoverImage: (dataUrl: string | undefined) => void;
+  onCoverImage: (file: File | undefined, previewDataUrl?: string) => void;
+  onRefreshCover?: () => void;
   onAddChapter: (sectionId: string) => void;
   onDeleteChapter: (chapterId: string) => void;
   onReorderChapters: (sectionId: string, from: number, to: number) => void;
@@ -365,6 +366,7 @@ export default function LeftColumn({
   onBookTitleChange,
   onChapterClick,
   onCoverImage,
+  onRefreshCover,
   onAddChapter,
   onDeleteChapter,
   onReorderChapters,
@@ -392,6 +394,9 @@ export default function LeftColumn({
   const [confirmDeleteChapter, setConfirmDeleteChapter] = useState<Chapter | null>(null);
 
   const coverInputRef = useRef<HTMLInputElement>(null);
+  // Guards the cover re-sign so an image that's genuinely broken (not just an
+  // expired signed URL) can't loop onError → refresh → onError.
+  const coverRetried = useRef(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   useAutoScrollOnDrag(scrollRef);
@@ -420,7 +425,7 @@ export default function LeftColumn({
   function handleCoverFile(file: File) {
     if (!file.type.startsWith("image/")) return;
     const reader = new FileReader();
-    reader.onload = (e) => onCoverImage(e.target?.result as string);
+    reader.onload = (e) => onCoverImage(file, e.target?.result as string);
     reader.readAsDataURL(file);
   }
 
@@ -504,7 +509,18 @@ export default function LeftColumn({
           >
             {book.coverImage ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={book.coverImage} alt="Book cover" className="w-full h-full object-cover" />
+              <img
+                src={book.coverImage}
+                alt="Book cover"
+                className="w-full h-full object-cover"
+                onLoad={() => { coverRetried.current = false; }}
+                onError={() => {
+                  // Likely an expired signed URL — re-mint it once.
+                  if (coverRetried.current || !onRefreshCover) return;
+                  coverRetried.current = true;
+                  onRefreshCover();
+                }}
+              />
             ) : (
               <>
                 <svg

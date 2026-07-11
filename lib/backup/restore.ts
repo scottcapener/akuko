@@ -59,13 +59,34 @@ export async function restoreBackup(
   for (const s of manifest.sections) sectionIdMap.set(s.id, crypto.randomUUID());
   for (const c of manifest.chapters) chapterIdMap.set(c.id, crypto.randomUUID());
 
+  // ── Cover ──────────────────────────────────────────────────────────
+  // v2 backups bundle the cover blob: re-upload it to the restored book's own
+  // Storage path. v1 backups carry a data/http URL, copied as-is.
+  let coverPath: string | null = manifest.book.coverImagePath ?? null;
+  if (manifest.book.coverImageFile) {
+    const coverBytes = files[manifest.book.coverImageFile];
+    if (coverBytes) {
+      const path = `${userId}/covers/${newBookId}/${Date.now()}-cover`;
+      const { error: coverErr } = await db.storage
+        .from(LIBRARY_BUCKET)
+        .upload(
+          path,
+          new Blob([coverBytes.slice()], {
+            type: manifest.book.coverContentType || "application/octet-stream",
+          }),
+          { contentType: manifest.book.coverContentType || undefined }
+        );
+      if (!coverErr) coverPath = path;
+    }
+  }
+
   // ── Book ───────────────────────────────────────────────────────────
   const { error: bookErr } = await db.from("books").insert({
     id: newBookId,
     user_id: userId,
     title: `${manifest.book.title} (Restored)`,
     cover_color: manifest.book.coverColor,
-    cover_image_path: manifest.book.coverImagePath ?? null,
+    cover_image_path: coverPath,
     word_count: manifest.book.wordCount,
     unlocks: manifest.book.unlocks,
   });

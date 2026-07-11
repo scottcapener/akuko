@@ -12,15 +12,25 @@
  * reject an older backup during restore, instead of failing silently.
  */
 
-export const SCHEMA_VERSION = 1;
+// v2: covers moved from inline data URLs (stored in the book row) to Storage,
+// so a stored cover is bundled as a blob in the ZIP (coverImageFile) instead of
+// being a self-contained data URL. v1 backups (data-URL covers) still restore.
+export const SCHEMA_VERSION = 2;
 
 export const MANIFEST_FILENAME = "manifest.json";
 export const IMAGES_DIR = "images";
+// ZIP entry for a bundled book cover (v2+).
+export const COVER_ENTRY = "cover/data";
 
 export interface BackupBook {
   title: string;
   coverColor: string;
-  coverImagePath?: string; // directly-usable URL/data-URL, copied as-is on restore
+  // Legacy (v1) inline cover: a directly-usable data/http URL, copied as-is.
+  coverImagePath?: string;
+  // v2 stored cover: ZIP path to the bundled blob (see COVER_ENTRY) + its
+  // content type, re-uploaded to the restored book's own cover on restore.
+  coverImageFile?: string;
+  coverContentType?: string;
   wordCount: number;
   unlocks: number[];
 }

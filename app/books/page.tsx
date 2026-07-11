@@ -27,12 +27,16 @@ function BookCard({
   switching,
   onOpen,
   onDelete,
+  onCoverError,
 }: {
   book: BookSummary;
   switching: boolean;
   onOpen: () => void;
   onDelete: () => void;
+  onCoverError: () => void;
 }) {
+  // Guards the cover re-sign so a genuinely broken image can't loop.
+  const coverRetried = useRef(false);
   return (
     <div className="group flex flex-col gap-2">
       <div className="relative aspect-[2/3] rounded-md overflow-hidden bg-panel border border-border-subtle group-hover:ring-1 group-hover:ring-hover transition-all">
@@ -44,7 +48,17 @@ function BookCard({
         >
           {book.coverImage ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={book.coverImage} alt="" className="w-full h-full object-cover" />
+            <img
+              src={book.coverImage}
+              alt=""
+              className="w-full h-full object-cover"
+              onLoad={() => { coverRetried.current = false; }}
+              onError={() => {
+                if (coverRetried.current) return;
+                coverRetried.current = true;
+                onCoverError();
+              }}
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <BookIcon />
@@ -177,6 +191,13 @@ export default function BooksPage() {
     [router, switchingId, creating]
   );
 
+  // Re-mint an expired signed cover URL and swap it into the grid.
+  const refreshCover = useCallback(async (book: BookSummary) => {
+    if (!book.coverImagePath) return;
+    const url = await db.signBookCoverUrl(book.coverImagePath);
+    if (url) setBooks((prev) => prev.map((b) => (b.id === book.id ? { ...b, coverImage: url } : b)));
+  }, []);
+
   const handleCreate = useCallback(async () => {
     if (!userId || creating || switchingId) return;
     setCreating(true);
@@ -291,6 +312,7 @@ export default function BooksPage() {
               switching={switchingId === b.id}
               onOpen={() => openBook(b.id)}
               onDelete={() => setConfirmDelete(b)}
+              onCoverError={() => refreshCover(b)}
             />
           ))}
 

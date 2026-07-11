@@ -66,6 +66,11 @@ export interface Book {
   id: string;
   title: string;
   coverColor: string;
+  // Display URL for the cover: a signed URL for a stored cover, or a legacy
+  // inline data URL. Time-limited when signed, so it's re-minted on <img> error.
   coverImage?: string;
+  // Storage path in the library-files bucket for an uploaded cover; used to
+  // re-mint the signed URL when it expires. Absent for legacy data-URL covers.
+  coverImagePath?: string;
   activeChapterId: string;
 }

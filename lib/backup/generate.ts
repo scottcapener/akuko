@@ -15,6 +15,7 @@ import {
   SCHEMA_VERSION,
   MANIFEST_FILENAME,
   IMAGES_DIR,
+  COVER_ENTRY,
   type BackupManifest,
   type BackupLibraryItem,
 } from "./manifest";
@@ -122,13 +123,36 @@ export async function generateBackup(
     manifestItems.push(base);
   }
 
+  // Cover: bundle the stored blob so a restore works even after the source
+  // book (and its cover object) is deleted. Legacy data/http URL covers are
+  // self-contained and copied as-is.
+  const coverRaw = book.cover_image_path as string | null;
+  let coverImagePath: string | undefined;
+  let coverImageFile: string | undefined;
+  let coverContentType: string | undefined;
+  if (coverRaw && !coverRaw.startsWith("data:") && !/^https?:/.test(coverRaw)) {
+    const { data: coverBlob, error } = await supabase.storage
+      .from(LIBRARY_BUCKET)
+      .download(coverRaw);
+    if (!error && coverBlob) {
+      files[COVER_ENTRY] = new Uint8Array(await coverBlob.arrayBuffer());
+      coverImageFile = COVER_ENTRY;
+      coverContentType = coverBlob.type || undefined;
+    }
+    // Missing blob (e.g. already deleted): fall through with no cover.
+  } else if (coverRaw) {
+    coverImagePath = coverRaw;
+  }
+
   const manifest: BackupManifest = {
     schemaVersion: SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
     book: {
       title: book.title ?? "Untitled",
       coverColor: book.cover_color ?? "#2a2a2e",
-      coverImagePath: book.cover_image_path ?? undefined,
+      coverImagePath,
+      coverImageFile,
+      coverContentType,
       wordCount: book.word_count ?? 0,
       unlocks: Array.isArray(book.unlocks) ? book.unlocks : [],
     },

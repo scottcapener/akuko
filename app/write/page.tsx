@@ -189,6 +189,7 @@ export default function WritePage() {
     activeChapter: store.activeChapter,
     onBookTitleChange: store.setBookTitle,
     onCoverImage: store.setCoverImage,
+    onRefreshCover: store.refreshCoverUrl,
     onReorderChapters: store.reorderChapters,
     onDeleteChapter: store.deleteChapter,
     onAddSection: store.addSection,
