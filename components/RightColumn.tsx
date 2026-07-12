@@ -402,6 +402,64 @@ function LinkListItem({ link, onRemove }: { link: LibraryLink; onRemove: () => v
   );
 }
 
+// ── Gallery image cell with skeleton loading ─────────────────────────────────
+
+function GalleryImage({
+  img,
+  cellProps,
+  highlighted,
+  onOpen,
+  onRemove,
+  onLoad,
+  onError,
+}: {
+  img: LibraryImage;
+  index: number;
+  cellProps: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean };
+  highlighted: boolean;
+  onOpen: () => void;
+  onRemove: () => void;
+  onLoad: () => void;
+  onError: () => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const prevSrc = useRef(img.dataUrl);
+  if (prevSrc.current !== img.dataUrl) {
+    prevSrc.current = img.dataUrl;
+    setLoaded(false);
+  }
+
+  return (
+    <div
+      {...cellProps}
+      className={`relative group aspect-square rounded ${
+        highlighted ? "ring-2 ring-accent" : ""
+      } ${loaded ? "" : "bg-panel animate-pulse"}`}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={img.dataUrl}
+        alt={img.name}
+        className={`w-full h-full object-cover rounded cursor-pointer transition-opacity duration-300 ${
+          loaded ? "opacity-100" : "opacity-0"
+        }`}
+        onClick={onOpen}
+        draggable={false}
+        onLoad={() => { setLoaded(true); onLoad(); }}
+        onError={onError}
+      />
+      <button
+        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/70 rounded-full items-center justify-center hidden group-hover:flex"
+      >
+        <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -647,7 +705,7 @@ export default function RightColumn({
         </div>
       ) : (
       <div
-        className={`mx-4 mt-4 mb-3 rounded-lg border border-dashed transition-colors ${
+        className={`mx-4 mt-4 mb-3 rounded-lg border border-dashed ${
           draggingOver ? "border-accent bg-accent/5" : "border-border-subtle hover:border-hover"
         }`}
         onDragOver={(e) => { e.preventDefault(); setDraggingOver(true); }}
@@ -667,37 +725,21 @@ export default function RightColumn({
         ) : (
           <div className="p-2 grid grid-cols-3 gap-1.5">
             {chapter.library.images.map((img, i) => (
-              <div
+              <GalleryImage
                 key={img.id}
-                {...imageReorder.cellProps(i)}
-                className={`relative group aspect-square rounded ${
-                  imageReorder.overIndex === i ? "ring-2 ring-accent" : ""
-                }`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={img.dataUrl}
-                  alt={img.name}
-                  className="w-full h-full object-cover rounded cursor-pointer"
-                  onClick={() => setImageLightboxIndex(i)}
-                  draggable={false}
-                  onLoad={() => retriedImageIds.current.delete(img.id)}
-                  onError={() => {
-                    // Likely an expired signed URL — re-mint it once.
-                    if (!img.path || retriedImageIds.current.has(img.id)) return;
-                    retriedImageIds.current.add(img.id);
-                    onRefreshImage(chapter.id, img.id);
-                  }}
-                />
-                <button
-                  onClick={(e) => { e.stopPropagation(); onRemoveImage(chapter.id, img.id); }}
-                  className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/70 rounded-full items-center justify-center hidden group-hover:flex"
-                >
-                  <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+                img={img}
+                index={i}
+                cellProps={imageReorder.cellProps(i)}
+                highlighted={imageReorder.overIndex === i}
+                onOpen={() => setImageLightboxIndex(i)}
+                onRemove={() => onRemoveImage(chapter.id, img.id)}
+                onLoad={() => retriedImageIds.current.delete(img.id)}
+                onError={() => {
+                  if (!img.path || retriedImageIds.current.has(img.id)) return;
+                  retriedImageIds.current.add(img.id);
+                  onRefreshImage(chapter.id, img.id);
+                }}
+              />
             ))}
             <button
               className="aspect-square rounded bg-panel flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"

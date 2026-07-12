@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type React from "react";
 
 // Drag-reorder for a vertical list with an insertion-line indicator.
@@ -16,10 +16,10 @@ export function useReorderList(onReorder: (from: number, to: number) => void) {
   const dragIndex = useRef<number | null>(null);
   const [activeGap, setActiveGap] = useState<number | null>(null);
 
-  function reset() {
+  const reset = useCallback(() => {
     dragIndex.current = null;
     setActiveGap(null);
-  }
+  }, []);
 
   function dragHandleProps(index: number) {
     return {
@@ -81,5 +81,5 @@ export function useReorderList(onReorder: (from: number, to: number) => void) {
     };
   }
 
-  return { activeGap, dragHandleProps, dropZoneProps, containerProps };
+  return { activeGap, dragHandleProps, dropZoneProps, containerProps, reset };
 }
