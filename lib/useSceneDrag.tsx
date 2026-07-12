@@ -40,11 +40,9 @@ export function SceneDragProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const peek = useCallback(() => payloadRef.current, []);
 
-  // Safety net: always clear the payload when a native drag ends. The drag source
-  // can unmount mid-drag (e.g. the source chapter's scene list closes when another
-  // chapter is hovered), which suppresses its own dragend — without this the drop
-  // target would stay stuck in its highlighted "targeted" state. These document
-  // listeners run after React's own drop handlers (which read `peek` first).
+  // Safety net: always clear the payload when a native drag ends. Runs after
+  // React's own drop handlers (which read `peek` first). The drag source is kept
+  // mounted for the whole drag (see LeftColumn) so its dragend always fires here.
   useEffect(() => {
     document.addEventListener("drop", end);
     document.addEventListener("dragend", end);

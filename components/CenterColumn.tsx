@@ -9,11 +9,6 @@ import { useReorderList } from "@/lib/useReorderList";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
 import { useSceneDrag } from "@/lib/useSceneDrag";
 
-// A description drag only engages reordering once the pointer travels past this
-// many pixels; a shorter press is treated as a click (enter edit). Set above the
-// browser's native ~4px drag threshold so small-jitter clicks reliably edit.
-const DRAG_THRESHOLD_PX = 6;
-
 interface Props {
   chapter: Chapter;
   saveStatus: SaveStatus;
@@ -114,11 +109,10 @@ function SceneBlock({
   const labelRef = useRef<HTMLInputElement>(null);
   const sceneDrag = useSceneDrag();
 
-  // Click-vs-drag on the description: `armed` gates the native drag behind a
-  // movement threshold so a plain click edits and a click-and-drag reorders.
-  const [armed, setArmed] = useState(false);
-  const armedRef = useRef(false);
-  const downPoint = useRef<{ x: number; y: number } | null>(null);
+  // Click-vs-drag on the description: the span is always draggable, so a
+  // click-and-drag reliably starts a native drag (reorder). A genuine click
+  // (no drag) still edits — the browser suppresses the `click` after a drag, and
+  // `draggedRef` guards the rare case where it doesn't.
   const draggedRef = useRef(false);
 
   // Set innerHTML on mount and when navigating to a different scene.
@@ -127,45 +121,8 @@ function SceneBlock({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene.id]);
 
-  function disarm() {
-    setArmed(false);
-    armedRef.current = false;
-    downPoint.current = null;
-  }
-
-  function handleLabelPointerMove(e: PointerEvent) {
-    if (!downPoint.current) return;
-    const dx = e.clientX - downPoint.current.x;
-    const dy = e.clientY - downPoint.current.y;
-    if (dx * dx + dy * dy > DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
-      armedRef.current = true;
-      setArmed(true);
-      window.removeEventListener("pointermove", handleLabelPointerMove);
-    }
-  }
-
-  function handleLabelPointerDown(e: React.PointerEvent) {
-    if (e.button !== 0) return;
-    downPoint.current = { x: e.clientX, y: e.clientY };
-    draggedRef.current = false;
-    window.addEventListener("pointermove", handleLabelPointerMove);
-    window.addEventListener(
-      "pointerup",
-      () => {
-        window.removeEventListener("pointermove", handleLabelPointerMove);
-        downPoint.current = null;
-        // A press that armed but never became a native drag (moved, then released
-        // in place) must un-arm so the next click still edits.
-        if (armedRef.current && !draggedRef.current) disarm();
-      },
-      { once: true }
-    );
-  }
-
-  // A drag suppresses the subsequent click, so this only runs for genuine clicks
-  // (movement stayed under the threshold) — open the inline editor.
   function handleLabelClick() {
-    if (draggedRef.current) return;
+    if (draggedRef.current) { draggedRef.current = false; return; }
     setEditingLabel(true);
   }
 
@@ -259,8 +216,8 @@ function SceneBlock({
             // handleLabelClick), a click-and-drag past the threshold reorders
             // and doubles as the cross-chapter drag source (shared payload).
             <span
-              draggable={armed}
-              onPointerDown={handleLabelPointerDown}
+              draggable
+              onMouseDown={() => { draggedRef.current = false; }}
               onDragStart={(e) => {
                 rowDrag.onDragStart?.(e);
                 draggedRef.current = true;
@@ -269,7 +226,6 @@ function SceneBlock({
               onDragEnd={(e) => {
                 rowDrag.onDragEnd?.(e);
                 sceneDrag.end();
-                disarm();
               }}
               onClick={(e) => { e.stopPropagation(); handleLabelClick(); }}
               title={scene.label || "Scene description…"}

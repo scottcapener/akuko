@@ -35,9 +35,8 @@ export function ChapterDragProvider({ children }: { children: React.ReactNode })
   }, []);
   const peek = useCallback(() => payloadRef.current, []);
 
-  // Safety net: always clear the payload when a native drag ends, even if the
-  // drag source unmounted mid-drag and its own dragend never fired. Runs after
-  // React's own drop handlers (which read `peek` first).
+  // Safety net: always clear the payload when a native drag ends (runs after
+  // React's own drop handlers, which read `peek` first).
   useEffect(() => {
     document.addEventListener("drop", end);
     document.addEventListener("dragend", end);

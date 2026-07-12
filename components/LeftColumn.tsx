@@ -395,20 +395,20 @@ function SectionRow({
           const isActive = ch.id === activeChapterId;
           const chDrop = chapterList.dropZoneProps(i);
           const sceneActive = !!sceneDrag.payload;
-          // The chapter the dragged scene came from stays open for the whole drag
-          // so the dragged row never unmounts mid-drag — otherwise its dragend
-          // wouldn't fire and the target would stay stuck in its highlighted state.
-          const isDragSource = sceneActive && sceneDrag.payload?.fromChapterId === ch.id;
-          // Which chapters show their scenes: while a scene is dragged, the source
-          // stays open and the hovered target also opens (falling back to the
-          // active chapter until one is hovered); otherwise just the active one.
-          const scenesOpen = scenesVisible && (
-            sceneActive ? (isDragSource || (dropChapterId ? dropChapterId === ch.id : isActive)) : isActive
+          // Which chapter's scenes are VISUALLY open: while a scene is dragged only
+          // the hovered target (falling back to the active chapter until one is
+          // hovered) so the source list "closes" — that keeps cross-chapter drop
+          // targeting unambiguous (a hidden source isn't a competing target).
+          const visualOpen = scenesVisible && (
+            sceneActive ? (dropChapterId ? dropChapterId === ch.id : isActive) : isActive
           );
-          // The chapter under the cursor right now — the one that shows the accent
-          // insertion line/ring and receives the drop. Any open list (source,
-          // target, or active) can *become* the target by hovering it (its scene
-          // rows set the drop target on dragover); this just controls the visuals.
+          // The source chapter's list stays MOUNTED (just hidden when it isn't the
+          // visual target) so the dragged row never unmounts mid-drag — otherwise
+          // its dragend wouldn't fire and the target would stay stuck highlighted.
+          const isDragSource = sceneActive && sceneDrag.payload?.fromChapterId === ch.id;
+          const scenesMounted = visualOpen || isDragSource;
+          // The chapter under the cursor right now — shows the accent insertion
+          // line/ring and receives the drop.
           const isDropTarget = sceneActive && dropChapterId === ch.id;
           const chDragHandle = chapterList.dragHandleProps(i);
           return (
@@ -464,22 +464,24 @@ function SectionRow({
 
             {/* Scene descriptions — nested under the chapter, text-only, tightly
                 spaced. Each is a drag source; while this chapter is the drop
-                target, they're also drop zones with insertion lines. */}
-            {scenesOpen && (
-              <div className="flex flex-col">
+                target, they're also drop zones with insertion lines. The source
+                chapter stays mounted but `hidden` while another chapter is the
+                target, so its dragged row stays alive without being a drop target. */}
+            {scenesMounted && (
+              <div className={`flex flex-col ${visualOpen ? "" : "hidden"}`}>
                 {ch.scenes.length === 0 ? (
                   <div
                     onDragOver={sceneActive ? (e) => { if (!sceneDrag.payload) return; e.preventDefault(); setSceneDropTarget(ch.id, 0); } : undefined}
                     onDrop={sceneActive ? (e) => { e.preventDefault(); e.stopPropagation(); dropSceneInto(ch.id, 0); } : undefined}
                   >
-                    {isDropTarget && <DropLine active={dropGap === 0} />}
+                    {isDropTarget && <DropLine active={dropGap === 0} className="pl-8" />}
                     <p className="text-xs text-subtle/40 italic pl-8 py-0.5">No scenes yet</p>
                   </div>
                 ) : (
                   <>
                     {ch.scenes.map((scene, si) => (
                       <Fragment key={scene.id}>
-                        {isDropTarget && <DropLine active={dropGap === si} />}
+                        {isDropTarget && <DropLine active={dropGap === si} className="pl-8" />}
                         <div
                           {...sceneSourceProps(scene, ch.id, si)}
                           onDragOver={sceneActive ? (e) => { if (!sceneDrag.payload) return; e.preventDefault(); setSceneDropTarget(ch.id, gapFromEvent(e, si)); } : undefined}
@@ -495,7 +497,7 @@ function SectionRow({
                         </div>
                       </Fragment>
                     ))}
-                    {isDropTarget && <DropLine active={dropGap === ch.scenes.length} />}
+                    {isDropTarget && <DropLine active={dropGap === ch.scenes.length} className="pl-8" />}
                   </>
                 )}
               </div>
