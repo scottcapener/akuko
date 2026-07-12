@@ -468,7 +468,14 @@ function SectionRow({
                 chapter stays mounted but `hidden` while another chapter is the
                 target, so its dragged row stays alive without being a drop target. */}
             {scenesMounted && (
-              <div className={`flex flex-col ${visualOpen ? "" : "hidden"}`}>
+              <div
+                className={`flex flex-col ${visualOpen ? "" : "hidden"}`}
+                // Catch drops that land on the insertion line in a gap (the line
+                // has no drop handler; its events bubble here). Scene rows
+                // stopPropagation, so row drops are handled by the row instead.
+                onDragOver={sceneActive ? (e) => { if (!sceneDrag.payload) return; e.preventDefault(); } : undefined}
+                onDrop={sceneActive ? (e) => { e.preventDefault(); e.stopPropagation(); dropSceneInto(ch.id, dropGap ?? ch.scenes.length); } : undefined}
+              >
                 {ch.scenes.length === 0 ? (
                   <div
                     onDragOver={sceneActive ? (e) => { if (!sceneDrag.payload) return; e.preventDefault(); setSceneDropTarget(ch.id, 0); } : undefined}

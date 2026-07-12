@@ -35,6 +35,16 @@ export function useReorderList(onReorder: (from: number, to: number) => void) {
     };
   }
 
+  function commitDrop() {
+    const from = dragIndex.current;
+    const gap = activeGap;
+    if (from !== null && gap !== null) {
+      const to = gap > from ? gap - 1 : gap;
+      if (to !== from) onReorder(from, to);
+    }
+    reset();
+  }
+
   function dropZoneProps(index: number) {
     return {
       onDragOver: (e: React.DragEvent) => {
@@ -48,16 +58,28 @@ export function useReorderList(onReorder: (from: number, to: number) => void) {
         if (dragIndex.current === null) return;
         e.preventDefault();
         e.stopPropagation();
-        const from = dragIndex.current;
-        const gap = activeGap;
-        if (gap !== null) {
-          const to = gap > from ? gap - 1 : gap;
-          if (to !== from) onReorder(from, to);
-        }
-        reset();
+        commitDrop();
       },
     };
   }
 
-  return { activeGap, dragHandleProps, dropZoneProps };
+  // Put on the list container so a drop that lands in the *gap* between items —
+  // on the insertion line, which has no drop handler of its own — still counts.
+  // The gap's dragover/drop bubble here; items stopPropagation so they're handled
+  // by their own dropZone and never reach this. The drop lands at the current gap.
+  function containerProps() {
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        if (dragIndex.current === null) return;
+        e.preventDefault();
+      },
+      onDrop: (e: React.DragEvent) => {
+        if (dragIndex.current === null) return;
+        e.preventDefault();
+        commitDrop();
+      },
+    };
+  }
+
+  return { activeGap, dragHandleProps, dropZoneProps, containerProps };
 }
