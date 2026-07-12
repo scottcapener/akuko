@@ -437,13 +437,13 @@ function SectionRow({
               title={ch.title}
               className={`flex items-center gap-2 group/chapter px-2 py-1.5 rounded transition-colors cursor-pointer ${
                 isDropTarget ? "ring-1 ring-accent" : ""
-              } ${isActive ? "bg-elevated" : "hover:bg-panel"}`}
+              } ${isActive ? "bg-elevated border border-subtle" : "hover:bg-panel"}`}
             >
               {/* Chapter marker — a small rectangle echoing the grid-view cell:
                   active gets a border + fill, inactive is a solid fill. */}
               <span className="w-3.5 flex-shrink-0 flex items-center justify-center" aria-hidden>
                 <span className={`w-2.5 h-3.5 rounded-[2px] ${
-                  isActive ? "bg-hover border-[1.5px] border-subtle" : "bg-subtle/50"
+                  isActive ? "bg-subtle" : "bg-subtle/50"
                 }`} />
               </span>
               <span className={`text-xs flex-1 truncate ${

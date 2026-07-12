@@ -7,7 +7,7 @@ import { SaveStatus } from "@/lib/useHotCocoaDb";
 import { DropLine } from "@/components/ui/DropLine";
 import { useReorderList } from "@/lib/useReorderList";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
-import { useSceneDrag } from "@/lib/useSceneDrag";
+import { useSceneDrag, SceneDragPayload } from "@/lib/useSceneDrag";
 
 interface Props {
   chapter: Chapter;
@@ -334,6 +334,12 @@ export default function CenterColumn({
   const scrollRef = useRef<HTMLDivElement>(null);
   useAutoScrollOnDrag(scrollRef);
   const sceneReorder = useReorderList((from, to) => onReorderScenes(chapter.id, from, to));
+  const sceneDrag = useSceneDrag();
+  const prevPayload = useRef<SceneDragPayload | null>(null);
+  useEffect(() => {
+    if (prevPayload.current && !sceneDrag.payload) sceneReorder.reset();
+    prevPayload.current = sceneDrag.payload;
+  }, [sceneDrag.payload, sceneReorder.reset]);
 
   // Clipboard paste → library image (when focus is in a scene body)
   const handlePaste = useCallback(
