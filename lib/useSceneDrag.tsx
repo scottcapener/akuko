@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 // Identifies the scene currently being dragged. `fromIndex` is the scene's index
 // within its source chapter — used only for same-chapter reorders (a cross-chapter
@@ -39,6 +39,18 @@ export function SceneDragProvider({ children }: { children: React.ReactNode }) {
     setPayload(null);
   }, []);
   const peek = useCallback(() => payloadRef.current, []);
+
+  // Safety net: always clear the payload when a native drag ends. Runs after
+  // React's own drop handlers (which read `peek` first). The drag source is kept
+  // mounted for the whole drag (see LeftColumn) so its dragend always fires here.
+  useEffect(() => {
+    document.addEventListener("drop", end);
+    document.addEventListener("dragend", end);
+    return () => {
+      document.removeEventListener("drop", end);
+      document.removeEventListener("dragend", end);
+    };
+  }, [end]);
 
   const value = useMemo(() => ({ payload, begin, end, peek }), [payload, begin, end, peek]);
   return <SceneDragContext.Provider value={value}>{children}</SceneDragContext.Provider>;

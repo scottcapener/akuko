@@ -9,11 +9,6 @@ import { useReorderList } from "@/lib/useReorderList";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
 import { useSceneDrag } from "@/lib/useSceneDrag";
 
-// A description drag only engages reordering once the pointer travels past this
-// many pixels; a shorter press is treated as a click (enter edit). Set above the
-// browser's native ~4px drag threshold so small-jitter clicks reliably edit.
-const DRAG_THRESHOLD_PX = 6;
-
 interface Props {
   chapter: Chapter;
   saveStatus: SaveStatus;
@@ -114,11 +109,10 @@ function SceneBlock({
   const labelRef = useRef<HTMLInputElement>(null);
   const sceneDrag = useSceneDrag();
 
-  // Click-vs-drag on the description: `armed` gates the native drag behind a
-  // movement threshold so a plain click edits and a click-and-drag reorders.
-  const [armed, setArmed] = useState(false);
-  const armedRef = useRef(false);
-  const downPoint = useRef<{ x: number; y: number } | null>(null);
+  // Click-vs-drag on the description: the span is always draggable, so a
+  // click-and-drag reliably starts a native drag (reorder). A genuine click
+  // (no drag) still edits — the browser suppresses the `click` after a drag, and
+  // `draggedRef` guards the rare case where it doesn't.
   const draggedRef = useRef(false);
 
   // Set innerHTML on mount and when navigating to a different scene.
@@ -127,45 +121,8 @@ function SceneBlock({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene.id]);
 
-  function disarm() {
-    setArmed(false);
-    armedRef.current = false;
-    downPoint.current = null;
-  }
-
-  function handleLabelPointerMove(e: PointerEvent) {
-    if (!downPoint.current) return;
-    const dx = e.clientX - downPoint.current.x;
-    const dy = e.clientY - downPoint.current.y;
-    if (dx * dx + dy * dy > DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) {
-      armedRef.current = true;
-      setArmed(true);
-      window.removeEventListener("pointermove", handleLabelPointerMove);
-    }
-  }
-
-  function handleLabelPointerDown(e: React.PointerEvent) {
-    if (e.button !== 0) return;
-    downPoint.current = { x: e.clientX, y: e.clientY };
-    draggedRef.current = false;
-    window.addEventListener("pointermove", handleLabelPointerMove);
-    window.addEventListener(
-      "pointerup",
-      () => {
-        window.removeEventListener("pointermove", handleLabelPointerMove);
-        downPoint.current = null;
-        // A press that armed but never became a native drag (moved, then released
-        // in place) must un-arm so the next click still edits.
-        if (armedRef.current && !draggedRef.current) disarm();
-      },
-      { once: true }
-    );
-  }
-
-  // A drag suppresses the subsequent click, so this only runs for genuine clicks
-  // (movement stayed under the threshold) — open the inline editor.
   function handleLabelClick() {
-    if (draggedRef.current) return;
+    if (draggedRef.current) { draggedRef.current = false; return; }
     setEditingLabel(true);
   }
 
@@ -222,12 +179,15 @@ function SceneBlock({
     }
   }
 
+  // When scenes are visible the HoverInsert rows provide the inter-scene gap, so
+  // the block needs no bottom margin; the sceneless view has no HoverInsert, so
+  // it keeps its own spacing.
   return (
     <div
       {...dropZoneProps(index)}
-      className={`rounded-lg mb-2 transition-colors relative group/scene ${
-        focused || editingLabel ? "bg-elevated" : "bg-transparent hover:bg-panel"
-      }`}
+      className={`rounded-lg transition-colors relative group/scene ${
+        scenesVisible ? "" : "mb-2"
+      } ${focused || editingLabel ? "bg-elevated" : "bg-transparent hover:bg-panel"}`}
     >
       <div className="px-4 py-3" onClick={handleWrapperClick}>
         {/* Scene Header: description label + delete (×/confirmation) on the right.
@@ -256,8 +216,8 @@ function SceneBlock({
             // handleLabelClick), a click-and-drag past the threshold reorders
             // and doubles as the cross-chapter drag source (shared payload).
             <span
-              draggable={armed}
-              onPointerDown={handleLabelPointerDown}
+              draggable
+              onMouseDown={() => { draggedRef.current = false; }}
               onDragStart={(e) => {
                 rowDrag.onDragStart?.(e);
                 draggedRef.current = true;
@@ -266,7 +226,6 @@ function SceneBlock({
               onDragEnd={(e) => {
                 rowDrag.onDragEnd?.(e);
                 sceneDrag.end();
-                disarm();
               }}
               onClick={(e) => { e.stopPropagation(); handleLabelClick(); }}
               title={scene.label || "Scene description…"}
@@ -329,13 +288,15 @@ function SceneBlock({
 }
 
 // Hover-reveal row shown in the gap between two scenes (Figma "Hover Insert",
-// 159:896): [+ Add scene] —— hairline —— [Split chapter]. The gap reserves a
-// small fixed height; the row floats centered and only appears (and becomes
-// clickable) on hover, so it never intercepts clicks on the scenes around it.
+// 159:896): [+ Add scene] —— hairline —— [+ Split chapter]. At rest the gap is
+// just the normal ~10px space between scenes (an invisible hover target). After
+// a 300ms hover dwell it grows to ~16px and the row fades in — animated, and
+// collapsing immediately on leave. The row floats centered and is only clickable
+// once revealed, so it never intercepts clicks on the scenes around it.
 function HoverInsert({ onAddScene, onSplit }: { onAddScene: () => void; onSplit: () => void }) {
   return (
-    <div className="group/insert relative h-4">
-      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center gap-2 px-4 opacity-0 pointer-events-none transition-opacity group-hover/insert:opacity-100 group-hover/insert:pointer-events-auto">
+    <div className="group/insert relative h-2.5 transition-[height] duration-200 hover:h-4 hover:delay-300">
+      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center gap-2 px-4 opacity-0 pointer-events-none transition-opacity duration-200 group-hover/insert:opacity-100 group-hover/insert:pointer-events-auto group-hover/insert:delay-300">
         <button
           onClick={onAddScene}
           className="flex items-center gap-1.5 flex-shrink-0 text-subtle hover:text-accent transition-colors"
@@ -348,10 +309,7 @@ function HoverInsert({ onAddScene, onSplit }: { onAddScene: () => void; onSplit:
           onClick={onSplit}
           className="flex items-center gap-1.5 flex-shrink-0 text-subtle hover:text-accent transition-colors"
         >
-          {/* Scissors — "cut the chapter here" */}
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M7.848 8.25l1.536.887M7.848 8.25a3 3 0 11-5.196-3 3 3 0 015.196 3zm1.536.887a2.165 2.165 0 011.083 1.839c.005.351.054.695.14 1.024M9.384 9.137l10.062 5.808a3 3 0 01-3 5.196l-1.536-.887m0 0a2.165 2.165 0 00-1.083-1.839 5.998 5.998 0 01-.14-1.024m1.223 2.863l.001-.001m-3.05-1.762l-1.536.887M14.436 14.943a3 3 0 11-5.196 3 3 3 0 015.196-3z" />
-          </svg>
+          <Image src="/plus.svg" alt="" width={16} height={16} className="opacity-60" />
           <span className="text-body-m whitespace-nowrap">Split chapter</span>
         </button>
       </div>
@@ -376,7 +334,6 @@ export default function CenterColumn({
   const scrollRef = useRef<HTMLDivElement>(null);
   useAutoScrollOnDrag(scrollRef);
   const sceneReorder = useReorderList((from, to) => onReorderScenes(chapter.id, from, to));
-  const sceneDrag = useSceneDrag();
 
   // Clipboard paste → library image (when focus is in a scene body)
   const handlePaste = useCallback(
@@ -437,7 +394,7 @@ export default function CenterColumn({
 
       {/* Scene feed */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="w-full max-w-[700px] mx-auto px-4 pt-4 pb-32">
+        <div className="w-full max-w-[700px] mx-auto px-4 pt-4 pb-32" {...sceneReorder.containerProps()}>
           {loading ? (
             <div className="px-4" aria-hidden>
               {[0, 1, 2].map((i) => (
@@ -455,9 +412,9 @@ export default function CenterColumn({
             <Fragment key={scene.id}>
               {scenesVisible && <DropLine active={sceneReorder.activeGap === i} />}
               {/* Hover-insert row in each gap between scenes (not before the
-                  first). Hidden while a scene is being dragged so it can't
-                  compete with the reorder DropLine. */}
-              {scenesVisible && i > 0 && !sceneDrag.payload && (
+                  first). Always rendered so it also provides the resting ~10px
+                  gap between scenes; its content only reveals on hover. */}
+              {scenesVisible && i > 0 && (
                 <HoverInsert
                   onAddScene={() => onInsertScene(chapter.id, i)}
                   onSplit={() => onSplitChapter(chapter.id, i)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 // Identifies the chapter currently being dragged. `fromIndex` is its index within
 // its source section — used for same-section reorders (a cross-section move
@@ -34,6 +34,17 @@ export function ChapterDragProvider({ children }: { children: React.ReactNode })
     setPayload(null);
   }, []);
   const peek = useCallback(() => payloadRef.current, []);
+
+  // Safety net: always clear the payload when a native drag ends (runs after
+  // React's own drop handlers, which read `peek` first).
+  useEffect(() => {
+    document.addEventListener("drop", end);
+    document.addEventListener("dragend", end);
+    return () => {
+      document.removeEventListener("drop", end);
+      document.removeEventListener("dragend", end);
+    };
+  }, [end]);
 
   const value = useMemo(() => ({ payload, begin, end, peek }), [payload, begin, end, peek]);
   return <ChapterDragContext.Provider value={value}>{children}</ChapterDragContext.Provider>;
