@@ -20,6 +20,7 @@ const RIGHT_MIN = 160;
 const RIGHT_MAX = 400;
 const LEFT_DEFAULT = 208;
 const RIGHT_DEFAULT = 240;
+const COLLAPSED_WIDTH = 56;
 
 function useColumnResize(storageKey: string, defaultPx: number, min: number, max: number, direction: 1 | -1 = 1) {
   // Lazily restore the last-used width. Safe against hydration mismatch: the write
@@ -100,6 +101,12 @@ function useLocalStorageState<T>(key: string, initial: T) {
   return [value, setValue] as const;
 }
 
+// Panel collapse width + the panel body's own fade run concurrently off the same
+// boolean (see LeftColumn/RightColumn: the body renders at a fixed pixel width
+// so it never visibly resizes — this wrapper's `overflow-hidden` just reveals or
+// hides more of it as the width tweens, while the body's opacity fades in step).
+const COLLAPSE_DURATION_MS = 200;
+
 export default function WritePage() {
   const router = useRouter();
   const store = useHotCocoaDb();
@@ -109,6 +116,8 @@ export default function WritePage() {
 
   const [scenesVisible, setScenesVisible] = useLocalStorageState("hc.scenesVisible", true);
   const [linksVisible, setLinksVisible] = useLocalStorageState("hc.linksVisible", true);
+  const [leftCollapsed, setLeftCollapsed] = useLocalStorageState("hc.leftCollapsed", false);
+  const [rightCollapsed, setRightCollapsed] = useLocalStorageState("hc.rightCollapsed", false);
   const [sectionViews, setSectionViews] = useLocalStorageState<Record<string, "grid" | "list">>("hc.sectionViews", {});
   const setSectionView = useCallback((sectionId: string, view: "grid" | "list") => {
     setSectionViews((prev) => ({ ...prev, [sectionId]: view }));
@@ -253,10 +262,25 @@ export default function WritePage() {
 
       {/* ── Desktop layout ── */}
       <div className="flex-1 hidden md:flex overflow-hidden">
-        <div className="flex-shrink-0 flex flex-col" style={{ width: left.width }}>
-          <LeftColumn {...leftProps} onChapterClick={store.setActiveChapter} onAddChapter={store.addChapter} />
+        <div
+          className="flex-shrink-0 flex flex-col overflow-hidden"
+          style={{
+            width: leftCollapsed ? COLLAPSED_WIDTH : left.width,
+            transition: `width ${COLLAPSE_DURATION_MS}ms ease-in-out`,
+          }}
+        >
+          <LeftColumn
+            {...leftProps}
+            onChapterClick={store.setActiveChapter}
+            onAddChapter={store.addChapter}
+            collapsed={leftCollapsed}
+            onToggleCollapse={() => setLeftCollapsed((v) => !v)}
+            expandedWidth={left.width}
+          />
         </div>
-        <div onMouseDown={left.onMouseDown} className="relative z-10 w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60 before:absolute before:inset-y-0 before:-left-1 before:-right-1 before:content-['']" />
+        {!leftCollapsed && (
+          <div onMouseDown={left.onMouseDown} className="relative z-10 w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60 before:absolute before:inset-y-0 before:-left-1 before:-right-1 before:content-['']" />
+        )}
         <div className="flex-1 overflow-hidden flex flex-col min-w-0">
           <CenterColumn
             chapter={store.activeChapter}
@@ -273,9 +297,22 @@ export default function WritePage() {
             scenesVisible={scenesVisible}
           />
         </div>
-        <div onMouseDown={right.onMouseDown} className="relative z-10 w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60 before:absolute before:inset-y-0 before:-left-1 before:-right-1 before:content-['']" />
-        <div className="flex-shrink-0 flex flex-col" style={{ width: right.width }}>
-          <RightColumn {...rightProps} />
+        {!rightCollapsed && (
+          <div onMouseDown={right.onMouseDown} className="relative z-10 w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60 before:absolute before:inset-y-0 before:-left-1 before:-right-1 before:content-['']" />
+        )}
+        <div
+          className="flex-shrink-0 flex flex-col overflow-hidden"
+          style={{
+            width: rightCollapsed ? COLLAPSED_WIDTH : right.width,
+            transition: `width ${COLLAPSE_DURATION_MS}ms ease-in-out`,
+          }}
+        >
+          <RightColumn
+            {...rightProps}
+            collapsed={rightCollapsed}
+            onToggleCollapse={() => setRightCollapsed((v) => !v)}
+            expandedWidth={right.width}
+          />
         </div>
       </div>
 
