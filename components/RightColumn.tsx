@@ -480,6 +480,13 @@ interface Props {
   onReorderMusicLinks: (chapterId: string, from: number, to: number) => void;
   onReorderNotes: (chapterId: string, from: number, to: number) => void;
   onClose?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+  // Pixel width of the expanded panel — the body below the header renders at
+  // this fixed width always (see the body wrapper below) so collapsing never
+  // visibly resizes its contents; only the enclosing column's overflow-hidden
+  // width and this fade change.
+  expandedWidth?: number;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -502,6 +509,9 @@ export default function RightColumn({
   onReorderMusicLinks,
   onReorderNotes,
   onClose,
+  collapsed,
+  onToggleCollapse,
+  expandedWidth,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useAutoScrollOnDrag(scrollRef);
@@ -649,7 +659,7 @@ export default function RightColumn({
   }
 
   return (
-    <div ref={scrollRef} className="flex flex-col h-full bg-bg border-l border-border-subtle w-full overflow-y-auto">
+    <div className="flex flex-col h-full bg-bg border-l border-border-subtle w-full">
       {imageModalOpen && (
         <Portal>
           <ImageUploadModal
@@ -683,10 +693,24 @@ export default function RightColumn({
         </Portal>
       )}
 
-      {/* Panel Header — library icon. Fixed h-16 (sticky) so the Gallery top
-          lines up with the Book Cover and the first Scene. */}
-      <div className="sticky top-0 z-10 bg-bg h-16 px-4 flex-shrink-0 flex items-center justify-between">
-        <Image src="/library.svg" alt="Library" width={20} height={20} />
+      {/* Panel Header — library icon, always visible. Fixed h-16 so the Gallery
+          top lines up with the Book Cover and the first Scene. The icon doubles
+          as the collapse toggle (desktop only); it's a sibling before the
+          scrollable body below, not part of that scroll, so it never needs to
+          be sticky and never fades with the body. */}
+      <div className="bg-bg h-16 px-4 flex-shrink-0 flex items-center justify-between">
+        {onToggleCollapse ? (
+          <button
+            onClick={onToggleCollapse}
+            className="text-subtle hover:text-text transition-colors"
+            title={collapsed ? "Expand library panel" : "Collapse library panel"}
+            aria-label={collapsed ? "Expand library panel" : "Collapse library panel"}
+          >
+            <Image src="/library.svg" alt="Library" width={20} height={20} />
+          </button>
+        ) : (
+          <Image src="/library.svg" alt="Library" width={20} height={20} />
+        )}
         {onClose && (
           <button onClick={onClose} className="text-subtle/50 hover:text-subtle transition-colors md:hidden">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -695,6 +719,26 @@ export default function RightColumn({
           </button>
         )}
       </div>
+
+      {/* Body — fixed to the expanded width and faded via `collapsed`, independently
+          of the enclosing column's own (animating) width. This is what lets the
+          collapse/expand run as a pure fade: the body's layout never changes size,
+          it's just progressively revealed or hidden by the ancestor's overflow-hidden
+          as that column width tweens, concurrently with this opacity. */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto"
+        style={
+          expandedWidth != null
+            ? {
+                width: expandedWidth,
+                opacity: collapsed ? 0 : 1,
+                transition: "opacity 200ms ease-in-out",
+                pointerEvents: collapsed ? "none" : undefined,
+              }
+            : undefined
+        }
+      >
 
       {/* ── Images ── */}
       {loading ? (
@@ -964,6 +1008,7 @@ export default function RightColumn({
         )}
       </div>
       )}
+      </div>
     </div>
   );
 }

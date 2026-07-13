@@ -49,6 +49,13 @@ interface Props {
   sectionViews: Record<string, "grid" | "list">;
   onSetSectionView: (sectionId: string, view: "grid" | "list") => void;
   onClose?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+  // Pixel width of the expanded panel — the body below the header renders at
+  // this fixed width always (see the body wrapper below) so collapsing never
+  // visibly resizes its contents; only the enclosing column's overflow-hidden
+  // width and this fade change.
+  expandedWidth?: number;
 }
 
 // ── Confirmation modal ────────────────────────────────────────────────────────
@@ -558,6 +565,9 @@ export default function LeftColumn({
   sectionViews,
   onSetSectionView,
   onClose,
+  collapsed,
+  onToggleCollapse,
+  expandedWidth,
 }: Props) {
   const router = useRouter();
   const supabase = createClient();
@@ -718,9 +728,21 @@ export default function LeftColumn({
 
       {/* Panel Header — book-open icon, mirroring the Library Panel Header.
           Fixed h-16 so the Book Cover top lines up with the first Scene and
-          the Image Gallery. The close affordance (mobile only) sits on the right. */}
+          the Image Gallery. The icon doubles as the collapse toggle (desktop
+          only); the close affordance (mobile only) sits on the right. */}
       <div className="h-16 px-4 flex-shrink-0 flex items-center justify-between">
-        <Image src="/book-open.svg" alt="Book" width={20} height={20} />
+        {onToggleCollapse ? (
+          <button
+            onClick={onToggleCollapse}
+            className="text-subtle hover:text-text transition-colors"
+            title={collapsed ? "Expand book panel" : "Collapse book panel"}
+            aria-label={collapsed ? "Expand book panel" : "Collapse book panel"}
+          >
+            <Image src="/book-open.svg" alt="Book" width={20} height={20} />
+          </button>
+        ) : (
+          <Image src="/book-open.svg" alt="Book" width={20} height={20} />
+        )}
         {onClose && (
           <button
             onClick={onClose}
@@ -734,6 +756,24 @@ export default function LeftColumn({
         )}
       </div>
 
+      {/* Body — fixed to the expanded width and faded via `collapsed`, independently
+          of the enclosing column's own (animating) width. This is what lets the
+          collapse/expand run as a pure fade: the body's layout never changes size,
+          it's just progressively revealed or hidden by the ancestor's overflow-hidden
+          as that column width tweens, concurrently with this opacity. */}
+      <div
+        className="flex flex-col flex-1 min-h-0"
+        style={
+          expandedWidth != null
+            ? {
+                width: expandedWidth,
+                opacity: collapsed ? 0 : 1,
+                transition: "opacity 200ms ease-in-out",
+                pointerEvents: collapsed ? "none" : undefined,
+              }
+            : undefined
+        }
+      >
       {/* Scrollable body */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-4">
 
@@ -978,6 +1018,7 @@ export default function LeftColumn({
             <circle cx="19" cy="12" r="1.5" />
           </svg>
         </button>
+      </div>
       </div>
     </div>
   );
