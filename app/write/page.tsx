@@ -37,6 +37,10 @@ function useColumnResize(storageKey: string, defaultPx: number, min: number, max
     } catch {}
     return defaultPx;
   });
+  // `resizing` is state (not just the `dragging` ref) so the column wrapper can
+  // drop its width transition mid-drag — otherwise the collapse/expand easing
+  // would also apply to resize, making the edge lag behind the cursor.
+  const [resizing, setResizing] = useState(false);
   const dragging = useRef(false);
   const startX = useRef(0);
   const startW = useRef(0);
@@ -46,6 +50,7 @@ function useColumnResize(storageKey: string, defaultPx: number, min: number, max
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     dragging.current = true;
+    setResizing(true);
     startX.current = e.clientX;
     startW.current = width;
     document.body.style.cursor = "col-resize";
@@ -63,6 +68,7 @@ function useColumnResize(storageKey: string, defaultPx: number, min: number, max
     function onMouseUp() {
       if (!dragging.current) return;
       dragging.current = false;
+      setResizing(false);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       // Persist only on drag-end, not on every frame.
@@ -76,7 +82,7 @@ function useColumnResize(storageKey: string, defaultPx: number, min: number, max
     };
   }, [min, max, direction, storageKey]);
 
-  return { width, onMouseDown };
+  return { width, onMouseDown, resizing };
 }
 
 // User-level view preferences (grid/list per section, scene visibility). These are
@@ -266,7 +272,7 @@ export default function WritePage() {
           className="flex-shrink-0 flex flex-col overflow-hidden"
           style={{
             width: leftCollapsed ? COLLAPSED_WIDTH : left.width,
-            transition: `width ${COLLAPSE_DURATION_MS}ms ease-in-out`,
+            transition: left.resizing ? "none" : `width ${COLLAPSE_DURATION_MS}ms ease-in-out`,
           }}
         >
           <LeftColumn
@@ -304,7 +310,7 @@ export default function WritePage() {
           className="flex-shrink-0 flex flex-col overflow-hidden"
           style={{
             width: rightCollapsed ? COLLAPSED_WIDTH : right.width,
-            transition: `width ${COLLAPSE_DURATION_MS}ms ease-in-out`,
+            transition: right.resizing ? "none" : `width ${COLLAPSE_DURATION_MS}ms ease-in-out`,
           }}
         >
           <RightColumn
