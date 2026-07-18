@@ -48,6 +48,12 @@ interface Props {
   onToggleLinks: () => void;
   sectionViews: Record<string, "grid" | "list">;
   onSetSectionView: (sectionId: string, view: "grid" | "list") => void;
+  // ── Side-by-side ──
+  // The chapter open in the second Chapter Editor, or null when side-by-side is
+  // off. `activeChapter` is always pane 1's chapter.
+  secondaryChapterId?: string | null;
+  focusedPane?: 1 | 2;
+  onOpenSideBySide?: (chapterId: string) => void;
   onClose?: () => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -89,6 +95,24 @@ function ConfirmModal({
   );
 }
 
+// ── Pane badge ────────────────────────────────────────────────────────────────
+
+// The "1"/"2" bubble marking which Chapter Editor a chapter is currently open in
+// while side-by-side is active. Colour tracks focus — accent for the focused
+// pane, subtle for the other — matching the chapter cell/row's own border.
+function PaneBubble({ pane, focused, className = "" }: { pane: 1 | 2; focused: boolean; className?: string }) {
+  return (
+    <span
+      className={`w-[15px] h-[15px] flex-shrink-0 rounded-full flex items-center justify-center text-[9px] font-semibold leading-none ${
+        focused ? "bg-accent text-text" : "bg-subtle text-muted"
+      } ${className}`}
+      title={`Open in Chapter Editor ${pane}`}
+    >
+      {pane}
+    </span>
+  );
+}
+
 // ── Section row ───────────────────────────────────────────────────────────────
 
 function SectionRow({
@@ -96,6 +120,8 @@ function SectionRow({
   sectionIndex,
   sectionCount,
   activeChapter,
+  secondaryChapterId,
+  focusedPane,
   onChapterClick,
   onAddChapter,
   onDeleteChapterRequest,
@@ -124,6 +150,8 @@ function SectionRow({
   sectionIndex: number;
   sectionCount: number;
   activeChapter: Chapter | undefined;
+  secondaryChapterId: string | null;
+  focusedPane: 1 | 2;
   onChapterClick: (id: string) => void;
   onAddChapter: (sectionId: string) => void;
   onDeleteChapterRequest: (chapter: Chapter) => void;
@@ -153,6 +181,12 @@ function SectionRow({
   clearChapterDropTarget: () => void;
 }) {
   const activeChapterId = activeChapter?.id ?? "";
+  // Which Chapter Editor a chapter is open in, or null if it isn't open. Outside
+  // side-by-side only pane 1 ever matches, so every chapter-styling rule below
+  // reduces to the old active/inactive split.
+  const paneOf = (chapterId: string): 1 | 2 | null =>
+    chapterId === activeChapterId ? 1 : chapterId && chapterId === secondaryChapterId ? 2 : null;
+  const sideBySide = secondaryChapterId != null;
   const sceneDrag = useSceneDrag();
   const chapterDrag = useChapterDrag();
   const [editingLabel, setEditingLabel] = useState(false);
@@ -334,6 +368,8 @@ function SectionRow({
           // A scene drag can't be shown between scenes in grid view, so a cell
           // just accepts a drop that appends the scene to that chapter.
           const isSceneDropChap = !!sceneDrag.payload && dropChapterId === ch.id;
+          const pane = paneOf(ch.id);
+          const paneFocused = pane === focusedPane;
           return (
           <div key={ch.id} className="relative group/chapter">
             <button
@@ -358,8 +394,10 @@ function SectionRow({
                 flex items-center justify-center px-1
                 transition-colors truncate leading-tight
                 ${chapterGrid.overIndex === i || isSceneDropChap || chapterDropGap === i ? "ring-2 ring-accent" : ""}
-                ${ch.id === activeChapterId
-                  ? "bg-elevated text-muted border-[1.5px] border-subtle"
+                ${pane
+                  ? `bg-elevated text-muted border-[1.5px] ${
+                      sideBySide && paneFocused ? "border-accent" : "border-subtle"
+                    }`
                   : "bg-panel text-subtle hover:bg-hover hover:text-text"
                 }
               `}
@@ -368,7 +406,20 @@ function SectionRow({
               <span className="truncate w-full text-center leading-tight">{ch.title}</span>
             </button>
 
+            {/* Pane bubble — centred on the cell's right edge, overhanging the top
+                by 5px. Occupies the same corner as the hover-× below, so the two
+                are mutually exclusive; an open chapter stays deletable via the
+                right-click menu. */}
+            {sideBySide && pane && (
+              <PaneBubble
+                pane={pane}
+                focused={paneFocused}
+                className="absolute -top-[5px] -right-[7.5px] z-10"
+              />
+            )}
+
             {/* Circle-× delete on hover */}
+            {!(sideBySide && pane) && (
             <button
               onClick={(e) => { e.stopPropagation(); onDeleteChapterRequest(ch); }}
               className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-bg border border-hover items-center justify-center hidden group-hover/chapter:flex text-subtle hover:text-error hover:border-error/40 transition-colors z-10"
@@ -378,6 +429,7 @@ function SectionRow({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+            )}
           </div>
           );
         })}
@@ -399,7 +451,11 @@ function SectionRow({
       /* Chapter list — active chapter expands to show its scene descriptions */
       <div className="flex flex-col gap-0.5">
         {section.chapters.map((ch, i) => {
-          const isActive = ch.id === activeChapterId;
+          const pane = paneOf(ch.id);
+          const paneFocused = pane === focusedPane;
+          // In side-by-side BOTH open chapters get the open treatment (border +
+          // expanded scenes); only the border/bubble colour distinguishes focus.
+          const isActive = pane !== null;
           const chDrop = chapterList.dropZoneProps(i);
           const sceneActive = !!sceneDrag.payload;
           // Which chapter's scenes are VISUALLY open: while a scene is dragged only
@@ -444,7 +500,9 @@ function SectionRow({
               title={ch.title}
               className={`flex items-center gap-2 group/chapter px-2 py-1.5 rounded transition-colors cursor-pointer ${
                 isDropTarget ? "ring-1 ring-accent" : ""
-              } ${isActive ? "bg-elevated border border-subtle" : "hover:bg-panel"}`}
+              } ${isActive
+                ? `bg-elevated border ${sideBySide && paneFocused ? "border-accent" : "border-subtle"}`
+                : "hover:bg-panel"}`}
             >
               {/* Chapter marker — a small rectangle echoing the grid-view cell:
                   active gets a border + fill, inactive is a solid fill. */}
@@ -458,6 +516,12 @@ function SectionRow({
               }`}>
                 {ch.title || "Untitled chapter"}
               </span>
+              {/* Pane bubble sits inside the row at its right edge. Like grid view
+                  it replaces the hover-× for an open chapter (delete stays on the
+                  right-click menu). */}
+              {sideBySide && pane ? (
+                <PaneBubble pane={pane} focused={paneFocused} />
+              ) : (
               <button
                 onClick={(e) => { e.stopPropagation(); onDeleteChapterRequest(ch); }}
                 className="hidden group-hover/chapter:flex text-subtle hover:text-error transition-colors flex-shrink-0"
@@ -467,6 +531,7 @@ function SectionRow({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
+              )}
             </div>
 
             {/* Scene descriptions — nested under the chapter, text-only, tightly
@@ -564,6 +629,9 @@ export default function LeftColumn({
   onToggleLinks,
   sectionViews,
   onSetSectionView,
+  secondaryChapterId = null,
+  focusedPane = 1,
+  onOpenSideBySide,
   onClose,
   collapsed,
   onToggleCollapse,
@@ -619,18 +687,26 @@ export default function LeftColumn({
   // Right-click chapter menu (Duplicate / Delete), positioned at the cursor.
   const [chapterMenu, setChapterMenu] = useState<{ chapter: Chapter; x: number; y: number } | null>(null);
   const openChapterMenu = (chapter: Chapter, x: number, y: number) => setChapterMenu({ chapter, x, y });
+  const chapterMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!chapterMenu) return;
     const close = () => setChapterMenu(null);
-    // Close on any outside interaction. mousedown (capture) covers clicks;
-    // scroll/resize/Escape cover the rest. The menu's own buttons close it too.
-    document.addEventListener("mousedown", close);
+    // Close on outside interaction only. A mousedown INSIDE the menu must not
+    // close it: React would unmount the item before the click landed, so the
+    // item's onClick never ran. The container's onMouseDown stopPropagation
+    // can't prevent this — React delegates from the same node this listener is
+    // on, and stopPropagation doesn't stop co-located listeners.
+    const closeOnOutsideMouseDown = (e: MouseEvent) => {
+      if (chapterMenuRef.current?.contains(e.target as Node)) return;
+      close();
+    };
+    document.addEventListener("mousedown", closeOnOutsideMouseDown);
     document.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", close);
+      document.removeEventListener("mousedown", closeOnOutsideMouseDown);
       document.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
       document.removeEventListener("keydown", onKey);
@@ -678,10 +754,36 @@ export default function LeftColumn({
           section kebab menu. Closes on outside interaction (see effect above). */}
       {chapterMenu && (
         <div
-          className="fixed z-50 w-36 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden"
+          ref={chapterMenuRef}
+          className="fixed z-50 w-44 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden"
           style={{ left: chapterMenu.x, top: chapterMenu.y }}
-          onMouseDown={(e) => e.stopPropagation()}
         >
+          {/* Open side-by-side — desktop only (the mobile panel passes no handler).
+              Disabled for a chapter that's already open in either editor: there'd
+              be nowhere to put it, and the two editors can't show the same chapter. */}
+          {onOpenSideBySide && (
+            <>
+              {(() => {
+                const alreadyOpen =
+                  chapterMenu.chapter.id === activeChapter?.id ||
+                  chapterMenu.chapter.id === secondaryChapterId;
+                return (
+                  <button
+                    disabled={alreadyOpen}
+                    onClick={() => { onOpenSideBySide(chapterMenu.chapter.id); setChapterMenu(null); }}
+                    className={`block w-full text-left px-4 py-2.5 text-xs transition-colors ${
+                      alreadyOpen
+                        ? "text-subtle/40 cursor-default"
+                        : "text-text hover:bg-hover"
+                    }`}
+                  >
+                    Open side-by-side
+                  </button>
+                );
+              })()}
+              <div className="h-px bg-hover" />
+            </>
+          )}
           <button
             onClick={() => { onDuplicateChapter(chapterMenu.chapter.id); setChapterMenu(null); }}
             className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
@@ -884,6 +986,8 @@ export default function LeftColumn({
               sectionIndex={i}
               sectionCount={sections.length}
               activeChapter={activeChapter}
+              secondaryChapterId={secondaryChapterId}
+              focusedPane={focusedPane}
               onChapterClick={onChapterClick}
               onAddChapter={onAddChapter}
               onDeleteChapterRequest={(ch) => setConfirmDeleteChapter(ch)}

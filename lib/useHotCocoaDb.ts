@@ -137,10 +137,19 @@ export function useHotCocoaDb() {
     if (loadedChapterIds.current.has(chapterId)) return;
     loadedChapterIds.current.add(chapterId);
 
-    const [scenes, library] = await Promise.all([
-      db.getScenesForChapter(chapterId),
-      db.getLibraryForChapter(chapterId),
-    ]);
+    let scenes, library;
+    try {
+      [scenes, library] = await Promise.all([
+        db.getScenesForChapter(chapterId),
+        db.getLibraryForChapter(chapterId),
+      ]);
+    } catch (err) {
+      // Roll the dedup entry back, otherwise this chapter is marked "in flight"
+      // forever and every later attempt short-circuits — leaving its editor stuck
+      // on the loading skeleton with no way to recover short of a reload.
+      loadedChapterIds.current.delete(chapterId);
+      throw err;
+    }
 
     setSections((prev) => mapChapter(prev, chapterId, (c) => ({ ...c, scenes, library })));
     setLoadedChapters((prev) => {
@@ -917,6 +926,13 @@ export function useHotCocoaDb() {
   const allChapters = sections.flatMap((s) => s.chapters);
   const activeChapter = allChapters.find((c) => c.id === activeChapterId) ?? allChapters[0];
   const activeChapterLoaded = activeChapter ? loadedChapters.has(activeChapter.id) : false;
+  // Side-by-side's second pane resolves its own chapter, so it needs the same
+  // "is this one's content here yet?" test the active pane gets. Background
+  // prefetch usually wins the race, but a pane restored on first paint can beat it.
+  const isChapterLoaded = useCallback(
+    (chapterId: string) => loadedChapters.has(chapterId),
+    [loadedChapters]
+  );
   // Recomputes only when `sections` changes identity; the per-chapter cache
   // then makes that recompute touch just the edited chapter.
   const wordCount = useMemo(() => wordCountAll(sections), [sections]);
@@ -927,6 +943,8 @@ export function useHotCocoaDb() {
     saveStatus,
     activeChapter,
     activeChapterLoaded,
+    isChapterLoaded,
+    loadChapter,
     sections,
     wordCount,
     unlocks,
