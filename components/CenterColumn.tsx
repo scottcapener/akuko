@@ -22,11 +22,24 @@ interface Props {
   onAddImage: (chapterId: string, img: LibraryImage) => void;
   loading?: boolean;
   scenesVisible?: boolean;
+  // ── Side-by-side ──
+  // `focused` is undefined in ordinary single-editor Write mode, which suppresses
+  // the focus rail entirely. In side-by-side both panes pass a boolean and the
+  // rail cross-fades between them.
+  focused?: boolean;
+  onFocusPane?: () => void;
+  // Only the second pane passes this; it renders the × that closes side-by-side.
+  onClose?: () => void;
 }
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
+
+// Matches both the collapsible panels' fade and the fade step of the side-by-side
+// enter/exit sequence in app/write, so the rail appearing and the pane appearing
+// read as one motion.
+const FOCUS_FADE_MS = 200;
 
 // The scene body's first-line indent comes from a CSS class (`indent-9`, 36px)
 // on the editor container, not from the markup itself — so copied HTML carries
@@ -330,6 +343,9 @@ export default function CenterColumn({
   onAddImage,
   loading = false,
   scenesVisible = true,
+  focused,
+  onFocusPane,
+  onClose,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useAutoScrollOnDrag(scrollRef);
@@ -369,11 +385,26 @@ export default function CenterColumn({
       className="flex flex-col h-full bg-bg w-full relative"
       data-paste-scope="center"
       onPaste={handlePaste}
+      // Capture phase, so focusing the pane wins even when the click lands on a
+      // child that stops propagation (scene buttons, the title input, etc.).
+      // `onFocusCapture` covers keyboard traversal into the pane.
+      onMouseDownCapture={onFocusPane}
+      onFocusCapture={onFocusPane}
     >
+      {/* Focus rail. Drawn as an overlay rather than a real border-top so that
+          gaining or losing focus never reflows the chapter by 2px, and so it can
+          fade on its own — a border-color transition would have to animate from
+          the accent to transparent, which reads as a grey ghost on the way out. */}
+      {focused !== undefined && (
+        <div
+          className="absolute inset-x-0 top-0 h-0.5 bg-accent z-30 pointer-events-none"
+          style={{ opacity: focused ? 1 : 0, transition: `opacity ${FOCUS_FADE_MS}ms ease-in-out` }}
+        />
+      )}
       {/* Save indicator */}
       {saveStatus !== "idle" && (
         <div
-          className={`absolute top-4 right-4 text-[10px] uppercase tracking-widest transition-opacity z-10 ${
+          className={`absolute top-4 ${onClose ? "right-12" : "right-4"} text-[10px] uppercase tracking-widest transition-opacity z-10 ${
             saveStatus === "saving" ? "text-subtle" : saveStatus === "error" ? "text-error" : "text-accent"
           }`}
         >
@@ -387,7 +418,7 @@ export default function CenterColumn({
 
       {/* Chapter Header — fixed h-16 so it matches the Book/Library Panel Headers;
           this keeps Cover, first Scene, and Gallery tops on the same baseline. */}
-      <div className="h-16 flex items-center justify-center border-b border-border-subtle flex-shrink-0">
+      <div className="h-16 flex items-center justify-center border-b border-border-subtle flex-shrink-0 relative">
         <div className="w-full max-w-[700px] px-6">
           <input
             value={chapter.title}
@@ -396,6 +427,20 @@ export default function CenterColumn({
             className="w-full bg-transparent text-heading-l text-text placeholder:text-subtle/40 focus:outline-none"
           />
         </div>
+        {/* Close side-by-side — second pane only. Sits at the column's right edge
+            rather than inside the centred title container, per the design. */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="absolute right-4 p-1 rounded text-subtle hover:text-text transition-colors"
+            title="Close side-by-side"
+            aria-label="Close side-by-side"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Scene feed */}
