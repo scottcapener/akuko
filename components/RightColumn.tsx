@@ -240,7 +240,9 @@ function NoteLightbox({
           autoCorrect="on"
           autoCapitalize="sentences"
           spellCheck
-          autoComplete="off"
+          // autoComplete isn't in React's div prop types (form-elements only),
+          // but the DOM attribute is honored on contentEditable — spread it in.
+          {...({ autoComplete: "off" } as Record<string, string>)}
           data-1p-ignore
           data-lpignore="true"
           data-form-type="other"
