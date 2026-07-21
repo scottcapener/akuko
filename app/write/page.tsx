@@ -398,7 +398,7 @@ export default function WritePage() {
 
   useEffect(() => {
     const name = store.book?.title?.trim();
-    document.title = name ? `Hot Cocoa – ${name}` : "Hot Cocoa";
+    document.title = name ? `${name} on Hot Cocoa` : "Hot Cocoa";
   }, [store.book?.title]);
 
   if (!store.hydrated || !store.book || !store.activeChapter) {

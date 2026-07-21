@@ -216,6 +216,12 @@ function SceneBlock({
               maxLength={260}
               value={scene.label}
               placeholder="Scene description…"
+              autoComplete="off"
+              autoCorrect="on"
+              autoCapitalize="sentences"
+              data-1p-ignore
+              data-lpignore="true"
+              data-form-type="other"
               onChange={(e) => onSceneChange(chapterId, scene.id, { label: e.target.value })}
               onClick={(e) => e.stopPropagation()}
               onFocus={() => setFocused(true)}
@@ -286,6 +292,21 @@ function SceneBlock({
           ref={bodyRef}
           contentEditable
           suppressContentEditableWarning
+          role="textbox"
+          aria-multiline="true"
+          // Freeform prose: enable sentence-casing/autocorrect/spellcheck, and
+          // opt out of autofill. iOS otherwise can't classify a bare
+          // contentEditable and pops its password/card/contact AutoFill bar over
+          // the keyboard (mis-reading the field as a credential input).
+          autoCorrect="on"
+          autoCapitalize="sentences"
+          spellCheck
+          // autoComplete isn't in React's div prop types (form-elements only),
+          // but the DOM attribute is honored on contentEditable — spread it in.
+          {...({ autoComplete: "off" } as Record<string, string>)}
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
           onFocus={() => { setFocused(true); setConfirmDelete(false); }}
           onBlur={() => setFocused(false)}
           onInput={() => onSceneChange(chapterId, scene.id, { body: bodyRef.current?.innerHTML ?? "" })}

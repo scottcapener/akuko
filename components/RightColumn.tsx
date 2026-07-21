@@ -215,6 +215,12 @@ function NoteLightbox({
             value={note.title}
             onChange={(e) => onUpdate(note.id, { title: e.target.value })}
             placeholder="Worldbuilding, character arc, story beats…"
+            autoComplete="off"
+            autoCorrect="on"
+            autoCapitalize="sentences"
+            data-1p-ignore
+            data-lpignore="true"
+            data-form-type="other"
             className="w-full bg-transparent text-text text-base font-bold placeholder:text-subtle/35 focus:outline-none"
           />
         </div>
@@ -226,6 +232,20 @@ function NoteLightbox({
           ref={bodyRef}
           contentEditable
           suppressContentEditableWarning
+          role="textbox"
+          aria-multiline="true"
+          // Freeform prose — signal a plain text editor and opt out of autofill
+          // so iOS doesn't pop its password/card/contact AutoFill bar (see the
+          // matching note in CenterColumn's scene body).
+          autoCorrect="on"
+          autoCapitalize="sentences"
+          spellCheck
+          // autoComplete isn't in React's div prop types (form-elements only),
+          // but the DOM attribute is honored on contentEditable — spread it in.
+          {...({ autoComplete: "off" } as Record<string, string>)}
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
           onInput={() => onUpdate(note.id, { body: bodyRef.current?.innerHTML ?? "" })}
           onPaste={handlePaste}
           onKeyDown={handleBodyKeyDown}
