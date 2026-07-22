@@ -22,6 +22,11 @@ interface Props {
   onAddImage: (chapterId: string, img: LibraryImage) => void;
   loading?: boolean;
   scenesVisible?: boolean;
+  // A request from the Book Panel to reveal a specific scene: scroll it into view
+  // and place the caret in its body. `nonce` bumps on every click so re-clicking
+  // the same scene re-fires. Self-guarded by scene id, so the panes that don't
+  // hold the scene simply find nothing and no-op.
+  scrollToScene?: { sceneId: string; nonce: number } | null;
   // ── Side-by-side ──
   // `focused` is undefined in ordinary single-editor Write mode, which suppresses
   // the focus rail entirely. In side-by-side both panes pass a boolean and the
@@ -198,6 +203,7 @@ function SceneBlock({
   return (
     <div
       {...dropZoneProps(index)}
+      data-scene-id={scene.id}
       className={`rounded-lg transition-colors relative group/scene ${
         scenesVisible ? "" : "mb-2"
       } ${focused || editingLabel ? "bg-elevated" : "bg-transparent hover:bg-panel"}`}
@@ -364,12 +370,33 @@ export default function CenterColumn({
   onAddImage,
   loading = false,
   scenesVisible = true,
+  scrollToScene,
   focused,
   onFocusPane,
   onClose,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useAutoScrollOnDrag(scrollRef);
+
+  // Reveal the scene the Book Panel asked for. Scoped to this pane's scroll
+  // container, so only the pane actually rendering that scene reacts — the id is
+  // unique across chapters, so the others' querySelector comes back empty. The
+  // element's own scrollIntoView drives the smooth scroll; focusing the body then
+  // drops the caret there (preventScroll so it doesn't fight the smooth scroll).
+  const scrollNonce = scrollToScene?.nonce;
+  const scrollSceneId = scrollToScene?.sceneId;
+  useEffect(() => {
+    if (!scrollSceneId || !scrollRef.current) return;
+    const el = scrollRef.current.querySelector<HTMLElement>(
+      `[data-scene-id="${CSS.escape(scrollSceneId)}"]`
+    );
+    // offsetParent is null for a hidden pane (the mobile/desktop layout the
+    // viewport isn't showing) — skip it so focus never lands off-screen.
+    if (!el || el.offsetParent === null) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.querySelector<HTMLElement>('[contenteditable="true"]')?.focus({ preventScroll: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollNonce]);
   const sceneReorder = useReorderList((from, to) => onReorderScenes(chapter.id, from, to));
   const sceneDrag = useSceneDrag();
   const prevPayload = useRef<SceneDragPayload | null>(null);

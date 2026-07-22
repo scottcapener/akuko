@@ -238,6 +238,24 @@ export default function WritePage() {
     if (store.hydrated && secondaryChapterId) loadChapter(secondaryChapterId);
   }, [store.hydrated, secondaryChapterId, loadChapter]);
 
+  // ── Scene navigation ────────────────────────────────────────────────────────
+  // Clicking a scene in the Book Panel (list view) reveals it in the Chapter
+  // Editor. The nonce bumps every click so re-clicking the same scene re-fires
+  // the reveal; the target is broadcast to every Chapter Editor and each self-
+  // guards by scene id (see CenterColumn).
+  const sceneScrollNonce = useRef(0);
+  const [sceneScrollTarget, setSceneScrollTarget] = useState<{ sceneId: string; nonce: number } | null>(null);
+  const handleSceneClick = useCallback((chapterId: string, sceneId: string) => {
+    // In side-by-side, focus the pane that holds the clicked scene's chapter so
+    // the reveal lands in the pane the user is looking at.
+    if (secondaryChapterId != null) {
+      if (chapterId === secondaryChapterId) setFocusedPane(2);
+      else if (chapterId === activeChapterId) setFocusedPane(1);
+    }
+    sceneScrollNonce.current += 1;
+    setSceneScrollTarget({ sceneId, nonce: sceneScrollNonce.current });
+  }, [secondaryChapterId, activeChapterId, setFocusedPane]);
+
   const setActiveChapter = store.setActiveChapter;
   const handleChapterClick = useCallback((id: string) => {
     if (secondaryChapterId == null) { setActiveChapter(id); return; }
@@ -480,6 +498,7 @@ export default function WritePage() {
     onDeleteScene: store.deleteScene,
     onAddImage: store.addLibraryImage,
     scenesVisible,
+    scrollToScene: sceneScrollTarget,
   };
 
   const rightProps = {
@@ -536,6 +555,7 @@ export default function WritePage() {
           <LeftColumn
             {...leftProps}
             onChapterClick={handleChapterClick}
+            onSceneClick={handleSceneClick}
             onAddChapter={store.addChapter}
             secondaryChapterId={secondaryChapterId}
             focusedPane={focusedPane}
@@ -638,6 +658,7 @@ export default function WritePage() {
         <LeftColumn
           {...leftProps}
           onChapterClick={(id) => { store.setActiveChapter(id); setMobilePanel(null); }}
+          onSceneClick={(chapterId, sceneId) => { handleSceneClick(chapterId, sceneId); setMobilePanel(null); }}
           onAddChapter={(sectionId) => { store.addChapter(sectionId); setMobilePanel(null); }}
           onDeleteChapter={store.deleteChapter}
           onClose={() => setMobilePanel(null)}
