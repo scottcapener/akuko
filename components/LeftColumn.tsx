@@ -30,6 +30,8 @@ interface Props {
   activeChapter: Chapter;
   onBookTitleChange: (t: string) => void;
   onChapterClick: (id: string) => void;
+  // Click a scene row (list view, open chapter) to reveal it in the Chapter Editor.
+  onSceneClick?: (chapterId: string, sceneId: string) => void;
   onCoverImage: (file: File | undefined, previewDataUrl?: string) => void;
   onRefreshCover?: () => void;
   onAddChapter: (sectionId: string) => void;
@@ -123,6 +125,7 @@ function SectionRow({
   secondaryChapterId,
   focusedPane,
   onChapterClick,
+  onSceneClick,
   onAddChapter,
   onDeleteChapterRequest,
   onReorderChapters,
@@ -153,6 +156,7 @@ function SectionRow({
   secondaryChapterId: string | null;
   focusedPane: 1 | 2;
   onChapterClick: (id: string) => void;
+  onSceneClick?: (chapterId: string, sceneId: string) => void;
   onAddChapter: (sectionId: string) => void;
   onDeleteChapterRequest: (chapter: Chapter) => void;
   onReorderChapters: (sectionId: string, from: number, to: number) => void;
@@ -563,12 +567,13 @@ function SectionRow({
                         {isDropTarget && <DropLine active={dropGap === si} className="pl-8" />}
                         <div
                           {...sceneSourceProps(scene, ch.id, si)}
+                          onClick={() => onSceneClick?.(ch.id, scene.id)}
                           onDragOver={sceneActive ? (e) => { if (!sceneDrag.payload) return; e.preventDefault(); setSceneDropTarget(ch.id, gapFromEvent(e, si)); } : undefined}
                           onDrop={sceneActive ? (e) => { e.preventDefault(); e.stopPropagation(); dropSceneInto(ch.id, dropGap ?? gapFromEvent(e, si)); } : undefined}
                           title={scene.label || "Untitled scene"}
-                          className="px-2 py-0.5 pl-8 cursor-grab active:cursor-grabbing"
+                          className="group/scene px-2 py-0.5 pl-8 cursor-pointer active:cursor-grabbing"
                         >
-                          <span className={`block text-xs truncate ${
+                          <span className={`block text-xs truncate transition-colors group-hover/scene:text-muted ${
                             scene.label ? "text-subtle" : "text-subtle/35 italic"
                           }`}>
                             {scene.label || "Untitled scene"}
@@ -611,6 +616,7 @@ export default function LeftColumn({
   activeChapter,
   onBookTitleChange,
   onChapterClick,
+  onSceneClick,
   onCoverImage,
   onRefreshCover,
   onAddChapter,
@@ -989,6 +995,7 @@ export default function LeftColumn({
               secondaryChapterId={secondaryChapterId}
               focusedPane={focusedPane}
               onChapterClick={onChapterClick}
+              onSceneClick={onSceneClick}
               onAddChapter={onAddChapter}
               onDeleteChapterRequest={(ch) => setConfirmDeleteChapter(ch)}
               onReorderChapters={onReorderChapters}
