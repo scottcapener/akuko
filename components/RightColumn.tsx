@@ -900,7 +900,7 @@ export default function RightColumn({
           </button>
         </div>
         {chapter.library.musicLinks.length > 0 && (
-          <div className="flex flex-col">
+          <div className="flex flex-col" {...musicReorder.containerProps()}>
             {chapter.library.musicLinks.map((link, i) => (
               <Fragment key={link.id}>
                 <DropLine active={musicReorder.activeGap === i} />
@@ -968,7 +968,7 @@ export default function RightColumn({
           </button>
         </div>
         {chapter.library.notes.length > 0 && (
-          <div className="flex flex-col">
+          <div className="flex flex-col" {...noteReorder.containerProps()}>
             {chapter.library.notes.map((note, i) => (
               <Fragment key={note.id}>
                 <DropLine active={noteReorder.activeGap === i} />
