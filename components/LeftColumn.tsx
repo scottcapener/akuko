@@ -453,7 +453,11 @@ function SectionRow({
       </div>
       ) : (
       /* Chapter list — active chapter expands to show its scene descriptions */
-      <div className="flex flex-col gap-0.5">
+      /* containerProps catches drops that land on an insertion line: the line has
+         no handler of its own, so without this the drop bubbles to the section
+         wrapper's dropZone, which bails (its drag ref is null during a chapter
+         drag) and never preventDefaults — leaving the line inert. */
+      <div className="flex flex-col gap-0.5" {...chapterList.containerProps()}>
         {section.chapters.map((ch, i) => {
           const pane = paneOf(ch.id);
           const paneFocused = pane === focusedPane;
@@ -984,6 +988,10 @@ export default function LeftColumn({
         </div>
 
         {/* ── Sections ── */}
+        {/* Wrapper (not the scroll body) owns containerProps so insertion-line
+            drops commit here, without the cover drop zone above also bubbling
+            into a section reorder. */}
+        <div {...sectionReorder.containerProps()}>
         {sections.map((section, i) => (
           <Fragment key={section.id}>
             <DropLine active={sectionReorder.activeGap === i} />
@@ -1022,6 +1030,7 @@ export default function LeftColumn({
           </Fragment>
         ))}
         <DropLine active={sectionReorder.activeGap === sections.length} />
+        </div>
       </div>
 
       {/* ── Logo + user menu ── */}
