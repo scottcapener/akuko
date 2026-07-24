@@ -250,6 +250,12 @@ export default function SignupPage() {
             </div>
             <ErrorMsg msg={error} />
             <Button loading={loading} onClick={handleStep1}>Continue</Button>
+            <p className="text-center text-subtle/50 text-[11px] leading-5">
+              By creating an account, you agree to our{" "}
+              <Link href="/terms" className="text-subtle hover:text-accent underline underline-offset-2">Terms of Service</Link>
+              {" "}and{" "}
+              <Link href="/privacy" className="text-subtle hover:text-accent underline underline-offset-2">Privacy Policy</Link>.
+            </p>
             <p className="text-center text-subtle/60 text-xs">
               Already have an account?{" "}
               <Link href="/login" className="text-subtle hover:text-accent underline underline-offset-2">Log in</Link>
