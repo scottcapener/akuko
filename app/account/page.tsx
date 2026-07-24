@@ -168,6 +168,13 @@ export default function AccountPage() {
           )}
         </div>
 
+        {/* Legal */}
+        <div className="flex items-center gap-4 pt-2 text-[11px] text-subtle/60">
+          <Link href="/terms" className="hover:text-accent transition-colors">Terms of Service</Link>
+          <span className="text-subtle/30">·</span>
+          <Link href="/privacy" className="hover:text-accent transition-colors">Privacy Policy</Link>
+        </div>
+
       </div>
     </div>
   );

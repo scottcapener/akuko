@@ -49,6 +49,7 @@ Defined in `globals.css` via `--text-*` modifiers. Prefer these over ad-hoc `tex
 
 | Utility          | Size / line-height / weight | Usage                                   |
 | ---------------- | --------------------------- | --------------------------------------- |
+| `text-heading-xl`| 33 / 1.1 / 600 (Semi Bold)  | Standalone page titles (Terms, Privacy) |
 | `text-heading-l` | 20 / 1 / 600 (Semi Bold)    | Chapter title                           |
 | `text-heading-m` | 14 / 1 / 500 (Medium)       | Book title, primary button label        |
 | `text-body-l`    | 16 / 24 / 400               | Note body                               |
