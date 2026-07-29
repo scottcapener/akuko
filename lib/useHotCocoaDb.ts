@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createClient } from "./supabase/client";
 import { ensureDevSession } from "./ensureDevSession";
 import * as db from "./db";
+import * as offlineQueue from "./offlineQueue";
 import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink, LibraryLink } from "./types";
 
-export type SaveStatus = "idle" | "saving" | "saved" | "error";
+export type SaveStatus = "idle" | "saving" | "saved" | "error" | "offline";
 
 // Autosave is debounced: a burst of typing collapses into one write DELAY ms
 // after the last keystroke. MAX_WAIT caps how long unsaved edits can sit while
@@ -196,14 +197,28 @@ export function useHotCocoaDb() {
 
   const flushSaves = useCallback(async () => {
     if (pendingSaves.current.size === 0) return;
+    // Offline: leave the queue intact (it's mirrored in IndexedDB too) and wait.
+    // The `online` / focus listeners replay it, so there's no red "error" flash
+    // and no retry spam while there's genuinely no network.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setSaveStatus("offline");
+      return;
+    }
     firstPendingAt.current = null;
     setSaveStatus("saving");
     const saves = Array.from(pendingSaves.current.entries());
     pendingSaves.current.clear();
 
-    const results = await Promise.allSettled(
-      saves.map(([sceneId, patch]) => db.saveScene(sceneId, patch))
+    // One tab at a time drains the shared queue, so two open tabs can't race the
+    // same write (no-op lock where Web Locks is unsupported).
+    const results = await offlineQueue.runExclusive(() =>
+      Promise.allSettled(saves.map(([sceneId, patch]) => db.saveScene(sceneId, patch)))
     );
+
+    // Drop durable copies of everything that reached the server; anything that
+    // failed stays queued in IndexedDB for the next replay.
+    const succeeded = saves.filter((_, i) => results[i].status === "fulfilled").map(([id]) => id);
+    if (succeeded.length > 0) offlineQueue.removeSceneWrites(succeeded).catch(() => {});
 
     // Re-queue any failed scene beneath edits that arrived while saving (newer
     // typing wins), so a transient failure retries instead of losing the edit.
@@ -237,6 +252,101 @@ export function useHotCocoaDb() {
 
   flushSavesRef.current = flushSaves;
 
+  // ── Durable-queue recovery ──────────────────────────────────────────────
+  // Pull any edits left in IndexedDB — from a closed tab, a crash, or another
+  // tab — back into the in-memory queue and flush them. Runs after hydration
+  // and again on reconnect / focus / cross-tab signal.
+  const recoverAndFlush = useCallback(async () => {
+    if (!userId) return;
+    const [sceneWrites, noteWrites] = await Promise.all([
+      offlineQueue.readSceneWrites(userId),
+      offlineQueue.readNoteWrites(userId),
+    ]);
+    if (sceneWrites.length === 0 && noteWrites.length === 0) return;
+
+    const online = typeof navigator === "undefined" || navigator.onLine;
+
+    // Scenes: merge into the in-memory queue (an in-tab edit stays newest) and
+    // reflect edits recovered from elsewhere in any loaded editor.
+    const showScenes = new Map<string, offlineQueue.ScenePatch>();
+    for (const { id, patch } of sceneWrites) {
+      const active = pendingSaves.current.get(id);
+      if (active) {
+        // Actively editing here; the in-memory copy is newer — don't disturb it.
+        pendingSaves.current.set(id, { ...patch, ...active });
+      } else {
+        // From a prior session / other tab: queue it and surface it so a
+        // recovered edit is visible, not just re-synced.
+        pendingSaves.current.set(id, patch);
+        showScenes.set(id, patch);
+      }
+    }
+
+    // Notes have no batched flush, so replay each durable copy directly when
+    // online — idempotent, since IndexedDB always holds the latest note text.
+    // Only surface notes that aren't being actively typed, so a live edit in
+    // this tab isn't reverted to a slightly older durable value.
+    const showNotes = new Map<string, offlineQueue.NotePatch>();
+    for (const { id, patch } of noteWrites) {
+      if (!pendingNoteSaves.current.has(id)) showNotes.set(id, patch);
+      if (online) {
+        db.updateNote(id, patch)
+          .then(() => offlineQueue.removeNoteWrites([id]))
+          .catch(() => {});
+      }
+    }
+
+    if (showScenes.size > 0 || showNotes.size > 0) {
+      setSections((prev) =>
+        prev.map((sec) => ({
+          ...sec,
+          chapters: sec.chapters.map((ch) => {
+            let touched = false;
+            const scenes = showScenes.size
+              ? ch.scenes.map((s) => {
+                  const patch = showScenes.get(s.id);
+                  if (!patch) return s;
+                  touched = true;
+                  return { ...s, ...patch };
+                })
+              : ch.scenes;
+            const notes = showNotes.size
+              ? ch.library.notes.map((n) => {
+                  const patch = showNotes.get(n.id);
+                  if (!patch) return n;
+                  touched = true;
+                  return { ...n, ...patch };
+                })
+              : ch.library.notes;
+            return touched ? { ...ch, scenes, library: { ...ch.library, notes } } : ch;
+          }),
+        }))
+      );
+    }
+
+    if (pendingSaves.current.size > 0) flushSavesRef.current();
+  }, [userId]);
+
+  useEffect(() => {
+    if (!hydrated || !userId) return;
+    recoverAndFlush();
+  }, [hydrated, userId, recoverAndFlush]);
+
+  useEffect(() => {
+    const onOnline = () => recoverAndFlush();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") recoverAndFlush();
+    };
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisible);
+    const unsubscribe = offlineQueue.subscribeQueue(() => recoverAndFlush());
+    return () => {
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
+      unsubscribe();
+    };
+  }, [recoverAndFlush]);
+
   // Persist any pending scene/note edits immediately when the writer unmounts
   // (e.g. navigating to /backups or /books) or the tab is hidden. Autosaves are
   // otherwise 30s-debounced, so without this a backup taken elsewhere could
@@ -248,12 +358,22 @@ export function useHotCocoaDb() {
       const saves = Array.from(pendingSaves.current.entries());
       pendingSaves.current.clear();
       // Best-effort on unmount/hide — can't re-queue after we're gone, so just
-      // swallow failures (the debounce keeps the unsaved window small anyway).
-      saves.forEach(([sceneId, patch]) => db.saveScene(sceneId, patch).catch(() => {}));
+      // swallow failures. The edit stays in IndexedDB until it saves, so a
+      // failure here (e.g. hidden while offline) is replayed on the next visit;
+      // clear the durable copy only once the server has it.
+      saves.forEach(([sceneId, patch]) =>
+        db
+          .saveScene(sceneId, patch)
+          .then(() => offlineQueue.removeSceneWrites([sceneId]))
+          .catch(() => {})
+      );
     }
     if (pendingNoteSaves.current.size > 0) {
       pendingNoteSaves.current.forEach((update, noteId) =>
-        db.updateNote(noteId, update).catch(() => {})
+        db
+          .updateNote(noteId, update)
+          .then(() => offlineQueue.removeNoteWrites([noteId]))
+          .catch(() => {})
       );
       pendingNoteSaves.current.clear();
     }
@@ -477,10 +597,14 @@ export function useHotCocoaDb() {
         }))
       );
       const existing = pendingSaves.current.get(sceneId) ?? {};
-      pendingSaves.current.set(sceneId, { ...existing, ...patch });
+      const merged = { ...existing, ...patch };
+      pendingSaves.current.set(sceneId, merged);
+      // Mirror to IndexedDB so the edit survives a tab close / crash before the
+      // debounced flush fires. Fire-and-forget; the in-memory queue is primary.
+      if (userId) offlineQueue.enqueueSceneWrite(userId, sceneId, merged).catch(() => {});
       scheduleSave();
     },
-    [scheduleSave]
+    [scheduleSave, userId]
   );
 
   const addScene = useCallback(
@@ -800,8 +924,11 @@ export function useHotCocoaDb() {
           },
         }))
       );
-      const existing = pendingNoteSaves.current.get(noteId) ?? {};
-      pendingNoteSaves.current.set(noteId, { ...existing, ...patch });
+      const merged = { ...(pendingNoteSaves.current.get(noteId) ?? {}), ...patch };
+      pendingNoteSaves.current.set(noteId, merged);
+      // Mirror to IndexedDB so an offline note edit survives a tab close; the
+      // reconnect/focus recovery replays it. Fire-and-forget.
+      if (userId) offlineQueue.enqueueNoteWrite(userId, noteId, merged).catch(() => {});
       const existingTimer = noteTimers.current.get(noteId);
       if (existingTimer) clearTimeout(existingTimer);
       noteTimers.current.set(
@@ -811,16 +938,20 @@ export function useHotCocoaDb() {
           noteTimers.current.delete(noteId);
           if (!update) return;
           pendingNoteSaves.current.delete(noteId);
-          // On failure, restore beneath any newer edit so the note isn't lost;
-          // it retries on the next keystroke or the unmount/hide flush.
-          db.updateNote(noteId, update).catch(() => {
-            const newer = pendingNoteSaves.current.get(noteId);
-            pendingNoteSaves.current.set(noteId, { ...update, ...newer });
-          });
+          // On success, drop the durable copy. On failure, restore beneath any
+          // newer edit so the note isn't lost — it retries on the next
+          // keystroke, the unmount/hide flush, or reconnect recovery (the
+          // durable copy stays in IndexedDB until a save lands).
+          db.updateNote(noteId, update)
+            .then(() => offlineQueue.removeNoteWrites([noteId]))
+            .catch(() => {
+              const newer = pendingNoteSaves.current.get(noteId);
+              pendingNoteSaves.current.set(noteId, { ...update, ...newer });
+            });
         }, 1500)
       );
     },
-    []
+    [userId]
   );
 
   const removeNote = useCallback(async (chapterId: string, noteId: string) => {

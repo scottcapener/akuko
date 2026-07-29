@@ -453,11 +453,17 @@ export default function CenterColumn({
       {saveStatus !== "idle" && (
         <div
           className={`absolute top-4 ${onClose ? "right-12" : "right-4"} text-[10px] uppercase tracking-widest transition-opacity z-10 ${
-            saveStatus === "saving" ? "text-subtle" : saveStatus === "error" ? "text-error" : "text-accent"
+            saveStatus === "saving" || saveStatus === "offline"
+              ? "text-subtle"
+              : saveStatus === "error"
+              ? "text-error"
+              : "text-accent"
           }`}
         >
           {saveStatus === "saving"
             ? "Saving…"
+            : saveStatus === "offline"
+            ? "Offline — will sync"
             : saveStatus === "error"
             ? "Save failed — retrying…"
             : "Saved"}
