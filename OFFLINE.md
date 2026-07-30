@@ -233,7 +233,10 @@ Each phase ships value on its own.
    `useHotCocoaDb.ts` replays them on reconnect/focus/reload and skips flushing
    while offline, showing a calm "Offline — will sync" status instead of an
    error. Delivers "keep writing on the plane, nothing lost" with no service
-   worker and no CRDT. See §8.
+   worker and no CRDT. See §8. Hardening: `navigator.storage.persist()` is
+   requested on init so the queue/cache aren't evicted under storage pressure,
+   and the flush is single-flight so a recovery-triggered flush can't race and
+   produce a spurious self-conflict.
 2. **Per-scene conflict detection.** ✅ **Implemented** — every scene carries its
    server `updatedAt` as an optimistic-concurrency base (`Scene.updatedAt`,
    threaded through the durable queue). `db.saveScene` does a conditional update
@@ -241,7 +244,7 @@ Each phase ships value on its own.
    conflict surfaces `ConflictModal` (keep this device / keep other device)
    instead of clobbering. Multi-device edits prompt instead of overwrite (§4).
 3. **Read cache.** ✅ **Implemented (Layer 2 complete).** `lib/offlineDb.ts` is
-   the shared IndexedDB handle (v4); `lib/offlineCache.ts` mirrors the book
+   the shared IndexedDB handle (v5); `lib/offlineCache.ts` mirrors the book
    structure + each chapter's scenes/library on every successful online load, and
    caches the **blobs** behind stored library images + the book cover (keyed by
    storage path) — serving them as local object URLs when offline, since the
@@ -252,9 +255,11 @@ Each phase ships value on its own.
    offline + instant chapter switching), while image blobs download only for the
    chapter actually being viewed (via an active-chapter effect), keeping Supabase
    egress bounded rather than pulling every chapter's images up front. The cache
-   **persists across sessions**. Images stored as an external `url` (no storage
-   path) stay network-dependent; the secondary compare-pane caches images only
-   once its chapter becomes active.
+   **persists across sessions**. The image blob cache is LRU-capped
+   (`IMAGE_CACHE_MAX`, evicted oldest-first via a `lastUsed` index) so it can't
+   grow unbounded and hasten eviction of the whole DB. Images stored as an
+   external `url` (no storage path) stay network-dependent; the secondary
+   compare-pane caches images only once its chapter becomes active.
 4. **Service-worker app shell (max).** ✅ **Implemented.** `public/sw.js` (hand-
    written — Serwist needs webpack, we're on Turbopack) caches the static `/write`
    shell + Next's hashed assets: network-first for navigations (fresh when online,

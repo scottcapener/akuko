@@ -20,6 +20,7 @@ import {
   CACHE_CHAPTER_STORE,
   CACHE_META_STORE,
   CACHE_IMAGE_STORE,
+  IMAGE_LAST_USED_INDEX,
 } from "./offlineDb";
 
 const SESSION_KEY = "session";
@@ -46,8 +47,15 @@ interface CachedImage {
   path: string;
   userId: string;
   blob: Blob;
+  size: number;
+  lastUsed: number; // bumped on read; drives LRU eviction (indexed in offlineDb)
   cachedAt: number;
 }
+
+// Cap the image blob cache so it can't grow without bound and hasten eviction of
+// the whole database (which holds the write queue). Least-recently-used blobs are
+// dropped once over the cap. Blobs re-download on next view if still needed.
+const IMAGE_CACHE_MAX = 400;
 
 const emptyLibrary = (): ChapterLibrary => ({ images: [], notes: [], musicLinks: [], links: [] });
 
@@ -63,9 +71,18 @@ export async function hasImageBlob(path: string): Promise<boolean> {
 export async function putImageBlob(userId: string, path: string, blob: Blob): Promise<void> {
   const db = await openDb();
   if (!db) return;
+  const now = Date.now();
   await promisify(
-    objectStore(db, CACHE_IMAGE_STORE, "readwrite").put({ path, userId, blob, cachedAt: Date.now() } satisfies CachedImage)
+    objectStore(db, CACHE_IMAGE_STORE, "readwrite").put({
+      path,
+      userId,
+      blob,
+      size: blob.size,
+      lastUsed: now,
+      cachedAt: now,
+    } satisfies CachedImage)
   ).catch(() => {});
+  pruneImageCache().catch(() => {});
 }
 
 async function getImageBlob(path: string): Promise<Blob | null> {
@@ -74,7 +91,48 @@ async function getImageBlob(path: string): Promise<Blob | null> {
   const row = (await promisify(objectStore(db, CACHE_IMAGE_STORE, "readonly").get(path)).catch(
     () => undefined
   )) as CachedImage | undefined;
-  return row?.blob ?? null;
+  if (!row) return null;
+  bumpLastUsed(path); // mark as recently used for LRU (fire-and-forget)
+  return row.blob;
+}
+
+// Record that a blob was just used, so eviction favours truly stale ones. get +
+// put share one transaction so a concurrent read can't drop the update.
+function bumpLastUsed(path: string): void {
+  openDb().then((db) => {
+    if (!db) return;
+    const store = objectStore(db, CACHE_IMAGE_STORE, "readwrite");
+    const getReq = store.get(path);
+    getReq.onsuccess = () => {
+      const row = getReq.result as CachedImage | undefined;
+      if (!row) return;
+      row.lastUsed = Date.now();
+      store.put(row);
+    };
+  }).catch(() => {});
+}
+
+// Evict least-recently-used blobs once the cache exceeds IMAGE_CACHE_MAX. Walks
+// the `lastUsed` index oldest-first with a key cursor (no blobs loaded) and
+// deletes until back under the cap.
+async function pruneImageCache(): Promise<void> {
+  const db = await openDb();
+  if (!db) return;
+  const store = objectStore(db, CACHE_IMAGE_STORE, "readwrite");
+  const total = await promisify(store.count()).catch(() => 0);
+  let toDelete = total - IMAGE_CACHE_MAX;
+  if (toDelete <= 0) return;
+  await new Promise<void>((resolve) => {
+    const cursorReq = store.index(IMAGE_LAST_USED_INDEX).openKeyCursor(); // ascending = oldest first
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result;
+      if (!cursor || toDelete <= 0) return resolve();
+      store.delete(cursor.primaryKey);
+      toDelete -= 1;
+      cursor.continue();
+    };
+    cursorReq.onerror = () => resolve();
+  });
 }
 
 // Swap stored-image signed URLs (stale/unreachable offline) for local object URLs
