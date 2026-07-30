@@ -9,6 +9,7 @@ import LeftColumn from "@/components/LeftColumn";
 import CenterColumn from "@/components/CenterColumn";
 import RightColumn from "@/components/RightColumn";
 import { ConflictModal } from "@/components/ConflictModal";
+import { InstallHint } from "@/components/InstallHint";
 import { SceneDragProvider } from "@/lib/useSceneDrag";
 import { ChapterDragProvider } from "@/lib/useChapterDrag";
 import { Scene } from "@/lib/types";
@@ -369,6 +370,10 @@ export default function WritePage() {
   // Skipped in development when NEXT_PUBLIC_DEV_USER_ID is set.
   useEffect(() => {
     if (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_DEV_USER_ID) return;
+    // Offline: don't run the auth check — getUser() can't reach the network and
+    // would report "no user", bouncing an offline author away from the cached
+    // editor to /login. Trust the cached session; the app hydrates from cache.
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { router.replace("/login"); return; }
@@ -671,6 +676,7 @@ export default function WritePage() {
       {store.conflicts.length > 0 && (
         <ConflictModal conflicts={store.conflicts} onResolve={store.resolveConflict} />
       )}
+      <InstallHint />
     </div>
     </ChapterDragProvider>
     </SceneDragProvider>
