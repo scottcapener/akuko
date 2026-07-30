@@ -8,7 +8,8 @@
 
 export const DB_NAME = "hotcocoa-offline";
 // v1: scene queue · v2: + note queue · v3: + read cache (book / chapter / meta)
-const DB_VERSION = 3;
+// v4: + image blob cache
+const DB_VERSION = 4;
 
 // Write-queue stores (offlineQueue).
 export const SCENE_STORE = "pending_scene_writes";
@@ -20,6 +21,7 @@ export const NOTE_KEY = "noteId";
 export const CACHE_BOOK_STORE = "cache_book"; // keyPath: bookId
 export const CACHE_CHAPTER_STORE = "cache_chapter"; // keyPath: chapterId
 export const CACHE_META_STORE = "cache_meta"; // keyPath: key
+export const CACHE_IMAGE_STORE = "cache_image"; // keyPath: path — storage blobs
 
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 
@@ -39,6 +41,7 @@ export function openDb(): Promise<IDBDatabase | null> {
       if (!db.objectStoreNames.contains(CACHE_BOOK_STORE)) db.createObjectStore(CACHE_BOOK_STORE, { keyPath: "bookId" });
       if (!db.objectStoreNames.contains(CACHE_CHAPTER_STORE)) db.createObjectStore(CACHE_CHAPTER_STORE, { keyPath: "chapterId" });
       if (!db.objectStoreNames.contains(CACHE_META_STORE)) db.createObjectStore(CACHE_META_STORE, { keyPath: "key" });
+      if (!db.objectStoreNames.contains(CACHE_IMAGE_STORE)) db.createObjectStore(CACHE_IMAGE_STORE, { keyPath: "path" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => resolve(null);

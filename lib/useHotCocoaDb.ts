@@ -75,6 +75,17 @@ function mapChapter(sections: Section[], chapterId: string, fn: (c: Chapter) => 
   }));
 }
 
+// Background-download and cache the blobs behind stored images (library or cover)
+// so they render offline later. Skips already-cached and external-URL images;
+// fully best-effort, sequential to avoid a burst of downloads.
+async function cacheImageBlobs(userId: string, paths: (string | undefined)[]) {
+  for (const path of paths) {
+    if (!path || (await offlineCache.hasImageBlob(path))) continue;
+    const blob = await db.downloadStorageBlob(path);
+    if (blob) await offlineCache.putImageBlob(userId, path, blob);
+  }
+}
+
 export function useHotCocoaDb() {
   const [userId, setUserId] = useState<string | null>(null);
   const [book, setBook] = useState<Book | null>(null);
@@ -169,6 +180,9 @@ export function useHotCocoaDb() {
       }
       // Mirror the structure immediately so a later offline reload can rebuild it.
       offlineCache.cacheBook(user.id, loadedBook, loadedSections).catch(() => {});
+      if (loadedBook.coverImagePath) {
+        cacheImageBlobs(user.id, [loadedBook.coverImagePath]).catch(() => {});
+      }
 
       const allChapters = loadedSections.flatMap((s) => s.chapters);
       // getOrCreateBook resolves activeChapterId to the last-edited chapter
@@ -182,6 +196,7 @@ export function useHotCocoaDb() {
           db.getLibraryForChapter(initialChapter.id),
         ]);
         offlineCache.cacheChapter(user.id, initialChapter.id, scenes, library).catch(() => {});
+        cacheImageBlobs(user.id, library.images.map((i) => i.path)).catch(() => {});
         loadedChapterIds.current.add(initialChapter.id);
         setLoadedChapters(new Set([initialChapter.id]));
         const updatedSections = mapChapter(loadedSections, initialChapter.id, (c) => ({
@@ -215,7 +230,10 @@ export function useHotCocoaDb() {
       ]);
       // Mirror for offline navigation to this chapter later.
       const uid = userIdRef.current;
-      if (uid) offlineCache.cacheChapter(uid, chapterId, scenes, library).catch(() => {});
+      if (uid) {
+        offlineCache.cacheChapter(uid, chapterId, scenes, library).catch(() => {});
+        cacheImageBlobs(uid, library.images.map((i) => i.path)).catch(() => {});
+      }
     } catch (err) {
       // Offline (or a transient failure) — serve cached content if we have it so
       // the author can still open this chapter.
