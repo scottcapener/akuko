@@ -247,12 +247,14 @@ Each phase ships value on its own.
    storage path) — serving them as local object URLs when offline, since the
    signed URLs 404 without a connection. `useHotCocoaDb` bootstrap hydrates
    entirely from cache when offline (via cached session `userId`), and
-   `loadChapter` falls back to cache. Chapters (and their image blobs) cache **as
-   they're loaded/visited** and the cache **persists across sessions**, so an
-   author's working set accumulates offline. Remaining caveat: the background
-   prefetch only warms ~1 chapter (pre-existing stale-deps bug), so full-book
-   offline needs that fixed or chapters visited first. Images stored as an
-   external `url` (no storage path) stay network-dependent.
+   `loadChapter` falls back to cache. **Text is eager, images are on-visit**: a
+   background prefetch warms *every* chapter's text (cheap — whole book readable
+   offline + instant chapter switching), while image blobs download only for the
+   chapter actually being viewed (via an active-chapter effect), keeping Supabase
+   egress bounded rather than pulling every chapter's images up front. The cache
+   **persists across sessions**. Images stored as an external `url` (no storage
+   path) stay network-dependent; the secondary compare-pane caches images only
+   once its chapter becomes active.
 4. **Service-worker app shell (max).** ✅ **Implemented.** `public/sw.js` (hand-
    written — Serwist needs webpack, we're on Turbopack) caches the static `/write`
    shell + Next's hashed assets: network-first for navigations (fresh when online,

@@ -196,7 +196,7 @@ export function useHotCocoaDb() {
           db.getLibraryForChapter(initialChapter.id),
         ]);
         offlineCache.cacheChapter(user.id, initialChapter.id, scenes, library).catch(() => {});
-        cacheImageBlobs(user.id, library.images.map((i) => i.path)).catch(() => {});
+        // (the active-chapter image effect pulls this chapter's blobs)
         loadedChapterIds.current.add(initialChapter.id);
         setLoadedChapters(new Set([initialChapter.id]));
         const updatedSections = mapChapter(loadedSections, initialChapter.id, (c) => ({
@@ -218,6 +218,10 @@ export function useHotCocoaDb() {
   }, []);
 
   // ── Load chapter data on switch ───────────────────────────────────────
+  // Caches the chapter's *text* for offline + instant switching. Image blobs are
+  // deliberately NOT pulled here (they're large): the active-chapter effect below
+  // downloads them only for the chapter actually being viewed, keeping egress
+  // bounded whether this load came from a background prefetch or a real open.
   const loadChapter = useCallback(async (chapterId: string) => {
     if (loadedChapterIds.current.has(chapterId)) return;
     loadedChapterIds.current.add(chapterId);
@@ -228,12 +232,9 @@ export function useHotCocoaDb() {
         db.getScenesForChapter(chapterId),
         db.getLibraryForChapter(chapterId),
       ]);
-      // Mirror for offline navigation to this chapter later.
+      // Mirror text for offline navigation to this chapter later.
       const uid = userIdRef.current;
-      if (uid) {
-        offlineCache.cacheChapter(uid, chapterId, scenes, library).catch(() => {});
-        cacheImageBlobs(uid, library.images.map((i) => i.path)).catch(() => {});
-      }
+      if (uid) offlineCache.cacheChapter(uid, chapterId, scenes, library).catch(() => {});
     } catch (err) {
       // Offline (or a transient failure) — serve cached content if we have it so
       // the author can still open this chapter.
@@ -259,15 +260,20 @@ export function useHotCocoaDb() {
   }, []);
 
   // ── Background prefetch ───────────────────────────────────────────────
-  // After the first chapter renders, quietly load every other chapter's
-  // content so switching chapters is instant (no empty flash). Runs once;
-  // loadChapter dedups, so already-loaded chapters are skipped.
+  // After the first chapter renders, quietly load every other chapter's text so
+  // switching chapters is instant (no empty flash) and the whole book's text is
+  // available offline. loadChapter caches text only (not image blobs), so this is
+  // cheap. Runs once; loadChapter dedups, so already-loaded chapters are skipped.
+  //
+  // The chapter list is read from sectionsRef, NOT a `sections` dependency: each
+  // loadChapter calls setSections, so depending on `sections` would re-run this
+  // effect and its cleanup would cancel the in-flight loop after one chapter.
   useEffect(() => {
     if (!hydrated || prefetchStarted.current) return;
     prefetchStarted.current = true;
     let cancelled = false;
     (async () => {
-      const all = sections.flatMap((s) => s.chapters);
+      const all = sectionsRef.current.flatMap((s) => s.chapters);
       for (const ch of all) {
         if (cancelled) break;
         await loadChapter(ch.id);
@@ -276,7 +282,21 @@ export function useHotCocoaDb() {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, sections, loadChapter]);
+  }, [hydrated, loadChapter]);
+
+  // ── Image blobs for the chapter being viewed ──────────────────────────
+  // Prefetch warms text for the whole book but skips images. Pull the active
+  // chapter's image blobs here instead — this fires even when its text was
+  // already prefetched (so loadChapter short-circuits). Once per chapter per
+  // session; cacheImageBlobs also skips blobs already stored.
+  const imagesRequestedFor = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!userId || !activeChapterId || !loadedChapters.has(activeChapterId)) return;
+    if (imagesRequestedFor.current.has(activeChapterId)) return;
+    imagesRequestedFor.current.add(activeChapterId);
+    const chapter = sectionsRef.current.flatMap((s) => s.chapters).find((c) => c.id === activeChapterId);
+    if (chapter) cacheImageBlobs(userId, chapter.library.images.map((i) => i.path)).catch(() => {});
+  }, [userId, activeChapterId, loadedChapters]);
 
   // ── Autosave flush ─────────────────────────────────────────────────────
   // Ref indirection breaks the flush ⇄ schedule cycle: scheduleSave stays
