@@ -253,11 +253,20 @@ Each phase ships value on its own.
    prefetch only warms ~1 chapter (pre-existing stale-deps bug), so full-book
    offline needs that fixed or chapters visited first. Images stored as an
    external `url` (no storage path) stay network-dependent.
-4. **Service-worker app shell (max).** Cache the Next.js shell so the app
-   cold-opens offline. Turns "plane, tab open" into "hike, phone was asleep."
-   Mandatory for iOS true offline. Ship the PWA install prompt + "Add to Home
-   Screen" guidance here. *Verify SW registration approach against Next.js 16
-   docs at build time.*
+4. **Service-worker app shell (max).** ✅ **Implemented.** `public/sw.js` (hand-
+   written — Serwist needs webpack, we're on Turbopack) caches the static `/write`
+   shell + Next's hashed assets: network-first for navigations (fresh when online,
+   cached shell when not), cache-first for immutable assets. Supabase, `/api/*`,
+   and non-GET requests are **never cached** — they pass through and fail cleanly
+   offline, as the app expects. `ServiceWorkerRegistrar` registers it **production
+   only** (a SW fights Turbopack/HMR in dev). Manifest `start_url` is `/write`
+   (`/` is a server redirect that can't run offline); the `/write` route guard now
+   skips its `getUser()` redirect when offline so the cached shell can hydrate;
+   `InstallHint` gives iOS users the "Add to Home Screen" nudge. Turns "plane, tab
+   open" into "hike, phone was asleep." Verified with a real `next build`/`start`:
+   SW caches the shell, and with the origin server **stopped** the app still
+   cold-loads /write and renders. *(SW registration approach checked against the
+   Next.js 16 PWA guide.)*
 5. **(Optional, later)** Sync engine (PowerSync/Electric) or CRDT — only if
    multi-device load or collaboration materializes.
 

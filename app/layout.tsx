@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./styles/tokens.css";
 import "./globals.css";
 import ScrollbarAutoHide from "@/components/ScrollbarAutoHide";
+import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -10,6 +11,9 @@ export const metadata: Metadata = {
   title: "Hot Cocoa",
   description: "A warm, cozy writing space for novelists.",
   manifest: "/site.webmanifest",
+  // Standalone (chrome-less) launch when added to an iOS Home Screen — the
+  // install path that also gives durable offline storage on iOS.
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Hot Cocoa" },
   icons: {
     icon: [
       { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
@@ -38,6 +42,7 @@ export default function RootLayout({
       </head>
       <body className="h-full">
         <ScrollbarAutoHide />
+        <ServiceWorkerRegistrar />
         {children}
       </body>
     </html>
