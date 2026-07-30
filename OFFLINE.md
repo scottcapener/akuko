@@ -276,6 +276,12 @@ Each phase ships value on its own.
    Next.js 16 PWA guide.)*
 5. **(Optional, later)** Sync engine (PowerSync/Electric) or CRDT — only if
    multi-device load or collaboration materializes.
+6. **Structural edits offline (next up).** 🔜 Today only *text edits to existing*
+   scenes/notes work offline; add/delete/reorder/split/move and media-add are
+   server-first and fail with no network. Make them optimistic + durably replayed
+   via an ordered operation log. Tiered: **Tier 1 (priority)** = scenes &
+   chapters; **Tier 2** = sections + notes/links; **Tier 3 (deferred)** = offline
+   library-image *add* (needs deferred Storage upload). Full spec in §9.
 
 ---
 
@@ -336,3 +342,93 @@ since the queue is introduced there.
 - Library-image *reads* inside an open chapter use signed Storage URLs that
   expire — offline they'll 404. Acceptable for Phase 1 (text-only offline), fixed
   in Phase 3.
+
+---
+
+## 9. Phase 6: structural edits offline
+
+Status: **planned, not started.** Tier 1 is the highest-priority remaining work.
+
+### The problem
+
+Phases 1–2 make *text edits to existing* scenes/notes work offline. But every
+**structural** action still runs server-first: `addScene`, `deleteScene`,
+`reorderScenes`, `moveScene`, `splitChapter`, `addChapter`, `deleteChapter`,
+`addSection`, note/link/image add — each does `await db.createX()` / `deleteX()`
+**before** touching local state. Offline the `await` throws and the action
+silently no-ops. So an author on a plane can rewrite a scene but can't add one.
+
+Two things are missing: **optimistic apply** (update local state immediately) and
+**durable, ordered replay** (persist the intent, sync in order on reconnect).
+
+### Architecture: a durable, ordered operation log
+
+Generalize the Phase 1 queue from "field edits" to "operations":
+
+1. **Client-generated IDs.** Creates currently take their UUID *from* the server
+   insert's return. To apply optimistically we must mint the id on the client
+   (`crypto.randomUUID()`) and pass it into the insert (Postgres accepts an
+   explicit `id`). Every create path changes:
+   `createScene / createChapter / createSection / addNote / addMusicLink /
+   addLink` take a caller-supplied id.
+2. **Op-log store** — new IndexedDB store `pending_ops` with an **auto-increment
+   key** so replay is strict FIFO. Record:
+   `{ seq, userId, op: { type, ...args }, createdAt }`.
+3. **Optimistic apply.** Each structural action updates React state immediately
+   with the client id, appends one op to the log, and (if online) drains.
+4. **Ordered replay engine.** Drains FIFO via the existing `db.*` functions. Order
+   matters because ops have **dependencies** — `splitChapter` = create-chapter
+   *then* move-scenes; "add chapter, then add a scene in it" would hit a
+   foreign-key violation replayed out of order. On network error: stop, keep
+   order, retry on the usual triggers (`online` / focus / mount). Remove each op
+   on success.
+
+Structural ops are mostly **additive/positional**, so — unlike scene *edits* —
+they need no per-op conflict detection. Deletes are last-write-wins (deleting a
+scene changed elsewhere just deletes it). Reorders are idempotent (`position = N`).
+
+### The one hard coordination point
+
+The field-edit queue (`pendingSaves` → `saveScene` UPDATE) and the op-log must
+cooperate: a scene **created offline** isn't on the server yet, so its
+body-UPDATE would hit a missing row.
+
+**Recommended approach (proposed — confirm at kickoff): separate queues + a
+gate.** Keep the tuned field-edit path as-is; track a set of "unsynced-created
+ids"; the flush **skips** field-edits for scenes whose id is in that set until
+their create op has drained (at which point the id leaves the set and the next
+flush includes them). Minimal blast radius. The heavier alternative — unifying
+*all* mutations (including field edits) into one op-log — is architecturally
+purer but a much larger refactor; not worth it unless Phase 5 (collaboration)
+forces it.
+
+### Other implementation notes
+
+- **Create-then-delete cancels out.** Deleting an offline-created entity before
+  sync should drop both ops (never send either), keyed by the client id.
+- **Storage cleanup deferred.** Deleting a library image offline can't remove its
+  Storage blob until online — queue the blob removal with the delete op.
+- **Word count.** Recompute stays aggregate LWW (no per-op guard), as today.
+
+### Tiering
+
+- **Tier 1 (priority): scenes + chapters** — create / delete / reorder / split /
+  move. Covers "add a scene", "split a chapter", "add a chapter", "reorder" on a
+  plane. The bulk of the value.
+- **Tier 2: sections + notes/links** — same mechanism, lower frequency.
+- **Tier 3 (deferred): offline library-image *add*.** Materially harder —
+  `addLibraryImage` uploads a file to Supabase Storage, which needs network.
+  Requires staging the blob locally and deferring the upload; a separate
+  sub-project. Media-add stays online-only until then, surfaced to users.
+
+### Effort & sequencing
+
+Comparable to Phases 1–2 combined: a new op-log module + replay engine,
+client-id plumbing through `db.ts` and every mutation in `useHotCocoaDb`, plus
+the edit-queue gate. Plan as **2–3 PRs** (Tier 1, then Tier 2), not one.
+
+### Decisions
+
+- ✅ Tiering agreed: Tier 1 first; Tiers 2–3 later; Tier 3 deferred.
+- ⬜ Coordination approach (separate-queues + gate vs. full op-log unification) —
+  confirm at kickoff; recommendation is the gate.
