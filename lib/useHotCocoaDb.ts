@@ -6,6 +6,7 @@ import { ensureDevSession } from "./ensureDevSession";
 import * as db from "./db";
 import * as offlineQueue from "./offlineQueue";
 import * as offlineCache from "./offlineCache";
+import * as offlineDb from "./offlineDb";
 import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink, LibraryLink } from "./types";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "offline";
@@ -108,6 +109,12 @@ export function useHotCocoaDb() {
   // Timestamp of the oldest unsaved edit in the current pending batch, so the
   // debounce can be capped at AUTOSAVE_MAX_WAIT from the first edit.
   const firstPendingAt = useRef<number | null>(null);
+  // Single-flight guard: a flush racing with a recovery-triggered flush could
+  // re-queue a scene mid-save with a stale base and pop a spurious self-conflict.
+  // Only one flush runs at a time; a flush requested while one is in flight sets
+  // `flushAgain` and is re-run once the current one finishes.
+  const isFlushing = useRef(false);
+  const flushAgain = useRef(false);
   const initialized = useRef(false);
   const loadedChapterIds = useRef(new Set<string>());
   // State mirror of loadedChapterIds so the UI can render a skeleton until a
@@ -129,6 +136,10 @@ export function useHotCocoaDb() {
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
+
+    // Mark storage persistent so queued offline edits + the cache survive
+    // storage pressure (esp. iOS eviction). Best-effort, fire-and-forget.
+    offlineDb.requestPersistentStorage();
 
     const supabase = createClient();
 
@@ -322,121 +333,140 @@ export function useHotCocoaDb() {
       setSaveStatus("offline");
       return;
     }
-    firstPendingAt.current = null;
-    setSaveStatus("saving");
-    const saves = Array.from(pendingSaves.current.entries());
-    pendingSaves.current.clear();
-
-    // One tab at a time drains the shared queue, so two open tabs can't race the
-    // same write (no-op lock where Web Locks is unsupported). Each save is
-    // conditioned on the scene's base version so a cross-device change surfaces
-    // as a conflict instead of a silent overwrite.
-    const results = await offlineQueue.runExclusive(() =>
-      Promise.allSettled(
-        saves.map(([sceneId, patch]) =>
-          db.saveScene(sceneId, patch, pendingBases.current.get(sceneId) ?? null)
-        )
-      )
-    );
-
-    const requeue: [string, Partial<Scene>][] = [];
-    const doneIds: string[] = []; // durable copies to drop (saved or gone)
-    const savedUpdates = new Map<string, string>(); // sceneId → new updatedAt
-    const newConflicts: SceneConflict[] = [];
-
-    saves.forEach(([sceneId, patch], i) => {
-      const result = results[i];
-      if (result.status === "rejected") {
-        // Network / unknown error — keep it (and its base) queued and retry.
-        requeue.push([sceneId, patch]);
-        return;
-      }
-      const outcome = result.value;
-      if (outcome.status === "saved") {
-        savedUpdates.set(sceneId, outcome.updatedAt);
-        doneIds.push(sceneId);
-        pendingBases.current.delete(sceneId);
-      } else if (outcome.status === "deleted") {
-        // Scene removed elsewhere — drop the orphaned edit.
-        doneIds.push(sceneId);
-        pendingBases.current.delete(sceneId);
-      } else {
-        // Conflict: hand it to the user. Leave the durable copy in IndexedDB so
-        // an unresolved conflict survives a reload (recovery skips it meanwhile).
-        const local = sectionsRef.current
-          .flatMap((s) => s.chapters)
-          .flatMap((c) => c.scenes.map((sc) => ({ scene: sc, chapter: c })))
-          .find((x) => x.scene.id === sceneId);
-        newConflicts.push({
-          sceneId,
-          chapterId: local?.chapter.id ?? null,
-          chapterTitle: local?.chapter.title ?? null,
-          mine: {
-            label: patch.label ?? local?.scene.label ?? outcome.server.label,
-            body: patch.body ?? local?.scene.body ?? outcome.server.body,
-          },
-          theirs: outcome.server,
-        });
-        pendingBases.current.delete(sceneId);
-      }
-    });
-
-    if (doneIds.length > 0) offlineQueue.removeSceneWrites(doneIds).catch(() => {});
-
-    // Advance the concurrency base for cleanly-saved scenes so the next edit
-    // conditions on the version we just wrote; recompute the word count too.
-    setSections((prev) => {
-      const next =
-        savedUpdates.size > 0
-          ? prev.map((sec) => ({
-              ...sec,
-              chapters: sec.chapters.map((ch) => {
-                let touched = false;
-                const scenes = ch.scenes.map((s) => {
-                  const updatedAt = savedUpdates.get(s.id);
-                  if (!updatedAt) return s;
-                  touched = true;
-                  return { ...s, updatedAt };
-                });
-                return touched ? { ...ch, scenes } : ch;
-              }),
-            }))
-          : prev;
-      const wc = wordCountAll(next);
-      if (book) {
-        setUnlocks((currentUnlocks) => {
-          db.updateBookWordCount(book.id, wc, currentUnlocks).then((updated) => setUnlocks(updated));
-          return currentUnlocks;
-        });
-      }
-      return next;
-    });
-
-    if (newConflicts.length > 0) {
-      setConflicts((prev) => [
-        ...prev.filter((c) => !newConflicts.some((n) => n.sceneId === c.sceneId)),
-        ...newConflicts,
-      ]);
-    }
-
-    // Re-queue any failed scene beneath edits that arrived while saving (newer
-    // typing wins), so a transient failure retries instead of losing the edit.
-    if (requeue.length > 0) {
-      for (const [sceneId, patch] of requeue) {
-        const newer = pendingSaves.current.get(sceneId);
-        pendingSaves.current.set(sceneId, { ...patch, ...newer });
-      }
-      setSaveStatus("error");
-      scheduleSave(); // retry on the normal cadence
+    // Single-flight: a flush requested while one is already running (e.g. a
+    // recovery-triggered flush firing mid-save) defers rather than running
+    // concurrently — otherwise it could re-queue a scene with a stale base and
+    // pop a spurious self-conflict.
+    if (isFlushing.current) {
+      flushAgain.current = true;
       return;
     }
+    isFlushing.current = true;
+    try {
+      firstPendingAt.current = null;
+      setSaveStatus("saving");
+      const saves = Array.from(pendingSaves.current.entries());
+      pendingSaves.current.clear();
 
-    if (savedUpdates.size > 0) {
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 2000);
-    } else {
-      // Only conflicts / deletions this round — nothing successfully written.
-      setSaveStatus("idle");
+      // One tab at a time drains the shared queue, so two open tabs can't race the
+      // same write (no-op lock where Web Locks is unsupported). Each save is
+      // conditioned on the scene's base version so a cross-device change surfaces
+      // as a conflict instead of a silent overwrite.
+      const results = await offlineQueue.runExclusive(() =>
+        Promise.allSettled(
+          saves.map(([sceneId, patch]) =>
+            db.saveScene(sceneId, patch, pendingBases.current.get(sceneId) ?? null)
+          )
+        )
+      );
+
+      const requeue: [string, Partial<Scene>][] = [];
+      const doneIds: string[] = []; // durable copies to drop (saved or gone)
+      const savedUpdates = new Map<string, string>(); // sceneId → new updatedAt
+      const newConflicts: SceneConflict[] = [];
+
+      saves.forEach(([sceneId, patch], i) => {
+        const result = results[i];
+        if (result.status === "rejected") {
+          // Network / unknown error — keep it (and its base) queued and retry.
+          requeue.push([sceneId, patch]);
+          return;
+        }
+        const outcome = result.value;
+        if (outcome.status === "saved") {
+          savedUpdates.set(sceneId, outcome.updatedAt);
+          doneIds.push(sceneId);
+          pendingBases.current.delete(sceneId);
+        } else if (outcome.status === "deleted") {
+          // Scene removed elsewhere — drop the orphaned edit.
+          doneIds.push(sceneId);
+          pendingBases.current.delete(sceneId);
+        } else {
+          // Conflict: hand it to the user. Leave the durable copy in IndexedDB so
+          // an unresolved conflict survives a reload (recovery skips it meanwhile).
+          const local = sectionsRef.current
+            .flatMap((s) => s.chapters)
+            .flatMap((c) => c.scenes.map((sc) => ({ scene: sc, chapter: c })))
+            .find((x) => x.scene.id === sceneId);
+          newConflicts.push({
+            sceneId,
+            chapterId: local?.chapter.id ?? null,
+            chapterTitle: local?.chapter.title ?? null,
+            mine: {
+              label: patch.label ?? local?.scene.label ?? outcome.server.label,
+              body: patch.body ?? local?.scene.body ?? outcome.server.body,
+            },
+            theirs: outcome.server,
+          });
+          pendingBases.current.delete(sceneId);
+        }
+      });
+
+      if (doneIds.length > 0) offlineQueue.removeSceneWrites(doneIds).catch(() => {});
+
+      // Advance the concurrency base for cleanly-saved scenes so the next edit
+      // conditions on the version we just wrote; recompute the word count too.
+      setSections((prev) => {
+        const next =
+          savedUpdates.size > 0
+            ? prev.map((sec) => ({
+                ...sec,
+                chapters: sec.chapters.map((ch) => {
+                  let touched = false;
+                  const scenes = ch.scenes.map((s) => {
+                    const updatedAt = savedUpdates.get(s.id);
+                    if (!updatedAt) return s;
+                    touched = true;
+                    return { ...s, updatedAt };
+                  });
+                  return touched ? { ...ch, scenes } : ch;
+                }),
+              }))
+            : prev;
+        const wc = wordCountAll(next);
+        if (book) {
+          setUnlocks((currentUnlocks) => {
+            db.updateBookWordCount(book.id, wc, currentUnlocks).then((updated) => setUnlocks(updated));
+            return currentUnlocks;
+          });
+        }
+        return next;
+      });
+
+      if (newConflicts.length > 0) {
+        setConflicts((prev) => [
+          ...prev.filter((c) => !newConflicts.some((n) => n.sceneId === c.sceneId)),
+          ...newConflicts,
+        ]);
+      }
+
+      // Re-queue any failed scene beneath edits that arrived while saving (newer
+      // typing wins), so a transient failure retries instead of losing the edit.
+      if (requeue.length > 0) {
+        for (const [sceneId, patch] of requeue) {
+          const newer = pendingSaves.current.get(sceneId);
+          pendingSaves.current.set(sceneId, { ...patch, ...newer });
+        }
+        setSaveStatus("error");
+        scheduleSave(); // retry on the normal cadence
+        return;
+      }
+
+      if (savedUpdates.size > 0) {
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus("idle"), 2000);
+      } else {
+        // Only conflicts / deletions this round — nothing successfully written.
+        setSaveStatus("idle");
+      }
+    } finally {
+      isFlushing.current = false;
+      // A flush was requested while this one ran — run it now to pick up whatever
+      // was queued in the meantime.
+      if (flushAgain.current) {
+        flushAgain.current = false;
+        flushSavesRef.current();
+      }
     }
   }, [book, scheduleSave]);
 

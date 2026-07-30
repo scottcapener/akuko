@@ -8,8 +8,10 @@
 
 export const DB_NAME = "hotcocoa-offline";
 // v1: scene queue · v2: + note queue · v3: + read cache (book / chapter / meta)
-// v4: + image blob cache
-const DB_VERSION = 4;
+// v4: + image blob cache · v5: + image `lastUsed` index (LRU eviction)
+const DB_VERSION = 5;
+
+export const IMAGE_LAST_USED_INDEX = "lastUsed";
 
 // Write-queue stores (offlineQueue).
 export const SCENE_STORE = "pending_scene_writes";
@@ -41,12 +43,35 @@ export function openDb(): Promise<IDBDatabase | null> {
       if (!db.objectStoreNames.contains(CACHE_BOOK_STORE)) db.createObjectStore(CACHE_BOOK_STORE, { keyPath: "bookId" });
       if (!db.objectStoreNames.contains(CACHE_CHAPTER_STORE)) db.createObjectStore(CACHE_CHAPTER_STORE, { keyPath: "chapterId" });
       if (!db.objectStoreNames.contains(CACHE_META_STORE)) db.createObjectStore(CACHE_META_STORE, { keyPath: "key" });
-      if (!db.objectStoreNames.contains(CACHE_IMAGE_STORE)) db.createObjectStore(CACHE_IMAGE_STORE, { keyPath: "path" });
+      // The image store keeps a `lastUsed` index so LRU eviction can find the
+      // oldest blobs without loading every blob into memory. Add the index whether
+      // the store is being created now or already exists from a v4 database.
+      const imageStore = db.objectStoreNames.contains(CACHE_IMAGE_STORE)
+        ? req.transaction!.objectStore(CACHE_IMAGE_STORE)
+        : db.createObjectStore(CACHE_IMAGE_STORE, { keyPath: "path" });
+      if (!imageStore.indexNames.contains(IMAGE_LAST_USED_INDEX)) {
+        imageStore.createIndex(IMAGE_LAST_USED_INDEX, "lastUsed");
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => resolve(null);
   });
   return dbPromise;
+}
+
+// Ask the browser to mark our storage persistent so the write queue and cache
+// aren't silently evicted under storage pressure (the core "nothing lost offline"
+// guarantee depends on it — see OFFLINE.md). Best-effort and idempotent: some
+// browsers grant it automatically based on engagement/installation, others prompt
+// or decline; either way we never throw. Returns whether storage is persisted.
+export async function requestPersistentStorage(): Promise<boolean> {
+  try {
+    if (typeof navigator === "undefined" || !navigator.storage?.persist) return false;
+    if (await navigator.storage.persisted?.()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
 }
 
 export function objectStore(db: IDBDatabase, name: string, mode: IDBTransactionMode) {
