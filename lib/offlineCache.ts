@@ -6,12 +6,21 @@
 // from this mirror instead of showing an empty/error state. This is what lets an
 // author open and navigate their whole book with no network.
 //
-// Text content only for now: library image `dataUrl`s are time-limited signed
-// URLs that 404 offline — caching the underlying blobs is a fast-follow. Cached
-// structure/scenes/notes/links all work offline today.
+// Library image `dataUrl`s are time-limited signed URLs that 404 offline, so we
+// also cache the underlying blobs (keyed by storage path) and, when serving from
+// cache, swap the stale URL for a local object URL. Images stored as an external
+// `url` (no storage path) can't be cached and stay network-dependent.
 
 import { Book, Section, Scene, ChapterLibrary } from "./types";
-import { openDb, objectStore, promisify, CACHE_BOOK_STORE, CACHE_CHAPTER_STORE, CACHE_META_STORE } from "./offlineDb";
+import {
+  openDb,
+  objectStore,
+  promisify,
+  CACHE_BOOK_STORE,
+  CACHE_CHAPTER_STORE,
+  CACHE_META_STORE,
+  CACHE_IMAGE_STORE,
+} from "./offlineDb";
 
 const SESSION_KEY = "session";
 
@@ -33,7 +42,55 @@ interface CachedSession {
   bookId: string;
 }
 
+interface CachedImage {
+  path: string;
+  userId: string;
+  blob: Blob;
+  cachedAt: number;
+}
+
 const emptyLibrary = (): ChapterLibrary => ({ images: [], notes: [], musicLinks: [], links: [] });
+
+// ── Image blobs ──────────────────────────────────────────────────────────────
+
+export async function hasImageBlob(path: string): Promise<boolean> {
+  const db = await openDb();
+  if (!db) return false;
+  const key = await promisify(objectStore(db, CACHE_IMAGE_STORE, "readonly").getKey(path)).catch(() => undefined);
+  return key !== undefined;
+}
+
+export async function putImageBlob(userId: string, path: string, blob: Blob): Promise<void> {
+  const db = await openDb();
+  if (!db) return;
+  await promisify(
+    objectStore(db, CACHE_IMAGE_STORE, "readwrite").put({ path, userId, blob, cachedAt: Date.now() } satisfies CachedImage)
+  ).catch(() => {});
+}
+
+async function getImageBlob(path: string): Promise<Blob | null> {
+  const db = await openDb();
+  if (!db) return null;
+  const row = (await promisify(objectStore(db, CACHE_IMAGE_STORE, "readonly").get(path)).catch(
+    () => undefined
+  )) as CachedImage | undefined;
+  return row?.blob ?? null;
+}
+
+// Swap stored-image signed URLs (stale/unreachable offline) for local object URLs
+// built from cached blobs. Only touches images with a storage `path` and a cached
+// blob; external-URL images and uncached ones are left as-is. The object URLs live
+// for the page session — acceptable for a bounded set of book images.
+async function hydrateImageUrls(library: ChapterLibrary): Promise<ChapterLibrary> {
+  const images = await Promise.all(
+    library.images.map(async (img) => {
+      if (!img.path) return img;
+      const blob = await getImageBlob(img.path);
+      return blob ? { ...img, dataUrl: URL.createObjectURL(blob) } : img;
+    })
+  );
+  return { ...library, images };
+}
 
 // ── Writes (populate the cache on successful online loads) ───────────────────
 
@@ -84,7 +141,8 @@ export async function readCachedChapter(
   const row = (await promisify(objectStore(db, CACHE_CHAPTER_STORE, "readonly").get(chapterId)).catch(
     () => undefined
   )) as CachedChapter | undefined;
-  return row ? { scenes: row.scenes, library: row.library } : null;
+  if (!row) return null;
+  return { scenes: row.scenes, library: await hydrateImageUrls(row.library) };
 }
 
 // Reconstruct the full editor state from cache for an offline bootstrap: the
@@ -126,5 +184,12 @@ export async function readSnapshot(): Promise<{
     sections.push({ ...section, chapters });
   }
 
-  return { userId: session.userId, book: cachedBook.book, sections, loadedChapterIds };
+  // Serve the cover from a cached blob too (its signed URL is unreachable offline).
+  let book = cachedBook.book;
+  if (book.coverImagePath) {
+    const blob = await getImageBlob(book.coverImagePath);
+    if (blob) book = { ...book, coverImage: URL.createObjectURL(blob) };
+  }
+
+  return { userId: session.userId, book, sections, loadedChapterIds };
 }

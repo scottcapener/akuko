@@ -240,17 +240,19 @@ Each phase ships value on its own.
    (`.eq("updated_at", base)`) returning `saved` / `conflict` / `deleted`; a
    conflict surfaces `ConflictModal` (keep this device / keep other device)
    instead of clobbering. Multi-device edits prompt instead of overwrite (§4).
-3. **Read cache.** 🟡 **Text shipped; image blobs pending.** `lib/offlineDb.ts`
-   is now the shared IndexedDB handle (v3); `lib/offlineCache.ts` mirrors the
-   book structure + each chapter's scenes/library on every successful online
-   load. `useHotCocoaDb` bootstrap hydrates entirely from cache when offline
-   (via cached session `userId`), and `loadChapter` falls back to cache. Chapters
-   cache **as they're loaded/visited** and the cache **persists across sessions**,
-   so an author's working set accumulates offline. Two follow-ups: (a) library
-   **image blobs** aren't cached yet — cached images use expiring signed URLs and
-   404 offline; (b) the background prefetch only loads ~1 chapter (pre-existing
-   stale-deps bug), so full-book offline needs that fixed or chapters visited
-   first. Completes Layer 2 once image blobs land.
+3. **Read cache.** ✅ **Implemented (Layer 2 complete).** `lib/offlineDb.ts` is
+   the shared IndexedDB handle (v4); `lib/offlineCache.ts` mirrors the book
+   structure + each chapter's scenes/library on every successful online load, and
+   caches the **blobs** behind stored library images + the book cover (keyed by
+   storage path) — serving them as local object URLs when offline, since the
+   signed URLs 404 without a connection. `useHotCocoaDb` bootstrap hydrates
+   entirely from cache when offline (via cached session `userId`), and
+   `loadChapter` falls back to cache. Chapters (and their image blobs) cache **as
+   they're loaded/visited** and the cache **persists across sessions**, so an
+   author's working set accumulates offline. Remaining caveat: the background
+   prefetch only warms ~1 chapter (pre-existing stale-deps bug), so full-book
+   offline needs that fixed or chapters visited first. Images stored as an
+   external `url` (no storage path) stay network-dependent.
 4. **Service-worker app shell (max).** Cache the Next.js shell so the app
    cold-opens offline. Turns "plane, tab open" into "hike, phone was asleep."
    Mandatory for iOS true offline. Ship the PWA install prompt + "Add to Home

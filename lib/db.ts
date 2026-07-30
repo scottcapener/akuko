@@ -60,6 +60,15 @@ export async function signBookCoverUrl(path: string): Promise<string> {
   return data?.signedUrl ?? "";
 }
 
+/** Download the raw bytes of a stored library-files object (image or cover) via
+ *  the authed storage client, for offline blob caching. Returns null on any
+ *  failure (offline / missing) so callers can skip silently. */
+export async function downloadStorageBlob(path: string): Promise<Blob | null> {
+  const { data, error } = await supabase().storage.from("library-files").download(path);
+  if (error || !data) return null;
+  return data;
+}
+
 /** All of a user's books, most-recently-opened first. The first entry is the active book. */
 export async function listBooks(userId: string): Promise<BookSummary[]> {
   const { data } = await supabase()
