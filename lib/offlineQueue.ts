@@ -10,6 +10,7 @@
 // Per-scene conflict detection is Phase 2.
 
 import { Scene } from "./types";
+import { openDb, objectStore, promisify, SCENE_STORE, NOTE_STORE, SCENE_KEY, NOTE_KEY } from "./offlineDb";
 
 export type ScenePatch = Partial<Pick<Scene, "label" | "body">>;
 export type NotePatch = { title?: string; body?: string };
@@ -23,54 +24,6 @@ interface PendingWrite<P> {
   // on the version the edit was actually derived from — not whatever the reload
   // fetched. Null for notes / brand-new scenes.
   baseUpdatedAt?: string | null;
-}
-
-const DB_NAME = "hotcocoa-offline";
-const DB_VERSION = 2;
-const SCENE_STORE = "pending_scene_writes";
-const NOTE_STORE = "pending_note_writes";
-// Each store keys on its entity id (sceneId / noteId) so repeated edits coalesce.
-const SCENE_KEY = "sceneId";
-const NOTE_KEY = "noteId";
-
-// ── IndexedDB plumbing ──────────────────────────────────────────────────────
-// Every entry point degrades gracefully: if IndexedDB is unavailable or blocked
-// (private mode, storage disabled), openDb resolves null and the durable layer
-// becomes a no-op — the in-memory autosave loop still works exactly as before.
-
-let dbPromise: Promise<IDBDatabase | null> | null = null;
-
-function openDb(): Promise<IDBDatabase | null> {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve) => {
-    if (typeof indexedDB === "undefined") return resolve(null);
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      // v1 → v2 adds the note store; createObjectStore is guarded so an existing
-      // scene store (and its queued edits) is left untouched across the upgrade.
-      if (!db.objectStoreNames.contains(SCENE_STORE)) {
-        db.createObjectStore(SCENE_STORE, { keyPath: SCENE_KEY });
-      }
-      if (!db.objectStoreNames.contains(NOTE_STORE)) {
-        db.createObjectStore(NOTE_STORE, { keyPath: NOTE_KEY });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => resolve(null);
-  });
-  return dbPromise;
-}
-
-function objectStore(db: IDBDatabase, name: string, mode: IDBTransactionMode) {
-  return db.transaction(name, mode).objectStore(name);
-}
-
-function promisify<T>(req: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
 }
 
 // Merge a patch into a store, coalescing with any patch already queued for that

@@ -240,8 +240,17 @@ Each phase ships value on its own.
    (`.eq("updated_at", base)`) returning `saved` / `conflict` / `deleted`; a
    conflict surfaces `ConflictModal` (keep this device / keep other device)
    instead of clobbering. Multi-device edits prompt instead of overwrite (§4).
-3. **Read cache.** Mirror scenes/chapters into IndexedDB on load; cache library
-   image blobs so navigation and images work offline. (Completes Layer 2.)
+3. **Read cache.** 🟡 **Text shipped; image blobs pending.** `lib/offlineDb.ts`
+   is now the shared IndexedDB handle (v3); `lib/offlineCache.ts` mirrors the
+   book structure + each chapter's scenes/library on every successful online
+   load. `useHotCocoaDb` bootstrap hydrates entirely from cache when offline
+   (via cached session `userId`), and `loadChapter` falls back to cache. Chapters
+   cache **as they're loaded/visited** and the cache **persists across sessions**,
+   so an author's working set accumulates offline. Two follow-ups: (a) library
+   **image blobs** aren't cached yet — cached images use expiring signed URLs and
+   404 offline; (b) the background prefetch only loads ~1 chapter (pre-existing
+   stale-deps bug), so full-book offline needs that fixed or chapters visited
+   first. Completes Layer 2 once image blobs land.
 4. **Service-worker app shell (max).** Cache the Next.js shell so the app
    cold-opens offline. Turns "plane, tab open" into "hike, phone was asleep."
    Mandatory for iOS true offline. Ship the PWA install prompt + "Add to Home

@@ -5,6 +5,7 @@ import { createClient } from "./supabase/client";
 import { ensureDevSession } from "./ensureDevSession";
 import * as db from "./db";
 import * as offlineQueue from "./offlineQueue";
+import * as offlineCache from "./offlineCache";
 import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink, LibraryLink } from "./types";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "offline";
@@ -110,6 +111,8 @@ export function useHotCocoaDb() {
   sectionsRef.current = sections;
   const conflictsRef = useRef(conflicts);
   conflictsRef.current = conflicts;
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
 
   // ── Bootstrap ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -118,14 +121,54 @@ export function useHotCocoaDb() {
 
     const supabase = createClient();
 
-    async function bootstrap() {
-      await ensureDevSession(supabase);
+    // Reconstruct the whole editor from the read cache when there's no network.
+    async function hydrateFromCache() {
+      const snap = await offlineCache.readSnapshot();
+      if (!snap) {
+        // Nothing cached and no network — mark hydrated so the UI can show its
+        // empty state instead of hanging on a skeleton forever.
+        setHydrated(true);
+        return;
+      }
+      setUserId(snap.userId);
+      snap.loadedChapterIds.forEach((id) => loadedChapterIds.current.add(id));
+      setLoadedChapters(new Set(snap.loadedChapterIds));
+      setSections(snap.sections);
+      setActiveChapterId(snap.book.activeChapterId);
+      setBook(snap.book);
+      setHydrated(true);
+    }
 
-      const { data: { user } } = await supabase.auth.getUser();
+    async function bootstrap() {
+      // Offline from the start: skip the network entirely and hydrate from cache.
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        await hydrateFromCache();
+        return;
+      }
+
+      let user;
+      try {
+        await ensureDevSession(supabase);
+        ({ data: { user } } = await supabase.auth.getUser());
+      } catch {
+        // Network failed mid-auth — fall back to whatever we have cached.
+        await hydrateFromCache();
+        return;
+      }
+      // Online but genuinely not signed in — respect it (don't reveal cache);
+      // the page's own auth gate handles the redirect.
       if (!user) return;
       setUserId(user.id);
 
-      const { book: loadedBook, sections: loadedSections } = await db.getOrCreateBook(user.id);
+      let loadedBook, loadedSections;
+      try {
+        ({ book: loadedBook, sections: loadedSections } = await db.getOrCreateBook(user.id));
+      } catch {
+        await hydrateFromCache();
+        return;
+      }
+      // Mirror the structure immediately so a later offline reload can rebuild it.
+      offlineCache.cacheBook(user.id, loadedBook, loadedSections).catch(() => {});
 
       const allChapters = loadedSections.flatMap((s) => s.chapters);
       // getOrCreateBook resolves activeChapterId to the last-edited chapter
@@ -138,6 +181,7 @@ export function useHotCocoaDb() {
           db.getScenesForChapter(initialChapter.id),
           db.getLibraryForChapter(initialChapter.id),
         ]);
+        offlineCache.cacheChapter(user.id, initialChapter.id, scenes, library).catch(() => {});
         loadedChapterIds.current.add(initialChapter.id);
         setLoadedChapters(new Set([initialChapter.id]));
         const updatedSections = mapChapter(loadedSections, initialChapter.id, (c) => ({
@@ -169,12 +213,23 @@ export function useHotCocoaDb() {
         db.getScenesForChapter(chapterId),
         db.getLibraryForChapter(chapterId),
       ]);
+      // Mirror for offline navigation to this chapter later.
+      const uid = userIdRef.current;
+      if (uid) offlineCache.cacheChapter(uid, chapterId, scenes, library).catch(() => {});
     } catch (err) {
-      // Roll the dedup entry back, otherwise this chapter is marked "in flight"
-      // forever and every later attempt short-circuits — leaving its editor stuck
-      // on the loading skeleton with no way to recover short of a reload.
-      loadedChapterIds.current.delete(chapterId);
-      throw err;
+      // Offline (or a transient failure) — serve cached content if we have it so
+      // the author can still open this chapter.
+      const cached = await offlineCache.readCachedChapter(chapterId);
+      if (cached) {
+        scenes = cached.scenes;
+        library = cached.library;
+      } else {
+        // Nothing cached: roll the dedup entry back, otherwise this chapter is
+        // marked "in flight" forever and every later attempt short-circuits —
+        // leaving its editor stuck on the skeleton short of a reload.
+        loadedChapterIds.current.delete(chapterId);
+        throw err;
+      }
     }
 
     setSections((prev) => mapChapter(prev, chapterId, (c) => ({ ...c, scenes, library })));
