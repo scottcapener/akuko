@@ -8,6 +8,7 @@ import { useHotCocoaDb } from "@/lib/useHotCocoaDb";
 import LeftColumn from "@/components/LeftColumn";
 import CenterColumn from "@/components/CenterColumn";
 import RightColumn from "@/components/RightColumn";
+import { ConflictModal } from "@/components/ConflictModal";
 import { SceneDragProvider } from "@/lib/useSceneDrag";
 import { ChapterDragProvider } from "@/lib/useChapterDrag";
 import { Scene } from "@/lib/types";
@@ -667,6 +668,9 @@ export default function WritePage() {
       <div className={`md:hidden fixed inset-y-0 right-0 z-40 w-full transition-transform duration-200 ${mobilePanel === "right" ? "translate-x-0" : "translate-x-full"}`}>
         <RightColumn {...rightProps} onClose={() => setMobilePanel(null)} />
       </div>
+      {store.conflicts.length > 0 && (
+        <ConflictModal conflicts={store.conflicts} onResolve={store.resolveConflict} />
+      )}
     </div>
     </ChapterDragProvider>
     </SceneDragProvider>

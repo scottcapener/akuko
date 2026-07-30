@@ -2,6 +2,11 @@ export interface Scene {
   id: string;
   label: string;
   body: string;
+  // Server `updated_at` as of load or last successful save — the optimistic-
+  // concurrency base. A queued offline edit conditions its save on this value so
+  // a change made on another device isn't silently clobbered (Phase 2 conflict
+  // detection). Advances on every successful save.
+  updatedAt: string;
 }
 
 export interface LibraryImage {
