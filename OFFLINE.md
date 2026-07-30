@@ -234,8 +234,12 @@ Each phase ships value on its own.
    while offline, showing a calm "Offline — will sync" status instead of an
    error. Delivers "keep writing on the plane, nothing lost" with no service
    worker and no CRDT. See §8.
-2. **Per-scene conflict detection.** Add `base_updated_at` guard to the flush so
-   multi-device edits prompt instead of clobber (§4).
+2. **Per-scene conflict detection.** ✅ **Implemented** — every scene carries its
+   server `updatedAt` as an optimistic-concurrency base (`Scene.updatedAt`,
+   threaded through the durable queue). `db.saveScene` does a conditional update
+   (`.eq("updated_at", base)`) returning `saved` / `conflict` / `deleted`; a
+   conflict surfaces `ConflictModal` (keep this device / keep other device)
+   instead of clobbering. Multi-device edits prompt instead of overwrite (§4).
 3. **Read cache.** Mirror scenes/chapters into IndexedDB on load; cache library
    image blobs so navigation and images work offline. (Completes Layer 2.)
 4. **Service-worker app shell (max).** Cache the Next.js shell so the app

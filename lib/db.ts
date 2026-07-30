@@ -402,6 +402,7 @@ export async function getScenesForChapter(chapterId: string): Promise<Scene[]> {
     id: s.id,
     label: s.label ?? "",
     body: s.body ?? "",
+    updatedAt: s.updated_at,
   }));
 }
 
@@ -412,17 +413,62 @@ export async function createScene(chapterId: string, position: number): Promise<
     .select()
     .single();
   if (error) throw error;
-  return { id: data.id, label: "", body: "" };
+  return { id: data.id, label: "", body: "", updatedAt: data.updated_at };
 }
 
-export async function saveScene(sceneId: string, patch: Partial<Pick<Scene, "label" | "body">>) {
-  const { error } = await supabase()
+export type SaveSceneResult =
+  | { status: "saved"; updatedAt: string }
+  | { status: "conflict"; server: { label: string; body: string; updatedAt: string } }
+  | { status: "deleted" };
+
+// Optimistic-concurrency save. When `baseUpdatedAt` is given, the write only
+// applies if the row's `updated_at` still matches it — so an offline edit
+// derived from an older version doesn't clobber a change made on another device.
+// Returns "conflict" (with the current server row) instead of overwriting, or
+// "deleted" if the scene is gone. Network/unknown errors still throw so the
+// autosave loop can re-queue.
+export async function saveScene(
+  sceneId: string,
+  patch: Partial<Pick<Scene, "label" | "body">>,
+  baseUpdatedAt?: string | null
+): Promise<SaveSceneResult> {
+  const db = supabase();
+
+  // No known base (brand-new local scene): unconditional write — nothing on the
+  // server to conflict with yet.
+  if (!baseUpdatedAt) {
+    const { data, error } = await db
+      .from("scenes")
+      .update({ ...patch })
+      .eq("id", sceneId)
+      .select("updated_at")
+      .maybeSingle();
+    if (error) throw error;
+    return data ? { status: "saved", updatedAt: data.updated_at } : { status: "deleted" };
+  }
+
+  const { data, error } = await db
     .from("scenes")
     .update({ ...patch })
-    .eq("id", sceneId);
-  // Surface the failure so the autosave loop can re-queue instead of dropping
-  // the edit and reporting success.
+    .eq("id", sceneId)
+    .eq("updated_at", baseUpdatedAt)
+    .select("updated_at")
+    .maybeSingle();
   if (error) throw error;
+  if (data) return { status: "saved", updatedAt: data.updated_at };
+
+  // Zero rows updated: either the row changed under us (conflict) or it's gone.
+  const { data: current, error: readErr } = await db
+    .from("scenes")
+    .select("label, body, updated_at")
+    .eq("id", sceneId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!current) return { status: "deleted" };
+  return {
+    status: "conflict",
+    server: { label: current.label ?? "", body: current.body ?? "", updatedAt: current.updated_at },
+  };
 }
 
 export async function reorderScenes(scenes: { id: string; position: number }[]) {
@@ -493,7 +539,7 @@ export async function duplicateChapterScenes(
   return (data ?? [])
     .slice()
     .sort((a, b) => a.position - b.position)
-    .map((s) => ({ id: s.id, label: s.label ?? "", body: s.body ?? "" }));
+    .map((s) => ({ id: s.id, label: s.label ?? "", body: s.body ?? "", updatedAt: s.updated_at }));
 }
 
 // Split: reparent `movedSceneIds` onto the new chapter and renumber both lists.

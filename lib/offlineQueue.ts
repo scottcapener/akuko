@@ -18,6 +18,11 @@ interface PendingWrite<P> {
   userId: string; // so queued work survives re-login and never crosses accounts
   patch: P;
   queuedAt: number;
+  // Optimistic-concurrency base captured when the edit was first queued (scenes
+  // only). Carried through so a replay after a page reload conditions its save
+  // on the version the edit was actually derived from — not whatever the reload
+  // fetched. Null for notes / brand-new scenes.
+  baseUpdatedAt?: string | null;
 }
 
 const DB_NAME = "hotcocoa-offline";
@@ -77,7 +82,8 @@ function enqueue<P extends object>(
   keyField: string,
   userId: string,
   id: string,
-  patch: P
+  patch: P,
+  baseUpdatedAt?: string | null
 ): Promise<void> {
   return openDb()
     .then(
@@ -93,6 +99,9 @@ function enqueue<P extends object>(
               userId,
               patch: { ...(existing?.patch ?? {}), ...patch },
               queuedAt: existing?.queuedAt ?? Date.now(),
+              // Keep the base from the first queued edit — later keystrokes share
+              // the same base until a save advances it.
+              baseUpdatedAt: existing?.baseUpdatedAt ?? baseUpdatedAt ?? null,
             };
             const putReq = os.put(merged);
             putReq.onsuccess = () => resolve();
@@ -116,29 +125,38 @@ async function read<P>(
   storeName: string,
   keyField: string,
   userId: string
-): Promise<{ id: string; patch: P }[]> {
+): Promise<{ id: string; patch: P; baseUpdatedAt: string | null }[]> {
   const db = await openDb();
   if (!db) return [];
   const os = objectStore(db, storeName, "readonly");
   const all = (await promisify(os.getAll())) as (PendingWrite<P> & Record<string, string>)[];
-  return all.filter((w) => w.userId === userId).map((w) => ({ id: w[keyField], patch: w.patch }));
+  return all
+    .filter((w) => w.userId === userId)
+    .map((w) => ({ id: w[keyField], patch: w.patch, baseUpdatedAt: w.baseUpdatedAt ?? null }));
 }
 
 // ── Public API: scenes ──────────────────────────────────────────────────────
 
-export function enqueueSceneWrite(userId: string, sceneId: string, patch: Partial<Scene>): Promise<void> {
+export function enqueueSceneWrite(
+  userId: string,
+  sceneId: string,
+  patch: Partial<Scene>,
+  baseUpdatedAt?: string | null
+): Promise<void> {
   const durable: ScenePatch = {};
   if (patch.label !== undefined) durable.label = patch.label;
   if (patch.body !== undefined) durable.body = patch.body;
   if (durable.label === undefined && durable.body === undefined) return Promise.resolve();
-  return enqueue(SCENE_STORE, SCENE_KEY, userId, sceneId, durable);
+  return enqueue(SCENE_STORE, SCENE_KEY, userId, sceneId, durable, baseUpdatedAt);
 }
 
 export function removeSceneWrites(sceneIds: string[]): Promise<void> {
   return remove(SCENE_STORE, sceneIds);
 }
 
-export function readSceneWrites(userId: string): Promise<{ id: string; patch: ScenePatch }[]> {
+export function readSceneWrites(
+  userId: string
+): Promise<{ id: string; patch: ScenePatch; baseUpdatedAt: string | null }[]> {
   return read<ScenePatch>(SCENE_STORE, SCENE_KEY, userId);
 }
 
