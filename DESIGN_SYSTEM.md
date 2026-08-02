@@ -49,7 +49,7 @@ Defined in `globals.css` via `--text-*` modifiers. Prefer these over ad-hoc `tex
 
 | Utility          | Size / line-height / weight | Usage                                   |
 | ---------------- | --------------------------- | --------------------------------------- |
-| `text-heading-xl`| 33 / 1.1 / 600 (Semi Bold)  | Standalone page titles (Terms, Privacy) |
+| `text-heading-xl`| 33 / 1.1 / 600 (Semi Bold)  | Standalone page titles (Terms, Privacy); Book Info title |
 | `text-heading-l` | 20 / 1 / 600 (Semi Bold)    | Chapter title                           |
 | `text-heading-m` | 14 / 1 / 500 (Medium)       | Book title, primary button label        |
 | `text-body-l`    | 16 / 24 / 400               | Note body                               |
@@ -77,6 +77,14 @@ Defined in `globals.css` via `--text-*` modifiers. Prefer these over ad-hoc `tex
 text-[11px] font-medium tracking-wide uppercase text-subtle
 ```
 Use the `Label` component from `components/ui` for form labels. For non-form section headers (e.g. in sidebars), apply these classes directly to `<p>` or `<span>`.
+
+---
+
+## Brand voice
+
+**Hot Cocoa uses Sentence case for UI copy** — buttons, labels, menu items, tags, headings, placeholders. Capitalize only the first word and any proper nouns / initialisms / stylized brand terms (e.g. "Add cover", "Total words written", "Enemies to lovers", "LGBTQ+", "LitRPG", "BookTok"). Not Title Case.
+
+Note: some existing labels use an all-caps + letter-spacing *visual treatment* (`text-label-m uppercase`, e.g. section headers like GUIDE / CHAPTERS). That's a style, not Title Case — the underlying copy is still authored in Sentence case.
 
 ---
 
@@ -158,6 +166,14 @@ import { Modal } from "@/components/ui";
 ```
 
 Renders via `createPortal` into `document.body`. Handles Escape key. Clicking the backdrop calls `onClose`. Container: `bg-panel rounded-2xl shadow-2xl`. Props: `maxWidth` (default `max-w-lg`), `backdrop` (`"dark"` = `bg-black/85`, `"medium"` = `bg-black/70`).
+
+---
+
+## Book Info components
+
+- `components/Tag.tsx` — `Tag` pill (Default: `bg-panel border-hover text-muted`; Selected: `bg-elevated border-accent text-text`; both `text-body-m`, `h-8 rounded-full`), plus `TagManageButton` (round `+`) and `TagAddButton` (empty state). Used in the Book Info tags row and `BookTagsModal`.
+- `components/SceneBlock.tsx` — the shared Scene block (extracted from `CenterColumn`). Pass `fixedLabel="Synopsis"` for the locked Book Info Synopsis variant (static label, no drag, no delete); `placeholder` overrides the empty-body hint.
+- `components/BookOverview.tsx` — Book Panel cover + title; the title opens Book Info (`active` = Book Info is the current view).
 
 ---
 

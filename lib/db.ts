@@ -10,6 +10,11 @@ import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicL
 
 const UNLOCK_THRESHOLDS = [1000, 2000, 5000, 10000, 25000];
 
+// Label of the hidden section that holds each book's "info chapter" (Synopsis +
+// Book-Info Library). Never rendered — the app filters this section out of
+// everything author-facing, so its label is internal only.
+const INFO_SECTION_LABEL = "__book_info__";
+
 // TTL for library-file signed URLs. These expire, so the UI re-mints them on
 // <img> error (see signLibraryImageUrl); a long TTL just keeps churn low for
 // normal sessions. 24 hours.
@@ -126,6 +131,7 @@ export async function setActiveBook(bookId: string) {
 export async function getOrCreateBook(userId: string): Promise<{
   book: Book;
   sections: Section[];
+  infoChapter: Chapter;
 }> {
   const db = supabase();
 
@@ -199,11 +205,54 @@ export async function getOrCreateBook(userId: string): Promise<{
     chaptersData = [newChapter];
   }
 
-  // Reopen the last-edited chapter if it still exists; else first chapter.
+  // ── Book Info: provision the hidden "info chapter" ──
+  // It reuses the chapter/scene/library machinery to hold the Synopsis (its
+  // single scene) and the Book-Info Library, but lives in a hidden section that
+  // never surfaces in the Book Panel, word counts, exports, or backups.
+  // chaptersData was fetched by book_id, so an existing info chapter is already
+  // present here — we filter it (and its section) out of `sections` below.
+  let infoChapterId = dbBook.info_chapter_id as string | null | undefined;
+  let infoChapterRow = infoChapterId
+    ? chaptersData.find((c) => c.id === infoChapterId)
+    : undefined;
+  if (!infoChapterId || !infoChapterRow) {
+    const { data: hiddenSection, error: hsErr } = await db
+      .from("sections")
+      .insert({ book_id: dbBook.id, label: INFO_SECTION_LABEL, position: -1 })
+      .select()
+      .single();
+    if (hsErr) throw hsErr;
+    const { data: newInfoChapter, error: icErr } = await db
+      .from("chapters")
+      .insert({ book_id: dbBook.id, section_id: hiddenSection.id, title: "Book Info", position: 0 })
+      .select()
+      .single();
+    if (icErr) throw icErr;
+    await db.from("scenes").insert({ chapter_id: newInfoChapter.id, label: "", body: "", position: 0 });
+    await db.from("books").update({ info_chapter_id: newInfoChapter.id }).eq("id", dbBook.id);
+    infoChapterId = newInfoChapter.id;
+    infoChapterRow = newInfoChapter;
+    sectionsData.push(hiddenSection);
+    chaptersData.push(newInfoChapter);
+  }
+  const infoSectionId = infoChapterRow.section_id as string;
+
+  // Author-visible sections/chapters exclude the hidden info section entirely.
+  // Match on label too, so a stray hidden section (e.g. from an interrupted
+  // provisioning) can never surface in the Book Panel.
+  const hiddenSectionIds = new Set(
+    sectionsData.filter((s) => s.id === infoSectionId || s.label === INFO_SECTION_LABEL).map((s) => s.id)
+  );
+  const realSections = sectionsData.filter((s) => !hiddenSectionIds.has(s.id));
+  const realChapters = chaptersData.filter(
+    (c) => c.id !== infoChapterId && !hiddenSectionIds.has(c.section_id)
+  );
+
+  // Reopen the last-edited chapter if it still exists; else first real chapter.
   const savedActiveId = dbBook.active_chapter_id as string | null | undefined;
-  const activeChapterId = chaptersData.some((c) => c.id === savedActiveId)
+  const activeChapterId = realChapters.some((c) => c.id === savedActiveId)
     ? savedActiveId!
-    : chaptersData[0].id;
+    : realChapters[0].id;
 
   const rawCover = dbBook.cover_image_path as string | null;
   const book: Book = {
@@ -215,13 +264,16 @@ export async function getOrCreateBook(userId: string): Promise<{
       : rawCover ?? undefined,
     coverImagePath: coverIsStoragePath(rawCover) ? rawCover : undefined,
     activeChapterId,
+    tags: (dbBook.tags as string[] | null) ?? [],
+    infoChapterId: infoChapterId ?? undefined,
+    excludedSectionIds: (dbBook.wordcount_excluded_sections as string[] | null) ?? [],
   };
 
-  const sections: Section[] = sectionsData.map((s) => ({
+  const sections: Section[] = realSections.map((s) => ({
     id: s.id,
     label: s.label,
     position: s.position,
-    chapters: chaptersData
+    chapters: realChapters
       .filter((c) => c.section_id === s.id)
       .map((c) => ({
         id: c.id,
@@ -232,7 +284,15 @@ export async function getOrCreateBook(userId: string): Promise<{
       })),
   }));
 
-  return { book, sections };
+  const infoChapter: Chapter = {
+    id: infoChapterRow.id,
+    title: infoChapterRow.title,
+    sectionId: infoSectionId,
+    scenes: [],
+    library: { images: [], notes: [], musicLinks: [], links: [] },
+  };
+
+  return { book, sections, infoChapter };
 }
 
 export async function updateBookTitle(bookId: string, title: string) {
@@ -241,6 +301,71 @@ export async function updateBookTitle(bookId: string, title: string) {
 
 export async function updateBookActiveChapter(bookId: string, chapterId: string) {
   await supabase().from("books").update({ active_chapter_id: chapterId }).eq("id", bookId);
+}
+
+/** Persist the book's selected Book Info tags (tag ids). */
+export async function updateBookTags(bookId: string, tags: string[]) {
+  await supabase().from("books").update({ tags }).eq("id", bookId);
+}
+
+/** Persist the sections excluded from the official Book Info word count. */
+export async function updateBookExcludedSections(bookId: string, sectionIds: string[]) {
+  await supabase()
+    .from("books")
+    .update({ wordcount_excluded_sections: sectionIds })
+    .eq("id", bookId);
+}
+
+// ── Book stats ────────────────────────────────────────────────────────────────
+
+export interface BookStats {
+  createdAt: string;         // book created_at — the "since …" anchor
+  sessionCount: number;      // distinct calendar days the author wrote
+  totalActiveSeconds: number;
+}
+
+/** Read the daily-rollup stats backing Book Info: how many days the author has
+ *  written (session count) and their summed active writing time. */
+export async function getBookStats(bookId: string): Promise<BookStats | null> {
+  const db = supabase();
+  const [{ data: bookRow }, { data: days }] = await Promise.all([
+    db.from("books").select("created_at").eq("id", bookId).maybeSingle(),
+    db.from("writing_days").select("active_seconds").eq("book_id", bookId),
+  ]);
+  if (!bookRow) return null;
+  const rows = days ?? [];
+  return {
+    createdAt: bookRow.created_at,
+    sessionCount: rows.length,
+    totalActiveSeconds: rows.reduce((t, r) => t + (r.active_seconds ?? 0), 0),
+  };
+}
+
+/** Local (author-timezone) calendar day as YYYY-MM-DD — the writing_days key. */
+function localDayKey(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Add active writing seconds to today's writing_days row (creating it — and so
+ *  marking today as a writing day — if absent). Best-effort read-modify-write;
+ *  small cross-tab races just lose a few seconds, which is fine for stats. */
+export async function bumpWritingDay(userId: string, bookId: string, deltaSeconds: number) {
+  if (deltaSeconds <= 0) return;
+  const db = supabase();
+  const day = localDayKey();
+  const { data: existing } = await db
+    .from("writing_days")
+    .select("active_seconds")
+    .eq("book_id", bookId)
+    .eq("day", day)
+    .maybeSingle();
+  const active_seconds = (existing?.active_seconds ?? 0) + Math.round(deltaSeconds);
+  await db
+    .from("writing_days")
+    .upsert(
+      { user_id: userId, book_id: bookId, day, active_seconds },
+      { onConflict: "book_id,day" }
+    );
 }
 
 /** Set (or clear) the stored cover path/value on the book row. */

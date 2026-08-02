@@ -75,6 +75,13 @@ export async function generateBackup(
     supabase.from("chapters").select("*").eq("book_id", bookId).order("position"),
   ]);
 
+  // Book Info (the hidden info chapter/section holding the Synopsis + Book-Info
+  // Library) is included in the backup so it survives a restore — it flows
+  // through the normal sections/chapters/scenes/library machinery below, and the
+  // restored book is re-pointed at it via book.infoChapterId. Its section is
+  // hidden by label on load, so it never shows in the Book Panel.
+  const infoChapterId = book.info_chapter_id as string | null;
+
   const chapterIds = (chapters ?? []).map((c) => c.id);
 
   // scenes + library items are keyed by chapter, not book, so fetch by id set
@@ -155,6 +162,8 @@ export async function generateBackup(
       coverContentType,
       wordCount: book.word_count ?? 0,
       unlocks: Array.isArray(book.unlocks) ? book.unlocks : [],
+      tags: Array.isArray(book.tags) ? book.tags : [],
+      infoChapterId: infoChapterId ?? undefined,
     },
     sections: (sections ?? []).map((s) => ({
       id: s.id,

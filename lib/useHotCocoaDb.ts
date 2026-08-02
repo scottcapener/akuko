@@ -95,6 +95,12 @@ export function useHotCocoaDb() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [hydrated, setHydrated] = useState(false);
   const [unlocks, setUnlocks] = useState<number[]>([]);
+  // The hidden "info chapter" backing Book Info (Synopsis scene + Book-Info
+  // Library). Kept out of `sections` so it never touches word counts, the Book
+  // Panel, side-by-side, exports, or backups; scene/library edits targeting it
+  // are routed here by updateChapterState below.
+  const [infoChapter, setInfoChapter] = useState<Chapter | null>(null);
+  const [bookStats, setBookStats] = useState<db.BookStats | null>(null);
 
   const [conflicts, setConflicts] = useState<SceneConflict[]>([]);
 
@@ -131,6 +137,35 @@ export function useHotCocoaDb() {
   conflictsRef.current = conflicts;
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
+  const bookRef = useRef(book);
+  bookRef.current = book;
+  const infoChapterRef = useRef(infoChapter);
+  infoChapterRef.current = infoChapter;
+
+  // Route a chapter-state update to the right container: the hidden info chapter
+  // lives outside `sections`, so scene/library edits targeting it update
+  // `infoChapter`; everything else maps within `sections` exactly as before.
+  const updateChapterState = useCallback(
+    (chapterId: string, fn: (c: Chapter) => Chapter) => {
+      if (infoChapterRef.current && chapterId === infoChapterRef.current.id) {
+        setInfoChapter((c) => (c ? fn(c) : c));
+      } else {
+        setSections((prev) => mapChapter(prev, chapterId, fn));
+      }
+    },
+    []
+  );
+
+  // Find a chapter by id across both containers (sections + the info chapter),
+  // so library/scene helpers that read current positions/paths also work for
+  // Book Info. Reads refs, so callers needn't depend on `sections`.
+  const findChapter = useCallback(
+    (chapterId: string): Chapter | undefined =>
+      infoChapterRef.current && infoChapterRef.current.id === chapterId
+        ? infoChapterRef.current
+        : sectionsRef.current.flatMap((s) => s.chapters).find((c) => c.id === chapterId),
+    []
+  );
 
   // ── Bootstrap ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -158,6 +193,24 @@ export function useHotCocoaDb() {
       setSections(snap.sections);
       setActiveChapterId(snap.book.activeChapterId);
       setBook(snap.book);
+      // Restore Book Info from the per-chapter cache (older snapshots predating
+      // Book Info simply have no infoChapterId — skip in that case).
+      if (snap.book.infoChapterId) {
+        const cached = await offlineCache.readCachedChapter(snap.book.infoChapterId);
+        const info: Chapter = {
+          id: snap.book.infoChapterId,
+          title: "Book Info",
+          sectionId: "",
+          scenes: cached?.scenes ?? [],
+          library: cached?.library ?? { images: [], notes: [], musicLinks: [], links: [] },
+        };
+        infoChapterRef.current = info;
+        setInfoChapter(info);
+        if (cached) {
+          loadedChapterIds.current.add(snap.book.infoChapterId);
+          setLoadedChapters((prev) => new Set(prev).add(snap.book.infoChapterId!));
+        }
+      }
       setHydrated(true);
     }
 
@@ -182,9 +235,10 @@ export function useHotCocoaDb() {
       if (!user) return;
       setUserId(user.id);
 
-      let loadedBook, loadedSections;
+      let loadedBook, loadedSections, loadedInfoChapter;
       try {
-        ({ book: loadedBook, sections: loadedSections } = await db.getOrCreateBook(user.id));
+        ({ book: loadedBook, sections: loadedSections, infoChapter: loadedInfoChapter } =
+          await db.getOrCreateBook(user.id));
       } catch {
         await hydrateFromCache();
         return;
@@ -222,6 +276,26 @@ export function useHotCocoaDb() {
         setSections(loadedSections);
         setBook(loadedBook);
       }
+
+      // Load Book Info (Synopsis + Book-Info Library) up front so the surface is
+      // instant when opened and available offline. Set the ref eagerly so any
+      // later scene/library edit routes to it before the state settles.
+      try {
+        const [iScenes, iLibrary] = await Promise.all([
+          db.getScenesForChapter(loadedInfoChapter.id),
+          db.getLibraryForChapter(loadedInfoChapter.id),
+        ]);
+        offlineCache.cacheChapter(user.id, loadedInfoChapter.id, iScenes, iLibrary).catch(() => {});
+        loadedChapterIds.current.add(loadedInfoChapter.id);
+        setLoadedChapters((prev) => new Set(prev).add(loadedInfoChapter.id));
+        infoChapterRef.current = { ...loadedInfoChapter, scenes: iScenes, library: iLibrary };
+        setInfoChapter(infoChapterRef.current);
+      } catch {
+        infoChapterRef.current = loadedInfoChapter;
+        setInfoChapter(loadedInfoChapter);
+      }
+      db.getBookStats(loadedBook.id).then(setBookStats).catch(() => {});
+
       setHydrated(true);
     }
 
@@ -262,13 +336,13 @@ export function useHotCocoaDb() {
       }
     }
 
-    setSections((prev) => mapChapter(prev, chapterId, (c) => ({ ...c, scenes, library })));
+    updateChapterState(chapterId, (c) => ({ ...c, scenes, library }));
     setLoadedChapters((prev) => {
       const next = new Set(prev);
       next.add(chapterId);
       return next;
     });
-  }, []);
+  }, [updateChapterState]);
 
   // ── Background prefetch ───────────────────────────────────────────────
   // After the first chapter renders, quietly load every other chapter's text so
@@ -384,8 +458,10 @@ export function useHotCocoaDb() {
         } else {
           // Conflict: hand it to the user. Leave the durable copy in IndexedDB so
           // an unresolved conflict survives a reload (recovery skips it meanwhile).
-          const local = sectionsRef.current
-            .flatMap((s) => s.chapters)
+          const local = [
+            ...sectionsRef.current.flatMap((s) => s.chapters),
+            ...(infoChapterRef.current ? [infoChapterRef.current] : []),
+          ]
             .flatMap((c) => c.scenes.map((sc) => ({ scene: sc, chapter: c })))
             .find((x) => x.scene.id === sceneId);
           newConflicts.push({
@@ -432,6 +508,23 @@ export function useHotCocoaDb() {
         }
         return next;
       });
+
+      // The Synopsis scene lives on the info chapter (outside `sections`), so
+      // advance its base version here too — otherwise the next synopsis edit
+      // would condition on a stale updatedAt and self-conflict.
+      if (savedUpdates.size > 0) {
+        setInfoChapter((prev) => {
+          if (!prev) return prev;
+          let touched = false;
+          const scenes = prev.scenes.map((s) => {
+            const updatedAt = savedUpdates.get(s.id);
+            if (!updatedAt) return s;
+            touched = true;
+            return { ...s, updatedAt };
+          });
+          return touched ? { ...prev, scenes } : prev;
+        });
+      }
 
       if (newConflicts.length > 0) {
         setConflicts((prev) => [
@@ -710,6 +803,59 @@ export function useHotCocoaDb() {
     if (signedUrl) setBook((b) => (b ? { ...b, coverImage: signedUrl } : b));
   }, [book]);
 
+  // ── Book Info: tags, word-count exclusions, stats ─────────────────────
+  const setBookTags = useCallback((tags: string[]) => {
+    setBook((b) => (b ? { ...b, tags } : b));
+    if (bookRef.current) db.updateBookTags(bookRef.current.id, tags);
+  }, []);
+
+  const toggleBookTag = useCallback((tagId: string) => {
+    setBook((b) => {
+      if (!b) return b;
+      const current = b.tags ?? [];
+      const tags = current.includes(tagId)
+        ? current.filter((t) => t !== tagId)
+        : [...current, tagId];
+      db.updateBookTags(b.id, tags);
+      return { ...b, tags };
+    });
+  }, []);
+
+  // Toggle a section in/out of the "official" manuscript word count. Whole-book
+  // achievements are unaffected — this only narrows the Book Info total.
+  const toggleExcludedSection = useCallback((sectionId: string) => {
+    setBook((b) => {
+      if (!b) return b;
+      const current = b.excludedSectionIds ?? [];
+      const excludedSectionIds = current.includes(sectionId)
+        ? current.filter((id) => id !== sectionId)
+        : [...current, sectionId];
+      db.updateBookExcludedSections(b.id, excludedSectionIds);
+      return { ...b, excludedSectionIds };
+    });
+  }, []);
+
+  // Record active writing time (drives Book Stats). Marks today a writing day
+  // and adds to its active_seconds; best-effort, skipped offline. Optimistically
+  // bumps local stats so the Book Info numbers move without a refetch — the next
+  // load's getBookStats is authoritative and corrects any drift.
+  const recordActiveTime = useCallback((seconds: number) => {
+    const uid = userIdRef.current;
+    const b = bookRef.current;
+    if (!uid || !b || seconds <= 0) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    db.bumpWritingDay(uid, b.id, seconds).catch(() => {});
+    setBookStats((prev) =>
+      prev
+        ? {
+            ...prev,
+            sessionCount: Math.max(prev.sessionCount, 1),
+            totalActiveSeconds: prev.totalActiveSeconds + Math.round(seconds),
+          }
+        : prev
+    );
+  }, []);
+
   const setActiveChapter = useCallback(
     (id: string) => {
       setActiveChapterId(id);
@@ -873,18 +1019,17 @@ export function useHotCocoaDb() {
       // server version it's being edited from. Held (not re-captured per
       // keystroke) until a save advances it, so the whole edit conditions on it.
       if (!pendingBases.current.has(sceneId)) {
-        const scene = sectionsRef.current
-          .flatMap((s) => s.chapters)
-          .flatMap((c) => c.scenes)
-          .find((s) => s.id === sceneId);
+        const chapters = [
+          ...sectionsRef.current.flatMap((s) => s.chapters),
+          ...(infoChapterRef.current ? [infoChapterRef.current] : []),
+        ];
+        const scene = chapters.flatMap((c) => c.scenes).find((s) => s.id === sceneId);
         pendingBases.current.set(sceneId, scene?.updatedAt ?? null);
       }
-      setSections((prev) =>
-        mapChapter(prev, chapterId, (c) => ({
-          ...c,
-          scenes: c.scenes.map((s) => (s.id === sceneId ? { ...s, ...patch } : s)),
-        }))
-      );
+      updateChapterState(chapterId, (c) => ({
+        ...c,
+        scenes: c.scenes.map((s) => (s.id === sceneId ? { ...s, ...patch } : s)),
+      }));
       const existing = pendingSaves.current.get(sceneId) ?? {};
       const merged = { ...existing, ...patch };
       pendingSaves.current.set(sceneId, merged);
@@ -897,7 +1042,7 @@ export function useHotCocoaDb() {
       }
       scheduleSave();
     },
-    [scheduleSave, userId]
+    [scheduleSave, userId, updateChapterState]
   );
 
   const addScene = useCallback(
@@ -1144,79 +1289,69 @@ export function useHotCocoaDb() {
   const addLibraryImage = useCallback(
     async (chapterId: string, img: LibraryImage) => {
       if (!userId) return;
-      const chapter = sections.flatMap((s) => s.chapters).find((c) => c.id === chapterId);
+      const chapter = findChapter(chapterId);
       const position = chapter?.library.images.length ?? 0;
       const saved = await db.addLibraryImageFromDataUrl(chapterId, userId, img.dataUrl, img.name, position);
-      setSections((prev) =>
-        mapChapter(prev, chapterId, (c) => ({
-          ...c,
-          library: { ...c.library, images: [...c.library.images, saved] },
-        }))
-      );
+      updateChapterState(chapterId, (c) => ({
+        ...c,
+        library: { ...c.library, images: [...c.library.images, saved] },
+      }));
     },
-    [userId, sections]
+    [userId, findChapter, updateChapterState]
   );
 
   // Re-mint an expired signed URL for a stored image and swap it into state.
   // Triggered by the gallery's <img> onError when a 24h signed URL lapses.
   const refreshLibraryImageUrl = useCallback(async (chapterId: string, imageId: string) => {
-    const chapter = sections.flatMap((s) => s.chapters).find((c) => c.id === chapterId);
+    const chapter = findChapter(chapterId);
     const img = chapter?.library.images.find((i) => i.id === imageId);
     if (!img?.path) return;
     const dataUrl = await db.signLibraryImageUrl(img.path);
     if (!dataUrl) return;
-    setSections((prev) =>
-      mapChapter(prev, chapterId, (c) => ({
-        ...c,
-        library: {
-          ...c.library,
-          images: c.library.images.map((i) => (i.id === imageId ? { ...i, dataUrl } : i)),
-        },
-      }))
-    );
-  }, [sections]);
+    updateChapterState(chapterId, (c) => ({
+      ...c,
+      library: {
+        ...c.library,
+        images: c.library.images.map((i) => (i.id === imageId ? { ...i, dataUrl } : i)),
+      },
+    }));
+  }, [findChapter, updateChapterState]);
 
   const removeLibraryImage = useCallback(async (chapterId: string, imageId: string) => {
     // Grab the storage path before the image leaves state, so the stored
     // blob is deleted along with the row instead of leaking in the bucket.
-    const chapter = sections.flatMap((s) => s.chapters).find((c) => c.id === chapterId);
+    const chapter = findChapter(chapterId);
     const path = chapter?.library.images.find((i) => i.id === imageId)?.path;
-    setSections((prev) =>
-      mapChapter(prev, chapterId, (c) => ({
-        ...c,
-        library: { ...c.library, images: c.library.images.filter((i) => i.id !== imageId) },
-      }))
-    );
+    updateChapterState(chapterId, (c) => ({
+      ...c,
+      library: { ...c.library, images: c.library.images.filter((i) => i.id !== imageId) },
+    }));
     await db.removeLibraryItem(imageId, path);
-  }, [sections]);
+  }, [findChapter, updateChapterState]);
 
   const addNote = useCallback(
     async (chapterId: string) => {
-      const chapter = sections.flatMap((s) => s.chapters).find((c) => c.id === chapterId);
+      const chapter = findChapter(chapterId);
       const position = chapter?.library.notes.length ?? 0;
       const saved = await db.addNote(chapterId, { title: "", body: "" }, position);
-      setSections((prev) =>
-        mapChapter(prev, chapterId, (c) => ({
-          ...c,
-          library: { ...c.library, notes: [...c.library.notes, saved] },
-        }))
-      );
+      updateChapterState(chapterId, (c) => ({
+        ...c,
+        library: { ...c.library, notes: [...c.library.notes, saved] },
+      }));
       return saved;
     },
-    [sections]
+    [findChapter, updateChapterState]
   );
 
   const updateNote = useCallback(
     (chapterId: string, noteId: string, patch: { title?: string; body?: string }) => {
-      setSections((prev) =>
-        mapChapter(prev, chapterId, (c) => ({
-          ...c,
-          library: {
-            ...c.library,
-            notes: c.library.notes.map((n) => (n.id === noteId ? { ...n, ...patch } : n)),
-          },
-        }))
-      );
+      updateChapterState(chapterId, (c) => ({
+        ...c,
+        library: {
+          ...c.library,
+          notes: c.library.notes.map((n) => (n.id === noteId ? { ...n, ...patch } : n)),
+        },
+      }));
       const merged = { ...(pendingNoteSaves.current.get(noteId) ?? {}), ...patch };
       pendingNoteSaves.current.set(noteId, merged);
       // Mirror to IndexedDB so an offline note edit survives a tab close; the
@@ -1244,108 +1379,92 @@ export function useHotCocoaDb() {
         }, 1500)
       );
     },
-    [userId]
+    [userId, updateChapterState]
   );
 
   const removeNote = useCallback(async (chapterId: string, noteId: string) => {
-    setSections((prev) =>
-      mapChapter(prev, chapterId, (c) => ({
-        ...c,
-        library: { ...c.library, notes: c.library.notes.filter((n) => n.id !== noteId) },
-      }))
-    );
+    updateChapterState(chapterId, (c) => ({
+      ...c,
+      library: { ...c.library, notes: c.library.notes.filter((n) => n.id !== noteId) },
+    }));
     await db.removeLibraryItem(noteId);
-  }, []);
+  }, [updateChapterState]);
 
   const addMusicLink = useCallback(
     async (chapterId: string, link: LibraryMusicLink) => {
-      const chapter = sections.flatMap((s) => s.chapters).find((c) => c.id === chapterId);
+      const chapter = findChapter(chapterId);
       const position = chapter?.library.musicLinks.length ?? 0;
       const { id: _id, ...rest } = link;
       const saved = await db.addMusicLink(chapterId, rest, position);
-      setSections((prev) =>
-        mapChapter(prev, chapterId, (c) => ({
-          ...c,
-          library: { ...c.library, musicLinks: [...c.library.musicLinks, saved] },
-        }))
-      );
+      updateChapterState(chapterId, (c) => ({
+        ...c,
+        library: { ...c.library, musicLinks: [...c.library.musicLinks, saved] },
+      }));
     },
-    [sections]
+    [findChapter, updateChapterState]
   );
 
   const removeMusicLink = useCallback(async (chapterId: string, linkId: string) => {
-    setSections((prev) =>
-      mapChapter(prev, chapterId, (c) => ({
-        ...c,
-        library: { ...c.library, musicLinks: c.library.musicLinks.filter((l) => l.id !== linkId) },
-      }))
-    );
+    updateChapterState(chapterId, (c) => ({
+      ...c,
+      library: { ...c.library, musicLinks: c.library.musicLinks.filter((l) => l.id !== linkId) },
+    }));
     await db.removeLibraryItem(linkId);
-  }, []);
+  }, [updateChapterState]);
 
   const addLink = useCallback(
     async (chapterId: string, link: LibraryLink) => {
-      const chapter = sections.flatMap((s) => s.chapters).find((c) => c.id === chapterId);
+      const chapter = findChapter(chapterId);
       const position = chapter?.library.links.length ?? 0;
       const { id: _id, ...rest } = link;
       const saved = await db.addLink(chapterId, rest, position);
-      setSections((prev) =>
-        mapChapter(prev, chapterId, (c) => ({
-          ...c,
-          library: { ...c.library, links: [...c.library.links, saved] },
-        }))
-      );
+      updateChapterState(chapterId, (c) => ({
+        ...c,
+        library: { ...c.library, links: [...c.library.links, saved] },
+      }));
     },
-    [sections]
+    [findChapter, updateChapterState]
   );
 
   const removeLink = useCallback(async (chapterId: string, linkId: string) => {
-    setSections((prev) =>
-      mapChapter(prev, chapterId, (c) => ({
-        ...c,
-        library: { ...c.library, links: c.library.links.filter((l) => l.id !== linkId) },
-      }))
-    );
+    updateChapterState(chapterId, (c) => ({
+      ...c,
+      library: { ...c.library, links: c.library.links.filter((l) => l.id !== linkId) },
+    }));
     await db.removeLibraryItem(linkId);
-  }, []);
+  }, [updateChapterState]);
 
   // Reorder a library sub-list (images / music links / notes). Positions are
   // rewritten 0..n for that list and persisted, mirroring reorderScenes.
   const reorderLibraryImages = useCallback((chapterId: string, fromIndex: number, toIndex: number) => {
-    setSections((prev) =>
-      mapChapter(prev, chapterId, (c) => {
-        const next = [...c.library.images];
-        const [moved] = next.splice(fromIndex, 1);
-        next.splice(toIndex, 0, moved);
-        db.reorderLibraryItems(next.map((it, i) => ({ id: it.id, position: i })));
-        return { ...c, library: { ...c.library, images: next } };
-      })
-    );
-  }, []);
+    updateChapterState(chapterId, (c) => {
+      const next = [...c.library.images];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      db.reorderLibraryItems(next.map((it, i) => ({ id: it.id, position: i })));
+      return { ...c, library: { ...c.library, images: next } };
+    });
+  }, [updateChapterState]);
 
   const reorderMusicLinks = useCallback((chapterId: string, fromIndex: number, toIndex: number) => {
-    setSections((prev) =>
-      mapChapter(prev, chapterId, (c) => {
-        const next = [...c.library.musicLinks];
-        const [moved] = next.splice(fromIndex, 1);
-        next.splice(toIndex, 0, moved);
-        db.reorderLibraryItems(next.map((it, i) => ({ id: it.id, position: i })));
-        return { ...c, library: { ...c.library, musicLinks: next } };
-      })
-    );
-  }, []);
+    updateChapterState(chapterId, (c) => {
+      const next = [...c.library.musicLinks];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      db.reorderLibraryItems(next.map((it, i) => ({ id: it.id, position: i })));
+      return { ...c, library: { ...c.library, musicLinks: next } };
+    });
+  }, [updateChapterState]);
 
   const reorderNotes = useCallback((chapterId: string, fromIndex: number, toIndex: number) => {
-    setSections((prev) =>
-      mapChapter(prev, chapterId, (c) => {
-        const next = [...c.library.notes];
-        const [moved] = next.splice(fromIndex, 1);
-        next.splice(toIndex, 0, moved);
-        db.reorderLibraryItems(next.map((it, i) => ({ id: it.id, position: i })));
-        return { ...c, library: { ...c.library, notes: next } };
-      })
-    );
-  }, []);
+    updateChapterState(chapterId, (c) => {
+      const next = [...c.library.notes];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      db.reorderLibraryItems(next.map((it, i) => ({ id: it.id, position: i })));
+      return { ...c, library: { ...c.library, notes: next } };
+    });
+  }, [updateChapterState]);
 
   const allChapters = sections.flatMap((s) => s.chapters);
   const activeChapter = allChapters.find((c) => c.id === activeChapterId) ?? allChapters[0];
@@ -1360,6 +1479,15 @@ export function useHotCocoaDb() {
   // Recomputes only when `sections` changes identity; the per-chapter cache
   // then makes that recompute touch just the edited chapter.
   const wordCount = useMemo(() => wordCountAll(sections), [sections]);
+  // The "official" manuscript count shown in Book Stats: whole-book, minus any
+  // sections the author unchecked in the ••• menu. Whole-book achievements still
+  // use `wordCount` — this only narrows the Book Info total.
+  const excludedSectionIds = book?.excludedSectionIds ?? [];
+  const officialWordCount = useMemo(
+    () => wordCountAll(sections.filter((s) => !excludedSectionIds.includes(s.id))),
+    [sections, excludedSectionIds]
+  );
+  const infoChapterLoaded = infoChapter ? loadedChapters.has(infoChapter.id) : false;
 
   return {
     book,
@@ -1373,6 +1501,14 @@ export function useHotCocoaDb() {
     loadChapter,
     sections,
     wordCount,
+    officialWordCount,
+    infoChapter,
+    infoChapterLoaded,
+    bookStats,
+    setBookTags,
+    toggleBookTag,
+    toggleExcludedSection,
+    recordActiveTime,
     unlocks,
     setBookTitle,
     setCoverImage,
