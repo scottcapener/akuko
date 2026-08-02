@@ -71,15 +71,20 @@ export async function generateExport(
     supabase.from("chapters").select("*").eq("book_id", bookId).order("position"),
   ]);
 
+  // Exclude the hidden Book Info chapter (its Synopsis scene isn't part of the
+  // manuscript) before building the reading order.
+  const infoChapterId = book.info_chapter_id as string | null;
+  const manuscriptChapters = (chapters ?? []).filter((c) => c.id !== infoChapterId);
+
   // Reading order: sections by position, chapters by position within each.
   const orderedAll: OrderedChapter[] = [];
   for (const s of sections ?? []) {
-    for (const c of chapters ?? []) {
+    for (const c of manuscriptChapters) {
       if (c.section_id === s.id) orderedAll.push({ id: c.id, title: c.title ?? "" });
     }
   }
   // Any chapter not matched to a section (shouldn't happen) still gets included.
-  for (const c of chapters ?? []) {
+  for (const c of manuscriptChapters) {
     if (!orderedAll.some((o) => o.id === c.id)) orderedAll.push({ id: c.id, title: c.title ?? "" });
   }
 

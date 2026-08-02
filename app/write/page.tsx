@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useHotCocoaDb } from "@/lib/useHotCocoaDb";
 import LeftColumn from "@/components/LeftColumn";
 import CenterColumn from "@/components/CenterColumn";
+import BookInfoColumn from "@/components/BookInfoColumn";
 import RightColumn from "@/components/RightColumn";
 import { ConflictModal } from "@/components/ConflictModal";
 import { InstallHint } from "@/components/InstallHint";
@@ -194,6 +195,11 @@ export default function WritePage() {
   const router = useRouter();
   const store = useHotCocoaDb();
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
+  // Book Info is an in-page view mode (not a route), so the store stays mounted.
+  // When on, the center pane renders BookInfoColumn and the Library binds to the
+  // book's info chapter; side-by-side is forced off.
+  const [bookView, setBookView] = useState(false);
+  const [authorName, setAuthorName] = useState("");
   const left = useColumnResize("hc.leftWidth", LEFT_DEFAULT, LEFT_MIN, LEFT_MAX, 1);
   const right = useColumnResize("hc.rightWidth", RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX, -1);
 
@@ -248,6 +254,7 @@ export default function WritePage() {
   const sceneScrollNonce = useRef(0);
   const [sceneScrollTarget, setSceneScrollTarget] = useState<{ sceneId: string; nonce: number } | null>(null);
   const handleSceneClick = useCallback((chapterId: string, sceneId: string) => {
+    setBookView(false);
     // In side-by-side, focus the pane that holds the clicked scene's chapter so
     // the reveal lands in the pane the user is looking at.
     if (secondaryChapterId != null) {
@@ -258,8 +265,16 @@ export default function WritePage() {
     setSceneScrollTarget({ sceneId, nonce: sceneScrollNonce.current });
   }, [secondaryChapterId, activeChapterId, setFocusedPane]);
 
+  // Open the Book Info editor. Force side-by-side off — Book Info is single-column.
+  const openBookInfo = useCallback(() => {
+    setBookView(true);
+    setSecondaryChapterId(null);
+    setFocusedPane(1);
+  }, [setSecondaryChapterId, setFocusedPane]);
+
   const setActiveChapter = store.setActiveChapter;
   const handleChapterClick = useCallback((id: string) => {
+    setBookView(false);
     if (secondaryChapterId == null) { setActiveChapter(id); return; }
     // The two editors can never show the same chapter, so clicking one that's
     // already open just moves focus to whichever pane holds it.
@@ -359,10 +374,11 @@ export default function WritePage() {
   }, [libraryFootprint, splitFraction, setSecondaryChapterId, setFocusedPane]);
 
   // Stable refs so the paste listener never goes stale
-  const activeChapterRef = useRef(store.activeChapter);
-  activeChapterRef.current = store.activeChapter;
   const addLibraryImageRef = useRef(store.addLibraryImage);
   addLibraryImageRef.current = store.addLibraryImage;
+  // In Book Info a global paste targets the info chapter's (Book-Info) library.
+  const pasteTargetRef = useRef(store.activeChapter);
+  pasteTargetRef.current = bookView ? (store.infoChapter ?? store.activeChapter) : store.activeChapter;
 
   // Route guard: unauthenticated users go to /login. Users with a session but no
   // finished profile (e.g. they confirmed their email but never completed the
@@ -405,10 +421,11 @@ export default function WritePage() {
       const imageItem = items.find((it) => it.type.startsWith("image/"));
       if (!imageItem) return;
       const file = imageItem.getAsFile();
-      if (!file || !activeChapterRef.current) return;
+      const target_chapter = pasteTargetRef.current;
+      if (!file || !target_chapter) return;
       const reader = new FileReader();
       reader.onload = (ev) => {
-        addLibraryImageRef.current(activeChapterRef.current!.id, {
+        addLibraryImageRef.current(target_chapter.id, {
           id: Math.random().toString(36).slice(2, 10),
           name: `pasted-${Date.now()}.png`,
           dataUrl: ev.target?.result as string,
@@ -424,6 +441,63 @@ export default function WritePage() {
     const name = store.book?.title?.trim();
     document.title = name ? `${name} on Hot Cocoa` : "Hot Cocoa";
   }, [store.book?.title]);
+
+  // Author display for Book Info: Pen Name if set, else Display Name. Fetched
+  // once the store has established a session (works in dev via the store's
+  // ensureDevSession bootstrap).
+  useEffect(() => {
+    if (!store.hydrated) return;
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("pen_name, display_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      setAuthorName((data?.pen_name?.trim() || data?.display_name?.trim() || "").trim());
+    });
+  }, [store.hydrated]);
+
+  // Active-writing-time tracker (Book Stats). Sums the gaps between consecutive
+  // edits inside an editor pane, ignoring any gap longer than the idle threshold
+  // (a pause reads as "stopped writing"). Flushed periodically and on hide/unload
+  // via recordActiveTime, which also marks today a writing day.
+  const recordActiveTime = store.recordActiveTime;
+  useEffect(() => {
+    const IDLE_GAP_MS = 60_000;
+    let accum = 0; // seconds pending flush
+    let lastInput = 0;
+    function onInput(e: Event) {
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      if (!(t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
+      // Only count edits inside an editor pane (chapter editor / Book Info), not
+      // sidebar fields like note titles or the section rename input.
+      if (!t.closest?.('[data-paste-scope="center"]')) return;
+      const now = Date.now();
+      if (lastInput) {
+        const delta = now - lastInput;
+        if (delta <= IDLE_GAP_MS) accum += delta / 1000;
+      }
+      lastInput = now;
+    }
+    function flush() {
+      if (accum >= 1) { recordActiveTime(Math.round(accum)); accum = 0; }
+    }
+    function onVisibility() { if (document.visibilityState === "hidden") flush(); }
+    document.addEventListener("input", onInput, true);
+    const interval = setInterval(flush, 30_000);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      flush();
+      document.removeEventListener("input", onInput, true);
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, [recordActiveTime]);
 
   if (!store.hydrated || !store.book || !store.activeChapter) {
     return <div className="h-full bg-bg" />;
@@ -470,7 +544,8 @@ export default function WritePage() {
     book: store.book,
     sections: store.sections,
     activeChapter: store.activeChapter,
-    onBookTitleChange: store.setBookTitle,
+    onOpenBookInfo: openBookInfo,
+    bookInfoActive: bookView,
     onCoverImage: store.setCoverImage,
     onRefreshCover: store.refreshCoverUrl,
     onReorderChapters: store.reorderChapters,
@@ -507,9 +582,11 @@ export default function WritePage() {
     scrollToScene: sceneScrollTarget,
   };
 
+  // In Book Info the Library binds to the info chapter (the Book-Info Library),
+  // falling back to the active chapter until the info chapter has loaded.
   const rightProps = {
-    chapter: store.activeChapter,
-    loading: !store.activeChapterLoaded,
+    chapter: bookView ? (store.infoChapter ?? store.activeChapter) : store.activeChapter,
+    loading: bookView ? !store.infoChapterLoaded : !store.activeChapterLoaded,
     onAddImage: store.addLibraryImage,
     onRemoveImage: store.removeLibraryImage,
     onRefreshImage: store.refreshLibraryImageUrl,
@@ -524,6 +601,23 @@ export default function WritePage() {
     onReorderImages: store.reorderLibraryImages,
     onReorderMusicLinks: store.reorderMusicLinks,
     onReorderNotes: store.reorderNotes,
+  };
+
+  const bookInfoProps = {
+    book: store.book,
+    authorName: authorName || "Anonymous",
+    sections: store.sections,
+    infoChapter: store.infoChapter,
+    infoChapterLoaded: store.infoChapterLoaded,
+    officialWordCount: store.officialWordCount,
+    bookStats: store.bookStats,
+    saveStatus: store.saveStatus,
+    onTitleChange: store.setBookTitle,
+    onSceneChange: (chapterId: string, sceneId: string, patch: Partial<Scene>) =>
+      store.updateScene(chapterId, sceneId, patch),
+    onToggleTag: store.toggleBookTag,
+    onToggleExcludedSection: store.toggleExcludedSection,
+    onAddImage: store.addLibraryImage,
   };
 
   return (
@@ -562,10 +656,10 @@ export default function WritePage() {
             {...leftProps}
             onChapterClick={handleChapterClick}
             onSceneClick={handleSceneClick}
-            onAddChapter={store.addChapter}
+            onAddChapter={(sectionId) => { setBookView(false); store.addChapter(sectionId); }}
             secondaryChapterId={secondaryChapterId}
             focusedPane={focusedPane}
-            onOpenSideBySide={openSideBySide}
+            onOpenSideBySide={(id) => { setBookView(false); openSideBySide(id); }}
             collapsed={leftCollapsed}
             onToggleCollapse={() => setLeftCollapsed((v) => !v)}
             expandedWidth={left.width}
@@ -578,31 +672,39 @@ export default function WritePage() {
             panes split this box by fraction, so the divider stays put when the
             Book panel collapses. */}
         <div ref={editorAreaRef} className="flex-1 overflow-hidden flex min-w-0">
-          <div className="overflow-hidden flex flex-col min-w-0" style={paneOneStyle}>
-            <CenterColumn
-              {...centerProps}
-              chapter={store.activeChapter}
-              loading={!store.activeChapterLoaded}
-              focused={sideBySide ? focusedPane === 1 : undefined}
-              onFocusPane={sideBySide ? () => setFocusedPane(1) : undefined}
-            />
-          </div>
-          {sideBySide && secondaryChapter && (
+          {bookView ? (
+            <div className="flex-1 overflow-hidden flex flex-col min-w-0">
+              <BookInfoColumn {...bookInfoProps} />
+            </div>
+          ) : (
             <>
-              <div onMouseDown={split.onMouseDown} className="relative z-10 w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60 before:absolute before:inset-y-0 before:-left-1 before:-right-1 before:content-['']" />
-              <div
-                className="flex-1 overflow-hidden flex flex-col min-w-0"
-                style={{ opacity: paneTwoOpacity, transition: transitioning ? fade : undefined }}
-              >
+              <div className="overflow-hidden flex flex-col min-w-0" style={paneOneStyle}>
                 <CenterColumn
                   {...centerProps}
-                  chapter={secondaryChapter}
-                  loading={!store.isChapterLoaded(secondaryChapter.id)}
-                  focused={focusedPane === 2}
-                  onFocusPane={() => setFocusedPane(2)}
-                  onClose={closeSideBySide}
+                  chapter={store.activeChapter}
+                  loading={!store.activeChapterLoaded}
+                  focused={sideBySide ? focusedPane === 1 : undefined}
+                  onFocusPane={sideBySide ? () => setFocusedPane(1) : undefined}
                 />
               </div>
+              {sideBySide && secondaryChapter && (
+                <>
+                  <div onMouseDown={split.onMouseDown} className="relative z-10 w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60 before:absolute before:inset-y-0 before:-left-1 before:-right-1 before:content-['']" />
+                  <div
+                    className="flex-1 overflow-hidden flex flex-col min-w-0"
+                    style={{ opacity: paneTwoOpacity, transition: transitioning ? fade : undefined }}
+                  >
+                    <CenterColumn
+                      {...centerProps}
+                      chapter={secondaryChapter}
+                      loading={!store.isChapterLoaded(secondaryChapter.id)}
+                      focused={focusedPane === 2}
+                      onFocusPane={() => setFocusedPane(2)}
+                      onClose={closeSideBySide}
+                    />
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -646,14 +748,18 @@ export default function WritePage() {
       </div>
 
       {/* ── Mobile single-column ── */}
-      {/* Side-by-side is desktop-only, so mobile always shows pane 1's chapter.
-          The mode isn't torn down — widening the window restores both panes. */}
+      {/* Side-by-side is desktop-only, so mobile always shows pane 1's chapter
+          (or Book Info). The mode isn't torn down — widening restores both panes. */}
       <div className="flex-1 md:hidden overflow-hidden flex flex-col">
-        <CenterColumn
-          {...centerProps}
-          chapter={store.activeChapter}
-          loading={!store.activeChapterLoaded}
-        />
+        {bookView ? (
+          <BookInfoColumn {...bookInfoProps} />
+        ) : (
+          <CenterColumn
+            {...centerProps}
+            chapter={store.activeChapter}
+            loading={!store.activeChapterLoaded}
+          />
+        )}
       </div>
 
       {/* ── Mobile slide-in panels (full-width, per CocoaBar) ── */}
@@ -663,9 +769,10 @@ export default function WritePage() {
       <div className={`md:hidden fixed inset-y-0 left-0 z-40 w-full transition-transform duration-200 ${mobilePanel === "left" ? "translate-x-0" : "-translate-x-full"}`}>
         <LeftColumn
           {...leftProps}
-          onChapterClick={(id) => { store.setActiveChapter(id); setMobilePanel(null); }}
+          onOpenBookInfo={() => { openBookInfo(); setMobilePanel(null); }}
+          onChapterClick={(id) => { handleChapterClick(id); setMobilePanel(null); }}
           onSceneClick={(chapterId, sceneId) => { handleSceneClick(chapterId, sceneId); setMobilePanel(null); }}
-          onAddChapter={(sectionId) => { store.addChapter(sectionId); setMobilePanel(null); }}
+          onAddChapter={(sectionId) => { setBookView(false); store.addChapter(sectionId); setMobilePanel(null); }}
           onDeleteChapter={store.deleteChapter}
           onClose={() => setMobilePanel(null)}
         />

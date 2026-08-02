@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Book, Section, Chapter, Scene } from "@/lib/types";
 import { Button, Modal } from "@/components/ui";
 import { DropLine } from "@/components/ui/DropLine";
+import BookOverview from "@/components/BookOverview";
 import { useTheme } from "@/lib/useTheme";
 import { useReorderList } from "@/lib/useReorderList";
 import { useReorderGrid } from "@/lib/useReorderGrid";
@@ -28,8 +29,11 @@ interface Props {
   book: Book;
   sections: Section[];
   activeChapter: Chapter;
-  onBookTitleChange: (t: string) => void;
   onChapterClick: (id: string) => void;
+  // Open the Book Info editor (clicking the Book Overview title). `bookInfoActive`
+  // reflects that Book Info is the current center view.
+  onOpenBookInfo: () => void;
+  bookInfoActive?: boolean;
   // Click a scene row (list view, open chapter) to reveal it in the Chapter Editor.
   onSceneClick?: (chapterId: string, sceneId: string) => void;
   onCoverImage: (file: File | undefined, previewDataUrl?: string) => void;
@@ -618,9 +622,10 @@ export default function LeftColumn({
   book,
   sections,
   activeChapter,
-  onBookTitleChange,
   onChapterClick,
   onSceneClick,
+  onOpenBookInfo,
+  bookInfoActive = false,
   onCoverImage,
   onRefreshCover,
   onAddChapter,
@@ -651,17 +656,10 @@ export default function LeftColumn({
   const supabase = createClient();
   const { theme, toggleTheme } = useTheme();
 
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState(book.title);
-  const [coverDragging, setCoverDragging] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<Section | null>(null);
   const [confirmDeleteChapter, setConfirmDeleteChapter] = useState<Chapter | null>(null);
 
-  const coverInputRef = useRef<HTMLInputElement>(null);
-  // Guards the cover re-sign so an image that's genuinely broken (not just an
-  // expired signed URL) can't loop onError → refresh → onError.
-  const coverRetried = useRef(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   useAutoScrollOnDrag(scrollRef);
@@ -736,25 +734,6 @@ export default function LeftColumn({
   async function handleSignOut() {
     await supabase.auth.signOut();
     router.push("/");
-  }
-
-  function commitTitle() {
-    setEditingTitle(false);
-    onBookTitleChange(titleDraft.trim() || "Untitled Book");
-  }
-
-  function handleCoverFile(file: File) {
-    if (!file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = (e) => onCoverImage(file, e.target?.result as string);
-    reader.readAsDataURL(file);
-  }
-
-  function handleCoverDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setCoverDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleCoverFile(file);
   }
 
   return (
@@ -889,103 +868,14 @@ export default function LeftColumn({
       {/* Scrollable body */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-4">
 
-        {/* ── Cover + Title ── */}
-        <div className="mb-3">
-          <div
-            className={`w-full max-w-[140px] md:max-w-none rounded-md relative overflow-hidden cursor-pointer group transition-colors ${
-              book.coverImage
-                ? "aspect-[2/3]"
-                : "flex flex-col items-center justify-center py-5 gap-2"
-            } ${
-              coverDragging
-                ? "ring-1 ring-accent bg-accent/5"
-                : book.coverImage
-                  ? "bg-panel hover:ring-1 hover:ring-hover"
-                  : "border border-dashed border-hover hover:border-muted/40"
-            }`}
-            onDragOver={(e) => { e.preventDefault(); setCoverDragging(true); }}
-            onDragLeave={() => setCoverDragging(false)}
-            onDrop={handleCoverDrop}
-            onClick={() => coverInputRef.current?.click()}
-          >
-            {book.coverImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={book.coverImage}
-                alt="Book cover"
-                className="w-full h-full object-cover"
-                onLoad={() => { coverRetried.current = false; }}
-                onError={() => {
-                  // Likely an expired signed URL — re-mint it once.
-                  if (coverRetried.current || !onRefreshCover) return;
-                  coverRetried.current = true;
-                  onRefreshCover();
-                }}
-              />
-            ) : (
-              <>
-                <svg
-                  className="w-4 h-4 text-subtle opacity-50 group-hover:opacity-80 transition-opacity"
-                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                </svg>
-                <span className="text-[9px] text-subtle opacity-50 group-hover:opacity-80 uppercase tracking-widest transition-opacity select-none">
-                  Add cover
-                </span>
-              </>
-            )}
-            {book.coverImage && (
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] uppercase tracking-widest">
-                  Replace
-                </span>
-              </div>
-            )}
-            {book.coverImage && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onCoverImage(undefined); }}
-                className="absolute top-1.5 right-1.5 w-5 h-5 bg-black/70 rounded-full items-center justify-center hidden group-hover:flex"
-              >
-                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
-          <input
-            ref={coverInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCoverFile(f); }}
-          />
-
-          {/* Book title */}
-          {editingTitle ? (
-            <input
-              autoFocus
-              className="w-full bg-transparent text-heading-m text-text border-b border-accent pb-0.5 mt-2 focus:outline-none"
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={commitTitle}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitTitle();
-                if (e.key === "Escape") { setTitleDraft(book.title); setEditingTitle(false); }
-              }}
-            />
-          ) : (
-            <button
-              // py-1 -my-1: expands truncate's overflow-hidden clip box so
-              // descenders/caps aren't cropped by the line-height:1 heading token,
-              // while the negative margin keeps layout position unchanged.
-              className="w-full text-left text-heading-m text-text hover:text-accent transition-colors truncate mt-2 py-1 -my-1"
-              onClick={() => { setTitleDraft(book.title); setEditingTitle(true); }}
-            >
-              {book.title}
-            </button>
-          )}
-        </div>
+        {/* ── Book Overview (cover + title) ── */}
+        <BookOverview
+          book={book}
+          onCoverImage={onCoverImage}
+          onRefreshCover={onRefreshCover}
+          onOpenBookInfo={onOpenBookInfo}
+          active={bookInfoActive}
+        />
 
         {/* ── Sections ── */}
         {/* Wrapper (not the scroll body) owns containerProps so insertion-line
@@ -999,7 +889,8 @@ export default function LeftColumn({
               section={section}
               sectionIndex={i}
               sectionCount={sections.length}
-              activeChapter={activeChapter}
+              // While Book Info is the active view, no chapter is "active".
+              activeChapter={bookInfoActive ? undefined : activeChapter}
               secondaryChapterId={secondaryChapterId}
               focusedPane={focusedPane}
               onChapterClick={onChapterClick}

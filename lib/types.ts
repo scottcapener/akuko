@@ -78,4 +78,15 @@ export interface Book {
   // re-mint the signed URL when it expires. Absent for legacy data-URL covers.
   coverImagePath?: string;
   activeChapterId: string;
+  // Selected Book Info tags (tag ids from lib/bookTags). Empty by default.
+  tags: string[];
+  // The hidden "info chapter" backing Book Info: its single scene is the
+  // Synopsis, its library_items are the Book-Info Library. Never appears in
+  // `sections`. Absent only for a book whose info chapter hasn't been
+  // provisioned yet (getOrCreateBook creates it lazily).
+  infoChapterId?: string;
+  // Section ids the author has excluded from the "official" manuscript word
+  // count via the Book Stats ••• menu. Unchecked sections still count toward
+  // whole-book achievements — this only narrows the Book Info total.
+  excludedSectionIds: string[];
 }

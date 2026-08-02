@@ -15,7 +15,10 @@
 // v2: covers moved from inline data URLs (stored in the book row) to Storage,
 // so a stored cover is bundled as a blob in the ZIP (coverImageFile) instead of
 // being a self-contained data URL. v1 backups (data-URL covers) still restore.
-export const SCHEMA_VERSION = 2;
+// v3: Book Info — the hidden info chapter/section (Synopsis + Book-Info Library)
+// rides along in sections/chapters/scenes/libraryItems, plus book.tags and
+// book.infoChapterId. Older backups (no Book Info) restore with a blank one.
+export const SCHEMA_VERSION = 3;
 
 export const MANIFEST_FILENAME = "manifest.json";
 export const IMAGES_DIR = "images";
@@ -33,6 +36,11 @@ export interface BackupBook {
   coverContentType?: string;
   wordCount: number;
   unlocks: number[];
+  // Book Info (v3+). Selected tag ids, and the id (in this manifest's chapter
+  // id-space) of the hidden info chapter holding the Synopsis + Book-Info
+  // Library. Absent in older backups → restore leaves Book Info empty.
+  tags?: string[];
+  infoChapterId?: string;
 }
 
 export interface BackupSection {

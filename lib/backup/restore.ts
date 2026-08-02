@@ -81,6 +81,13 @@ export async function restoreBackup(
   }
 
   // ── Book ───────────────────────────────────────────────────────────
+  // The restored hidden info chapter (Synopsis + Book-Info Library) in the new
+  // id-space; used to re-point the book so getOrCreateBook adopts it rather than
+  // provisioning a fresh empty one. Absent for pre-v3 backups.
+  const restoredInfoChapterId = manifest.book.infoChapterId
+    ? chapterIdMap.get(manifest.book.infoChapterId) ?? null
+    : null;
+
   const { error: bookErr } = await db.from("books").insert({
     id: newBookId,
     user_id: userId,
@@ -89,6 +96,8 @@ export async function restoreBackup(
     cover_image_path: coverPath,
     word_count: manifest.book.wordCount,
     unlocks: manifest.book.unlocks,
+    tags: manifest.book.tags ?? [],
+    info_chapter_id: restoredInfoChapterId,
   });
   if (bookErr) throw bookErr;
 
@@ -183,8 +192,9 @@ export async function restoreBackup(
     if (error) throw error;
   }
 
-  // Reopen the first chapter when this book is next opened.
-  const firstChapter = orderedChapters[0];
+  // Reopen the first author-visible chapter when this book is next opened (never
+  // the hidden info chapter).
+  const firstChapter = orderedChapters.find((c) => c.id !== manifest.book.infoChapterId);
   if (firstChapter) {
     await db
       .from("books")
