@@ -119,6 +119,128 @@ function PaneBubble({ pane, focused, className = "" }: { pane: 1 | 2; focused: b
   );
 }
 
+// ── Animated scene list ─────────────────────────────────────────────────────
+
+// Wraps a chapter's scene list (list view) so switching the active chapter
+// animates instead of snapping. Height collapses/expands via the grid-rows
+// 0fr⇄1fr trick (animatable, unlike height:auto) and the content fades, with
+// the two phases staggered per the choreography:
+//   closing → fade out (0–200ms), then collapse (200–400ms)
+//   opening → expand (0–200ms), then fade in (200–400ms)
+// `enterDelay` pushes the opening chapter's phases later so it waits out the
+// previously-active chapter's fade-out — the two heights then animate together.
+// During a scene drag (`animate` false) and under prefers-reduced-motion, it
+// falls back to instant show/hide so drop targeting stays snappy. Content is
+// mounted only while open, kept mounted through the collapse (unmounted on
+// transition end) or while it hosts the dragged scene (`keepMounted`).
+function ChapterScenes({
+  open,
+  keepMounted,
+  animate,
+  enterDelay,
+  children,
+}: {
+  open: boolean;
+  keepMounted: boolean;
+  animate: boolean;
+  enterDelay: number;
+  children: React.ReactNode;
+}) {
+  const [mounted, setMounted] = useState(open || keepMounted);
+  const [shown, setShown] = useState(open);
+  const [reduce, setReduce] = useState(false);
+  const rafRef = useRef<number | null>(null);
+  const prevOpenRef = useRef(open);
+
+  useEffect(() => {
+    const m = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduce(m.matches);
+    const onChange = () => setReduce(m.matches);
+    m.addEventListener("change", onChange);
+    return () => m.removeEventListener("change", onChange);
+  }, []);
+
+  const doAnimate = animate && !reduce;
+
+  useEffect(() => {
+    const wasOpen = prevOpenRef.current;
+    prevOpenRef.current = open;
+    const cancelRaf = () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+
+    if (open && !wasOpen) {
+      // Enter: mount closed, then flip to open on the next frame so the
+      // grid-rows/opacity transition has a "from" state to animate off.
+      setMounted(true);
+      if (doAnimate) {
+        setShown(false);
+        cancelRaf();
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = requestAnimationFrame(() => setShown(true));
+        });
+      } else {
+        setShown(true);
+      }
+    } else if (!open && wasOpen) {
+      // Exit: animate closed (unmount on transitionend) or hide instantly.
+      cancelRaf();
+      setShown(false);
+      if (!doAnimate && !keepMounted) setMounted(false);
+    } else if (open) {
+      // Stayed open (e.g. animate toggled off/on mid-life) — settle to shown.
+      cancelRaf();
+      setShown(true);
+      setMounted(true);
+    }
+    return cancelRaf;
+  }, [open, doAnimate, keepMounted]);
+
+  // A drag source must stay mounted even while its list is collapsed.
+  useEffect(() => {
+    if (keepMounted) setMounted(true);
+  }, [keepMounted]);
+
+  if (!mounted) return null;
+
+  return (
+    <div
+      className="grid min-h-0"
+      style={{
+        gridTemplateRows: shown ? "1fr" : "0fr",
+        transition: doAnimate
+          ? `grid-template-rows 200ms ease ${open ? enterDelay : 200}ms`
+          : "none",
+      }}
+      onTransitionEnd={(e) => {
+        // Only the outer row-height collapse finishing should unmount; ignore
+        // the inner opacity fade and any child transitions bubbling up.
+        if (
+          e.propertyName === "grid-template-rows" &&
+          e.currentTarget === e.target &&
+          !open &&
+          !keepMounted
+        ) {
+          setMounted(false);
+        }
+      }}
+    >
+      <div
+        className="min-h-0 overflow-hidden"
+        style={{
+          opacity: shown ? 1 : 0,
+          transition: doAnimate
+            ? `opacity 200ms ease ${open ? enterDelay + 200 : 0}ms`
+            : "none",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // ── Section row ───────────────────────────────────────────────────────────────
 
 function SectionRow({
@@ -189,6 +311,18 @@ function SectionRow({
   clearChapterDropTarget: () => void;
 }) {
   const activeChapterId = activeChapter?.id ?? "";
+  // The active chapter from the previous render — used to sequence the scene-list
+  // animation: when the active chapter changes, the newly-opened list waits for
+  // the previously-open one to finish collapsing (see ChapterScenes.enterDelay).
+  const prevActiveIdRef = useRef(activeChapterId);
+  const prevActiveId = prevActiveIdRef.current;
+  useEffect(() => {
+    prevActiveIdRef.current = activeChapterId;
+  });
+  // The opening list waits out only the fade-out (200ms) so its expand runs
+  // concurrently with the previous list's collapse, then its scenes fade in:
+  //   1. fade out old scenes  2. collapse + expand together  3. fade in new scenes
+  const HANDOFF_DELAY = 200;
   // Which Chapter Editor a chapter is open in, or null if it isn't open. Outside
   // side-by-side only pane 1 ever matches, so every chapter-styling rule below
   // reduces to the old active/inactive split.
@@ -481,7 +615,13 @@ function SectionRow({
           // visual target) so the dragged row never unmounts mid-drag — otherwise
           // its dragend wouldn't fire and the target would stay stuck highlighted.
           const isDragSource = sceneActive && sceneDrag.payload?.fromChapterId === ch.id;
-          const scenesMounted = visualOpen || isDragSource;
+          // A list opening because the active chapter switched waits for the
+          // previously-active list to finish collapsing; opening from a scenes-
+          // toggle or a side-by-side pane (no chapter is closing) starts at once.
+          const sceneEnterDelay =
+            !sceneActive && prevActiveId && prevActiveId !== activeChapterId && ch.id !== prevActiveId
+              ? HANDOFF_DELAY
+              : 0;
           // The chapter under the cursor right now — shows the accent insertion
           // line/ring and receives the drop.
           const isDropTarget = sceneActive && dropChapterId === ch.id;
@@ -551,9 +691,14 @@ function SectionRow({
                 target, they're also drop zones with insertion lines. The source
                 chapter stays mounted but `hidden` while another chapter is the
                 target, so its dragged row stays alive without being a drop target. */}
-            {scenesMounted && (
+            <ChapterScenes
+              open={visualOpen}
+              keepMounted={isDragSource}
+              animate={!sceneActive}
+              enterDelay={sceneEnterDelay}
+            >
               <div
-                className={`flex flex-col ${visualOpen ? "" : "hidden"}`}
+                className="flex flex-col"
                 // Catch drops that land on the insertion line in a gap (the line
                 // has no drop handler; its events bubble here). Scene rows
                 // stopPropagation, so row drops are handled by the row instead.
@@ -593,7 +738,7 @@ function SectionRow({
                   </>
                 )}
               </div>
-            )}
+            </ChapterScenes>
           </div>
           );
         })}
