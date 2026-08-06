@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Button, Input, Label } from "@/components/ui";
+import { Button, Input, Label, PasswordInput } from "@/components/ui";
 
 // ── Password strength ───────────────────────────────────────────────────────
 
@@ -42,7 +42,6 @@ export default function SignupPage() {
   // Step 1
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const strength = passwordStrength(password);
 
   // Step 2 — email verification code
@@ -214,23 +213,13 @@ export default function SignupPage() {
             </div>
             <div>
               <Label>Password</Label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  placeholder="Minimum 10 characters"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleStep1()}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle/60 hover:text-subtle text-xs"
-                >
-                  {showPassword ? "Hide" : "Show"}
-                </button>
-              </div>
+              <PasswordInput
+                autoComplete="new-password"
+                placeholder="Minimum 10 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleStep1()}
+              />
               {password.length > 0 && (
                 <div className="mt-2 flex items-center gap-2">
                   <div className="flex-1 h-0.5 bg-border-subtle rounded-full overflow-hidden">

@@ -5,21 +5,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { PasswordInput } from "@/components/ui";
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <label className="block text-[11px] font-medium tracking-wide uppercase text-subtle mb-1.5">
       {children}
     </label>
-  );
-}
-
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={`w-full bg-panel text-text text-base px-3 py-2.5 rounded-lg border border-hover placeholder:text-subtle/50 focus:outline-none focus:border-accent/60 transition-colors ${props.className ?? ""}`}
-    />
   );
 }
 
@@ -91,8 +83,7 @@ export default function ResetPasswordPage() {
             </div>
             <div>
               <Label>New password</Label>
-              <Input
-                type="password"
+              <PasswordInput
                 autoComplete="new-password"
                 placeholder="Minimum 10 characters"
                 value={password}
