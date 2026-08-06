@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Button, Input, Label } from "@/components/ui";
+import { Button, Input, Label, PasswordInput } from "@/components/ui";
 
 type Step = "credentials" | "otp";
 
@@ -88,7 +88,7 @@ export default function LoginPage() {
             </div>
             <div>
               <Label>Password</Label>
-              <Input type="password" autoComplete="current-password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
+              <PasswordInput autoComplete="current-password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
               <div className="flex justify-end mt-1.5">
                 <Link href="/forgot-password" className="text-[11px] text-subtle/60 hover:text-accent transition-colors">Forgot password?</Link>
               </div>
