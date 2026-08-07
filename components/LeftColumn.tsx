@@ -1011,7 +1011,7 @@ export default function LeftColumn({
         }
       >
       {/* Scrollable body */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pt-4 pb-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto hc-scroll-hoverbar pl-4 pr-1.5 pt-4 pb-4">
 
         {/* ── Book Overview (cover + title) ── */}
         <BookOverview

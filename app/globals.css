@@ -133,6 +133,31 @@ body {
   scrollbar-color: var(--hc-border-subtle) transparent;
 }
 
+/* Hover-revealing scrollbar. Setting the standard scrollbar-* props (above)
+   disables ::-webkit-scrollbar in Chrome 121+, which drops the hover-reveal
+   and forces a zero-width overlay bar. Opting an element back to the initial
+   standard values re-enables the ::-webkit-scrollbar path (classic 10px bar,
+   working :hover reveal). Kept off the .is-scrolling override too, so the bar
+   stays on the webkit path while scrolling. Containers using this reduce their
+   right padding by ~10px so the reserved gutter doesn't shift content. */
+.hc-scroll-hoverbar,
+.hc-scroll-hoverbar.is-scrolling {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+/* Firefox has no ::-webkit-scrollbar, so the reset above would give it a plain
+   always-visible bar. Firefox-only (@-moz-appearance is unknown to Chrome),
+   restore the thin auto-hide styling to match the rest of the app. */
+@supports (-moz-appearance: none) {
+  .hc-scroll-hoverbar {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .hc-scroll-hoverbar.is-scrolling {
+    scrollbar-color: var(--hc-border-subtle) transparent;
+  }
+}
+
 /* Remove default textarea/input outlines */
 textarea:focus,
 input:focus {

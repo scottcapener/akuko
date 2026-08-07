@@ -218,8 +218,8 @@ export default function CenterColumn({
       </div>
 
       {/* Scene feed */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="w-full max-w-[700px] mx-auto px-4 pt-4 pb-32" {...sceneReorder.containerProps()}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto hc-scroll-hoverbar">
+        <div className="w-full max-w-[700px] mx-auto pl-4 pr-1.5 pt-4 pb-32" {...sceneReorder.containerProps()}>
           {loading ? (
             <div className="px-4" aria-hidden>
               {[0, 1, 2].map((i) => (
