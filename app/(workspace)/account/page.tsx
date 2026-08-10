@@ -85,11 +85,6 @@ export default function AccountPage() {
     <div className="min-h-full bg-bg px-6 py-10">
       <div className="max-w-sm mx-auto flex flex-col gap-6">
 
-        {/* Back link */}
-        <Link href="/write" className="text-xs text-subtle/60 hover:text-subtle transition-colors self-start">
-          ← Back to Hot Cocoa
-        </Link>
-
         <h1 className="text-text text-xl font-semibold">Account</h1>
 
         {/* Info */}

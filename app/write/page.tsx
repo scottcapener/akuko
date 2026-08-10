@@ -13,6 +13,8 @@ import { ConflictModal } from "@/components/ConflictModal";
 import { InstallHint } from "@/components/InstallHint";
 import { SceneDragProvider } from "@/lib/useSceneDrag";
 import { ChapterDragProvider } from "@/lib/useChapterDrag";
+import { useLocalStorageState } from "@/lib/useLocalStorageState";
+import { useColumnResize } from "@/lib/useColumnResize";
 import { Scene } from "@/lib/types";
 
 type MobilePanel = "left" | "right" | null;
@@ -30,69 +32,6 @@ const COLLAPSED_WIDTH = 56;
 const SPLIT_MIN = 0.25;
 const SPLIT_MAX = 0.75;
 const SPLIT_DEFAULT = 0.5;
-
-function useColumnResize(storageKey: string, defaultPx: number, min: number, max: number, direction: 1 | -1 = 1) {
-  // Lazily restore the last-used width. Safe against hydration mismatch: the write
-  // page renders a blank placeholder until `store.hydrated`, so this width never
-  // reaches the DOM during the initial server/client render.
-  const [width, setWidth] = useState<number>(() => {
-    if (typeof window === "undefined") return defaultPx;
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw != null) {
-        const n = parseInt(raw, 10);
-        if (!Number.isNaN(n)) return Math.min(max, Math.max(min, n));
-      }
-    } catch {}
-    return defaultPx;
-  });
-  // `resizing` is state (not just the `dragging` ref) so the column wrapper can
-  // drop its width transition mid-drag — otherwise the collapse/expand easing
-  // would also apply to resize, making the edge lag behind the cursor.
-  const [resizing, setResizing] = useState(false);
-  const dragging = useRef(false);
-  const startX = useRef(0);
-  const startW = useRef(0);
-  // Mirrors `width` so the drag-end handler can persist the final value without
-  // re-registering the window listeners on every mousemove.
-  const widthRef = useRef(width);
-
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    dragging.current = true;
-    setResizing(true);
-    startX.current = e.clientX;
-    startW.current = width;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  }, [width]);
-
-  useEffect(() => {
-    function onMouseMove(e: MouseEvent) {
-      if (!dragging.current) return;
-      const delta = (e.clientX - startX.current) * direction;
-      const next = Math.min(max, Math.max(min, startW.current + delta));
-      widthRef.current = next;
-      setWidth(next);
-    }
-    function onMouseUp() {
-      if (!dragging.current) return;
-      dragging.current = false;
-      setResizing(false);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      // Persist only on drag-end, not on every frame.
-      try { localStorage.setItem(storageKey, String(widthRef.current)); } catch {}
-    }
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [min, max, direction, storageKey]);
-
-  return { width, onMouseDown, resizing };
-}
 
 // The divider between the two Chapter Editors. Mirrors `useColumnResize`'s drag
 // contract (state-backed `resizing`, persist on drag-end only) but tracks a
@@ -153,28 +92,6 @@ function useSplitResize(storageKey: string, containerRef: React.RefObject<HTMLDi
   }, [storageKey]);
 
   return { fraction, onMouseDown, resizing };
-}
-
-// User-level view preferences (grid/list per section, scene visibility). These are
-// display-only and never touch book structure, so they live in localStorage rather
-// than the DB. Reads happen after mount to avoid a hydration mismatch.
-function useLocalStorageState<T>(key: string, initial: T) {
-  const [value, setValue] = useState<T>(initial);
-  const loaded = useRef(false);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw != null) setValue(JSON.parse(raw) as T);
-    } catch {}
-    loaded.current = true;
-  }, [key]);
-  useEffect(() => {
-    if (!loaded.current) return;
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {}
-  }, [key, value]);
-  return [value, setValue] as const;
 }
 
 // Panel collapse width + the panel body's own fade run concurrently off the same
