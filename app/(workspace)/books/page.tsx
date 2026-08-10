@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ensureDevSession } from "@/lib/ensureDevSession";
@@ -264,11 +263,6 @@ export default function BooksPage() {
   return (
     <div className="min-h-full bg-bg px-6 py-10">
       <div className="max-w-2xl mx-auto flex flex-col gap-6">
-
-        {/* Back link */}
-        <Link href="/write" className="text-xs text-subtle/60 hover:text-subtle transition-colors self-start">
-          ← Back to Hot Cocoa
-        </Link>
 
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-baseline gap-3">
