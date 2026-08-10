@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useLocalStorageState } from "@/lib/useLocalStorageState";
 import { useTheme } from "@/lib/useTheme";
 
@@ -15,25 +16,31 @@ function ToggleRow({
   onChange,
 }: {
   label: string;
-  description: string;
+  description: ReactNode;
   checked: boolean;
   onChange: () => void;
 }) {
+  // Row is a plain container (not one big button) so the description can hold a
+  // link — an <a> nested inside a <button> would be invalid HTML. The label and
+  // the switch are each their own toggle target; the switch carries the semantics.
   return (
-    <button
-      onClick={onChange}
-      role="switch"
-      aria-checked={checked}
-      className="flex w-full items-center justify-between gap-4 py-3 text-left"
-    >
+    <div className="flex w-full items-center justify-between gap-4 py-3">
       <span className="flex flex-col gap-0.5 min-w-0">
-        <span className="text-sm text-text">{label}</span>
+        <button onClick={onChange} className="text-sm text-text text-left w-fit">
+          {label}
+        </button>
         <span className="text-xs text-subtle">{description}</span>
       </span>
-      <span className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? "bg-accent" : "bg-hover"}`}>
+      <button
+        onClick={onChange}
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? "bg-accent" : "bg-hover"}`}
+      >
         <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${checked ? "left-4" : "left-0.5"}`} />
-      </span>
-    </button>
+      </button>
+    </div>
   );
 }
 
@@ -42,6 +49,7 @@ function ToggleRow({
 export default function SettingsPage() {
   const [scenesVisible, setScenesVisible] = useLocalStorageState("hc.scenesVisible", true);
   const [linksVisible, setLinksVisible] = useLocalStorageState("hc.linksVisible", true);
+  const [tipsEnabled, setTipsEnabled] = useLocalStorageState("hc.tipsEnabled", true);
   const { theme, toggleTheme } = useTheme();
 
   return (
@@ -67,6 +75,25 @@ export default function SettingsPage() {
             description="Show the Links section in the library panel."
             checked={linksVisible}
             onChange={() => setLinksVisible((v) => !v)}
+          />
+          <ToggleRow
+            label="Tips"
+            description={
+              <>
+                Show a tip in the book panel at the start of each day.
+                <br />
+                <a
+                  href="/how-to"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  How to use Hot Cocoa →
+                </a>
+              </>
+            }
+            checked={tipsEnabled}
+            onChange={() => setTipsEnabled((v) => !v)}
           />
           <ToggleRow
             label="Light mode"

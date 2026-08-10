@@ -68,6 +68,9 @@ interface Props {
   // visibly resizes its contents; only the enclosing column's overflow-hidden
   // width and this fade change.
   expandedWidth?: number;
+  // Optional content floated over the bottom of the chapter list (the Tips card).
+  // Passed only by the desktop writer instance so the card renders exactly once.
+  overlay?: React.ReactNode;
 }
 
 // ── Confirmation modal ────────────────────────────────────────────────────────
@@ -796,6 +799,7 @@ export default function LeftColumn({
   collapsed,
   onToggleCollapse,
   expandedWidth,
+  overlay,
 }: Props) {
   const router = useRouter();
   const supabase = createClient();
@@ -1010,7 +1014,9 @@ export default function LeftColumn({
             : undefined
         }
       >
-      {/* Scrollable body */}
+      {/* Scrollable body — wrapped so the Tips overlay can anchor to its bottom
+          edge (over the chapter list) without scrolling with the content. */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
       <div ref={scrollRef} className="flex-1 overflow-y-auto hc-scroll-hoverbar pl-4 pr-1.5 pt-4 pb-4">
 
         {/* ── Book Overview (cover + title) ── */}
@@ -1068,6 +1074,14 @@ export default function LeftColumn({
         <DropLine active={sectionReorder.activeGap === sections.length} />
         </div>
       </div>
+        {/* Tips overlay — floats over the bottom of the chapter list. The wrapper
+            is click-through; the card itself re-enables pointer events. */}
+        {overlay && (
+          <div className="absolute inset-x-0 bottom-0 z-10 px-3 pb-3 pointer-events-none">
+            {overlay}
+          </div>
+        )}
+      </div>
 
       {/* ── Logo + user menu ── */}
       <div ref={menuRef} className="px-5 py-4 flex-shrink-0 border-t border-border-subtle relative flex items-center justify-between">
@@ -1093,6 +1107,13 @@ export default function LeftColumn({
               className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
             >
               Export
+            </Link>
+            <Link
+              href="/settings"
+              onClick={() => setMenuOpen(false)}
+              className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
+            >
+              Settings
             </Link>
             <Link
               href="/account"
