@@ -519,6 +519,8 @@ export default function WritePage() {
     onReorderImages: store.reorderLibraryImages,
     onReorderMusicLinks: store.reorderMusicLinks,
     onReorderNotes: store.reorderNotes,
+    // Sharing applies to real chapters, not the hidden Book-Info chapter.
+    shareable: !bookView,
   };
 
   const bookInfoProps = {

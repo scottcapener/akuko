@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { redeemShares } from "@/lib/shared/redeem";
 import { Button, Input, Label, PasswordInput } from "@/components/ui";
 
 type Step = "credentials" | "otp";
@@ -52,6 +53,7 @@ export default function LoginPage() {
       // Send OTP
       await supabase.auth.signInWithOtp({ phone: userPhone });
     } else {
+      await redeemShares(supabase);
       router.push("/write");
     }
   }
@@ -67,6 +69,7 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (err) { setError(err.message); return; }
+    await redeemShares(supabase);
     router.push("/write");
   }
 

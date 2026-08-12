@@ -45,6 +45,13 @@ export async function GET(request: Request) {
       : await supabase.auth.exchangeCodeForSession(code!);
 
     if (!error) {
+      // Redeem any pending "shared with you" grants for this now-authenticated
+      // email (SHARED_WITH_YOU.md §4). Best-effort — never block the redirect.
+      try {
+        await supabase.rpc("redeem_my_shares");
+      } catch {
+        // ignore — the /shared surfaces retry redemption
+      }
       return NextResponse.redirect(`${origin}${next}`);
     }
   }

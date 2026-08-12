@@ -8,6 +8,7 @@ import { DropLine } from "@/components/ui/DropLine";
 import { useReorderList } from "@/lib/useReorderList";
 import { useReorderGrid } from "@/lib/useReorderGrid";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
+import { SharingMenu } from "@/components/sharing/SharingMenu";
 
 // Renders children into document.body so fixed overlays escape transformed parents
 function Portal({ children }: { children: React.ReactNode }) {
@@ -500,6 +501,9 @@ interface Props {
   onReorderMusicLinks: (chapterId: string, from: number, to: number) => void;
   onReorderNotes: (chapterId: string, from: number, to: number) => void;
   onClose?: () => void;
+  // When true, show the sharing mini-menu at the column's bottom-right (§3.6).
+  // False for the hidden Book-Info chapter.
+  shareable?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   // Pixel width of the expanded panel — the body below the header renders at
@@ -529,6 +533,7 @@ export default function RightColumn({
   onReorderMusicLinks,
   onReorderNotes,
   onClose,
+  shareable = false,
   collapsed,
   onToggleCollapse,
   expandedWidth,
@@ -1029,6 +1034,25 @@ export default function RightColumn({
       </div>
       )}
       </div>
+
+      {/* ── Sharing mini-menu (bottom-right, §3.6) ── */}
+      {shareable && chapter?.id && (
+        <div
+          className="flex-shrink-0 flex items-center justify-end px-3 py-2 border-t border-border-subtle"
+          style={
+            expandedWidth != null
+              ? {
+                  width: expandedWidth,
+                  opacity: collapsed ? 0 : 1,
+                  transition: "opacity 200ms ease-in-out",
+                  pointerEvents: collapsed ? "none" : undefined,
+                }
+              : undefined
+          }
+        >
+          <SharingMenu key={chapter.id} chapterId={chapter.id} />
+        </div>
+      )}
     </div>
   );
 }
