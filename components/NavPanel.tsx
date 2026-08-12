@@ -73,6 +73,15 @@ function AccountIcon({ className }: IconProps) {
   );
 }
 
+// Speech bubble — the "Shared with you" conversation surface.
+function SharedIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.5 9.58341C17.5029 10.6832 17.2459 11.7681 16.75 12.7501C16.162 13.9265 15.2581 14.916 14.1395 15.6077C13.021 16.2994 11.7319 16.666 10.4167 16.6667C9.31688 16.6697 8.23193 16.4126 7.25 15.9167L2.5 17.5001L4.08333 12.7501C3.58743 11.7681 3.33046 10.6832 3.33333 9.58341C3.33403 8.26819 3.7006 6.97906 4.39232 5.86054C5.08403 4.74201 6.07355 3.83808 7.25 3.25008C8.23193 2.75418 9.31688 2.49721 10.4167 2.50008H10.8333C12.5703 2.59591 14.2109 3.32914 15.4409 4.5591C16.6708 5.78907 17.4041 7.42975 17.5 9.16675V9.58341Z" />
+    </svg>
+  );
+}
+
 // Book-open placeholder when the active book has no cover (mirrors the Books grid).
 function BookCoverPlaceholder() {
   return (
@@ -90,12 +99,15 @@ type NavItem = {
   Icon: (props: IconProps) => React.JSX.Element;
 };
 
-// Grouped exactly as in the Figma. "Shared" is a future feature and is omitted
-// on this branch (its divider goes with it).
+// Grouped exactly as in the Figma. "Shared with you" sits in its own section
+// between the file group and Settings/Account (§3.1).
 const PRIMARY: NavItem[] = [
   { href: "/books", label: "Books", Icon: BooksIcon },
   { href: "/backups", label: "Backups", Icon: BackupsIcon },
   { href: "/export", label: "Export", Icon: ExportIcon },
+];
+const SHARED: NavItem[] = [
+  { href: "/shared", label: "Shared", Icon: SharedIcon },
 ];
 const SECONDARY: NavItem[] = [
   { href: "/settings", label: "Settings", Icon: SettingsIcon },
@@ -269,6 +281,12 @@ export default function NavPanel({ collapsed, onToggleCollapse, expandedWidth, o
 
           {PRIMARY.map((item) => (
             <NavRow key={item.href} item={item} active={pathname === item.href} onNavigate={onNavigate} />
+          ))}
+
+          <div className="my-2 -mx-3 border-t border-border-subtle" />
+
+          {SHARED.map((item) => (
+            <NavRow key={item.href} item={item} active={pathname.startsWith(item.href)} onNavigate={onNavigate} />
           ))}
 
           <div className="my-2 -mx-3 border-t border-border-subtle" />

@@ -1123,6 +1123,17 @@ export default function LeftColumn({
               Account
             </Link>
 
+            {/* Shared with you — its own section below Account (§3.1). Label is
+                "Shared"; the page title is "Shared with you". */}
+            <div className="border-t border-hover" />
+            <Link
+              href="/shared"
+              onClick={() => setMenuOpen(false)}
+              className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
+            >
+              Shared
+            </Link>
+
             {/* Scene visibility — a user-level view preference, not a book edit.
                 Off hides scene descriptions + the Add scene button everywhere;
                 the underlying scene structure is left untouched. */}
