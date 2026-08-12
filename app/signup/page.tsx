@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { redeemShares } from "@/lib/shared/redeem";
 import { Button, Input, Label, PasswordInput } from "@/components/ui";
 
 // ── Password strength ───────────────────────────────────────────────────────
@@ -131,6 +132,9 @@ export default function SignupPage() {
       pen_name: penName.trim() || null,
     });
     if (profileErr) { setError(profileErr.message); setLoading(false); return; }
+
+    // Redeem any chapters shared to this email before the account existed (§4).
+    await redeemShares(supabase);
 
     // A returning user (e.g. a legacy account with no display_name, or one
     // bounced here mid-session) may already have books. Only scaffold a starter
