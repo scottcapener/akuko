@@ -90,7 +90,7 @@ function renderShareEmail({
       <tr><td align="center">
         <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
           <tr><td align="center" style="padding:8px 0 28px;">
-            <span style="font-size:24px;font-weight:700;letter-spacing:0.2px;color:#d4d2ce;">hot cocoa</span>
+            <img src="${base}/email-logo.png" alt="Hot Cocoa" width="196" height="36" style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
           </td></tr>
           <tr><td style="background:#18181a;border:1px solid #1c1b1b;border-radius:16px;padding:32px 28px;" align="center">
             <div style="font-size:20px;font-weight:700;color:#d4d2ce;margin:0 0 12px;">${name} shared a chapter</div>
