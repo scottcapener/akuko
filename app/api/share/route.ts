@@ -79,7 +79,7 @@ export async function POST(request: Request) {
           if (error) console.error("[share] resolve_share_recipients:", error.message);
         });
     }
-    await notifyNewRecipients(supabase, user.id, user.email ?? "", result.sharedChapterId, result.addedEmails);
+    await notifyNewRecipients(supabase, admin, user.id, user.email ?? "", result.sharedChapterId, result.addedEmails);
   }
 
   const state = await getShareState(supabase, chapterId);
@@ -110,9 +110,11 @@ export async function DELETE(request: Request) {
   return NextResponse.json({ ok: true, chapterId, sharedChapterId: null, shared: false, recipients: [] });
 }
 
-/** Email each newly-added recipient the "shared a chapter with you" note. */
+/** Email each newly-added recipient the "shared a chapter with you" note,
+ *  skipping accounts that opted out (§6). */
 async function notifyNewRecipients(
   supabase: Awaited<ReturnType<typeof createServerClient>>,
+  admin: ReturnType<typeof createAdminClient>,
   ownerId: string,
   authorEmail: string,
   sharedChapterId: string,
@@ -130,16 +132,48 @@ async function notifyNewRecipients(
   const authorName =
     (profile?.pen_name as string | null) || (profile?.display_name as string | null) || "A writer";
 
+  // Recipients who have an account and turned off share emails. Read through the
+  // service-role client so a recipient's preference never reaches the author's
+  // session; pending recipients (no account, no preference) always get the email
+  // — it's how they discover the share.
+  const optedOut = new Set<string>();
+  if (admin) {
+    const { data: grants } = await admin
+      .from("chapter_shares")
+      .select("recipient_email, recipient_id")
+      .eq("shared_chapter_id", sharedChapterId)
+      .in("recipient_email", emails);
+    const accountIds = (grants ?? [])
+      .map((g) => g.recipient_id as string | null)
+      .filter((id): id is string => !!id);
+    if (accountIds.length) {
+      const { data: prefs } = await admin
+        .from("profiles")
+        .select("id, notify_on_share")
+        .in("id", accountIds);
+      const muted = new Set(
+        (prefs ?? []).filter((p) => p.notify_on_share === false).map((p) => p.id as string)
+      );
+      for (const g of grants ?? []) {
+        if (g.recipient_id && muted.has(g.recipient_id as string)) {
+          optedOut.add((g.recipient_email as string).toLowerCase());
+        }
+      }
+    }
+  }
+
   await Promise.all(
-    emails.map((to) =>
-      sendShareEmail({
-        to,
-        authorName,
-        authorEmail,
-        bookTitle: (snapshot?.book_title as string) ?? "",
-        chapterTitle: (snapshot?.chapter_title as string) ?? "",
-        sharedChapterId,
-      })
-    )
+    emails
+      .filter((to) => !optedOut.has(to.toLowerCase()))
+      .map((to) =>
+        sendShareEmail({
+          to,
+          authorName,
+          authorEmail,
+          bookTitle: (snapshot?.book_title as string) ?? "",
+          chapterTitle: (snapshot?.chapter_title as string) ?? "",
+          sharedChapterId,
+        })
+      )
   );
 }

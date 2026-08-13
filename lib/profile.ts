@@ -19,6 +19,7 @@ export interface Profile {
   bio: string;
   avatarPath: string | null;
   avatarUrl: string | null; // signed, ready for <img src>
+  notifyOnShare: boolean; // receive the "shared a chapter with you" email (§6)
 }
 
 function supabase() {
@@ -58,6 +59,14 @@ export async function getProfile(userId: string): Promise<Profile> {
     data = legacy.data as typeof data;
   }
 
+  // notify_on_share (migration 015) is read on its own so a not-yet-run migration
+  // can't take bio/avatar down with it. Missing column → default to opted-in.
+  const { data: pref } = await supabase()
+    .from("profiles")
+    .select("notify_on_share")
+    .eq("id", userId)
+    .single();
+
   const avatarPath = (data?.avatar_path as string | null) ?? null;
   return {
     displayName: data?.display_name ?? "",
@@ -65,6 +74,7 @@ export async function getProfile(userId: string): Promise<Profile> {
     bio: data?.bio ?? "",
     avatarPath,
     avatarUrl: await signAvatar(avatarPath),
+    notifyOnShare: (pref?.notify_on_share as boolean | null | undefined) ?? true,
   };
 }
 
