@@ -7,6 +7,7 @@ import { ensureDevSession } from "@/lib/ensureDevSession";
 import { useLocalStorageState } from "@/lib/useLocalStorageState";
 import { Avatar } from "@/components/ui/Avatar";
 import { ReadComments } from "@/components/sharing/ReadComments";
+import { refreshUnread } from "@/lib/useUnread";
 import type { ReadView, BookPanelChapter } from "@/lib/shared/read";
 
 // The read view (§3.3): one shared chapter as continuous prose, with a
@@ -54,6 +55,9 @@ export default function SharedReadPage({
         const data = await res.json();
         setView(data as ReadView);
         setStatus("ok");
+        // The view fetch marked this chapter seen server-side; refresh the
+        // shared unread store so the account/nav badges reflect it (§6).
+        refreshUnread();
       } catch {
         if (!cancelled) setStatus("notfound");
       }
