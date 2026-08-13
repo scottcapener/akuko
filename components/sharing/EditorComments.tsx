@@ -63,6 +63,13 @@ export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick 
     const data = await res.json();
     setComments(data.comments ?? []);
     setOwnerId(data.ownerId ?? null);
+    // Opening the Comments tab is "seeing" this chapter — advance the read
+    // cursor so its unread badges clear (§6). Best-effort; fire and forget.
+    fetch("/api/shared/seen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sharedChapterId: state.sharedChapterId }),
+    }).catch(() => {});
   }, [chapterId]);
 
   useEffect(() => {
