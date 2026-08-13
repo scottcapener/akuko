@@ -19,6 +19,11 @@
   /* ── Border ── */
   --hc-border-subtle: #1c1b1b;   /* all borders */
 
+  /* ── Comment highlights (Shared With You §3.4) ──
+     inactive = a commented range not currently focused; the active range uses
+     --hc-accent and a resolved range uses --hc-hover. */
+  --hc-inactive-highlight: #393942;
+
   /* ── Semantic ── */
   --hc-error:   #ef4444;
   --hc-warning: #f59e0b;

@@ -1,11 +1,12 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ensureDevSession } from "@/lib/ensureDevSession";
 import { useLocalStorageState } from "@/lib/useLocalStorageState";
 import { Avatar } from "@/components/ui/Avatar";
+import { ReadComments } from "@/components/sharing/ReadComments";
 import type { ReadView, BookPanelChapter } from "@/lib/shared/read";
 
 // The read view (§3.3): one shared chapter as continuous prose, with a
@@ -23,6 +24,16 @@ export default function SharedReadPage({
   const [view, setView] = useState<ReadView | null>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "notfound">("loading");
   const [commentsOpen, setCommentsOpen] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Prose + comments rail share this scroll container so cards scroll with text.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const proseRef = useRef<HTMLDivElement>(null);
+  // Bumped once the prose is in the DOM, so ReadComments (re)builds its maps.
+  const [proseReady, setProseReady] = useState(0);
+  useEffect(() => {
+    if (view) setProseReady((n) => n + 1);
+  }, [view]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -35,6 +46,7 @@ export default function SharedReadPage({
         router.replace(`/login?next=/shared/${sharedChapterId}`);
         return;
       }
+      setCurrentUserId(user.id);
       try {
         const res = await fetch(`/api/shared/${sharedChapterId}`);
         if (cancelled) return;
@@ -81,27 +93,37 @@ export default function SharedReadPage({
           {view && <BookPanel view={view} />}
         </div>
 
-        {/* Center — prose. */}
-        <div className="flex-1 min-w-0 overflow-y-auto">
-          {status === "loading" || !view ? (
-            <div className="max-w-[700px] mx-auto px-6 py-16 flex flex-col gap-3" aria-hidden>
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="h-4 rounded bg-panel animate-pulse" style={{ width: `${70 + (i % 3) * 10}%` }} />
-              ))}
+        {/* Center + right share one scroll container so comment cards scroll
+            with the prose they anchor to (§3.4). */}
+        <div ref={scrollRef} className="flex-1 min-w-0 overflow-y-auto">
+          <div className="flex min-h-full">
+            {/* Prose */}
+            <div ref={proseRef} className="flex-1 min-w-0">
+              {status === "loading" || !view ? (
+                <div className="max-w-[700px] mx-auto px-6 py-16 flex flex-col gap-3" aria-hidden>
+                  {[...Array(8)].map((_, i) => (
+                    <div key={i} className="h-4 rounded bg-panel animate-pulse" style={{ width: `${70 + (i % 3) * 10}%` }} />
+                  ))}
+                </div>
+              ) : (
+                <Prose view={view} />
+              )}
             </div>
-          ) : (
-            <Prose view={view} />
-          )}
-        </div>
 
-        {/* Right — comments (Stage 2). Desktop; toggled by the header icon. */}
-        {commentsOpen && (
-          <div className="hidden md:flex w-[300px] flex-shrink-0 border-l border-border-subtle flex-col">
-            <div className="flex-1 flex items-start justify-center pt-16 px-6">
-              <p className="text-subtle/70 text-xs text-center">Comments will appear here.</p>
-            </div>
+            {/* Comments rail (desktop; toggled by the header icon). */}
+            {commentsOpen && view && currentUserId && (
+              <div className="hidden md:block flex-shrink-0">
+                <ReadComments
+                  sharedChapterId={sharedChapterId}
+                  currentUserId={currentUserId}
+                  scrollRef={scrollRef}
+                  proseRef={proseRef}
+                  proseReady={proseReady}
+                />
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -307,15 +329,18 @@ function Prose({ view }: { view: ReadView }) {
       <h1 className="font-serif text-text text-2xl mb-8">{view.chapterTitle}</h1>
       <div className="font-serif text-manuscript-l text-text">
         {view.scenes.map((scene, i) => (
-          <div key={scene.id}>
+          <div key={scene.id} data-shared-scene-id={scene.id}>
             {i > 0 && (
               <div className="text-center text-subtle/50 select-none my-8" aria-hidden>
                 * * *
               </div>
             )}
             {/* body_html is sanitized at snapshot time (lib/sanitize.ts). Scene
-                labels are intentionally omitted — author metadata, not the draft. */}
-            <div className="indent-9 [&_p]:mb-0 [&_em]:italic [&_i]:italic [&_b]:font-bold [&_strong]:font-bold"
+                labels are intentionally omitted — author metadata, not the draft.
+                data-scene-body marks the anchoring root for comment offsets. */}
+            <div
+              data-scene-body
+              className="indent-9 [&_p]:mb-0 [&_em]:italic [&_i]:italic [&_b]:font-bold [&_strong]:font-bold"
               dangerouslySetInnerHTML={{ __html: scene.bodyHtml }}
             />
           </div>

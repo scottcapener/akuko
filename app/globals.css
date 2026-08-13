@@ -20,6 +20,9 @@
   /* Border */
   --color-border-subtle: var(--hc-border-subtle);
 
+  /* Comment highlight (Shared With You) */
+  --color-inactive-highlight: var(--hc-inactive-highlight);
+
   /* Scrim */
   --color-scrim: var(--hc-scrim);
 
@@ -86,6 +89,20 @@ body {
   color: var(--hc-text);
   font-family: var(--hc-font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Comment highlights (Shared With You §3.4) — painted via the CSS Custom
+   Highlight API so commented ranges tint the immutable snapshot HTML without
+   mutating it. Registered in components/sharing/ReadComments. */
+::highlight(hc-comment-inactive) {
+  background-color: var(--hc-inactive-highlight);
+}
+::highlight(hc-comment-active) {
+  background-color: var(--hc-accent);
+  color: var(--hc-on-accent);
+}
+::highlight(hc-comment-resolved) {
+  background-color: var(--hc-hover);
 }
 
 /* Inline wordmark logo (logo-S.svg is authored near-black). Render it light on
