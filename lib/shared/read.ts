@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { signSharedPath } from "./covers";
+import { markChapterSeen } from "./unread";
 
 // One shared chapter, with book context, for the read view (SHARED_WITH_YOU.md
 // §3.3). Runs under the recipient's session; RLS returns the snapshot only if
@@ -75,13 +76,8 @@ export async function getSharedChapterView(
     })
   );
 
-  // Mark read (clears the feed's unread dot). Best-effort; own-row RLS applies.
-  await supabase
-    .from("shared_chapter_reads")
-    .upsert(
-      { shared_chapter_id: sharedChapterId, user_id: userId, last_seen_at: new Date().toISOString() },
-      { onConflict: "shared_chapter_id,user_id" }
-    );
+  // Mark read (clears the feed's unread dot + comment badges). Best-effort.
+  await markChapterSeen(supabase, userId, sharedChapterId);
 
   return {
     sharedChapterId,
