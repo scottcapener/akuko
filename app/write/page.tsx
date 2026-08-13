@@ -519,8 +519,11 @@ export default function WritePage() {
     onReorderImages: store.reorderLibraryImages,
     onReorderMusicLinks: store.reorderMusicLinks,
     onReorderNotes: store.reorderNotes,
-    // Sharing applies to real chapters, not the hidden Book-Info chapter.
+    // Sharing + the Comments tab apply to real chapters, not the hidden
+    // Book-Info chapter.
     shareable: !bookView,
+    currentUserId: store.userId,
+    onSceneClick: handleSceneClick,
   };
 
   const bookInfoProps = {
@@ -699,7 +702,11 @@ export default function WritePage() {
         />
       </div>
       <div className={`md:hidden fixed inset-y-0 right-0 z-40 w-full transition-transform duration-200 ${mobilePanel === "right" ? "translate-x-0" : "translate-x-full"}`}>
-        <RightColumn {...rightProps} onClose={() => setMobilePanel(null)} />
+        <RightColumn
+          {...rightProps}
+          onClose={() => setMobilePanel(null)}
+          onSceneClick={(chapterId, sceneId) => { handleSceneClick(chapterId, sceneId); setMobilePanel(null); }}
+        />
       </div>
       {store.conflicts.length > 0 && (
         <ConflictModal conflicts={store.conflicts} onResolve={store.resolveConflict} />

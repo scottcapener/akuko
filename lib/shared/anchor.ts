@@ -99,3 +99,53 @@ export function rangeFromOffsets(map: TextMap, start: number, end: number): Rang
     return null;
   }
 }
+
+// ── Tier-2 editor highlighting (SHARED_WITH_YOU.md §3.7) ──────────────────────
+// The editor's Comments tab can't index into the immutable snapshot — it points
+// at the *live* scene, which the author has since been editing. So instead of
+// offsets we do a plain substring search of the live text for the stored quote:
+// exactly one match → a Range to highlight; zero or many → no highlight (the card
+// still lists the quote). Recomputed on demand, never stored, degrades silently.
+
+/** A Range for the sole occurrence of `needle` in `root`'s text, else null.
+ *  Zero matches (the author revised the quoted text) and multiple matches (the
+ *  quote is ambiguous) both return null — highlighting stays opportunistic. */
+export function findUniqueTextRange(root: HTMLElement, needle: string): Range | null {
+  if (!needle) return null;
+  // root.textContent concatenates descendant text-node data in document order
+  // with no separators — the exact basis a SHOW_TEXT walk reproduces below.
+  const text = root.textContent ?? "";
+  const first = text.indexOf(needle);
+  if (first === -1) return null;
+  if (text.indexOf(needle, first + 1) !== -1) return null; // ambiguous → skip
+  const end = first + needle.length;
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let offset = 0;
+  let startNode: Text | null = null;
+  let startOffset = 0;
+  let endNode: Text | null = null;
+  let endOffset = 0;
+  for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+    const len = node.data.length;
+    if (startNode == null && first < offset + len) {
+      startNode = node;
+      startOffset = first - offset;
+    }
+    if (startNode != null && end <= offset + len) {
+      endNode = node;
+      endOffset = end - offset;
+      break;
+    }
+    offset += len;
+  }
+  if (!startNode || !endNode) return null;
+  try {
+    const range = document.createRange();
+    range.setStart(startNode, startOffset);
+    range.setEnd(endNode, endOffset);
+    return range;
+  } catch {
+    return null;
+  }
+}
