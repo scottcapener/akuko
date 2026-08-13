@@ -6,6 +6,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ensureDevSession } from "@/lib/ensureDevSession";
+import { useUnread } from "@/lib/useUnread";
+import { Badge } from "@/components/ui/Badge";
 import * as db from "@/lib/db";
 import type { BookSummary } from "@/lib/db";
 
@@ -114,7 +116,7 @@ const SECONDARY: NavItem[] = [
   { href: "/account", label: "Account", Icon: AccountIcon },
 ];
 
-function NavRow({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
+function NavRow({ item, active, badge = 0, onNavigate }: { item: NavItem; active: boolean; badge?: number; onNavigate?: () => void }) {
   return (
     <Link
       href={item.href}
@@ -128,6 +130,7 @@ function NavRow({ item, active, onNavigate }: { item: NavItem; active: boolean; 
       <span className={`text-sm transition-colors ${active ? "text-text" : "text-muted group-hover:text-text"}`}>
         {item.label}
       </span>
+      {badge > 0 && <Badge count={badge} className="ml-auto" />}
     </Link>
   );
 }
@@ -155,6 +158,7 @@ interface Props {
 
 export default function NavPanel({ collapsed, onToggleCollapse, expandedWidth, onClose, onNavigate }: Props) {
   const pathname = usePathname();
+  const { total: unreadTotal } = useUnread();
   // Seed from the module cache so a revisit paints immediately; only the very
   // first fetch of the session shows the skeleton.
   const [book, setBook] = useState<BookSummary | null>(() => cachedActiveBook ?? null);
@@ -200,11 +204,13 @@ export default function NavPanel({ collapsed, onToggleCollapse, expandedWidth, o
         {onToggleCollapse ? (
           <button
             onClick={onToggleCollapse}
-            className="text-subtle hover:text-text transition-colors"
+            className="relative text-subtle hover:text-text transition-colors"
             title={collapsed ? "Expand navigation" : "Collapse navigation"}
             aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
           >
             <PanelToggleIcon className="w-6 h-6" />
+            {/* When collapsed the Shared row is hidden, so surface unread here. */}
+            {collapsed && unreadTotal > 0 && <Badge dot className="absolute -top-0.5 -right-0.5" />}
           </button>
         ) : (
           <PanelToggleIcon className="w-6 h-6 text-subtle" />
@@ -286,7 +292,7 @@ export default function NavPanel({ collapsed, onToggleCollapse, expandedWidth, o
           <div className="my-2 -mx-3 border-t border-border-subtle" />
 
           {SHARED.map((item) => (
-            <NavRow key={item.href} item={item} active={pathname.startsWith(item.href)} onNavigate={onNavigate} />
+            <NavRow key={item.href} item={item} active={pathname.startsWith(item.href)} badge={unreadTotal} onNavigate={onNavigate} />
           ))}
 
           <div className="my-2 -mx-3 border-t border-border-subtle" />

@@ -10,6 +10,8 @@ import { useReorderGrid } from "@/lib/useReorderGrid";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
 import { SharingMenu } from "@/components/sharing/SharingMenu";
 import { EditorComments } from "@/components/sharing/EditorComments";
+import { Badge } from "@/components/ui/Badge";
+import { useUnread } from "@/lib/useUnread";
 
 // Renders children into document.body so fixed overlays escape transformed parents
 function Portal({ children }: { children: React.ReactNode }) {
@@ -555,6 +557,14 @@ export default function RightColumn({
   }, [shareable]);
   const showComments = shareable && activeTab === "comments";
 
+  // Unread comments on THIS chapter drive the Comments-tab count + the collapsed
+  // library-icon dot (§6). Cleared when the tab opens (EditorComments marks seen
+  // → refreshUnread). Book Info isn't shareable, so it never shows a badge.
+  const { chapters: unreadChapters } = useUnread();
+  const unreadComments = shareable
+    ? unreadChapters.find((c) => c.chapterId === chapter.id)?.unreadComments ?? 0
+    : 0;
+
   // Clicking the active tab collapses/expands the panel (preserving the old
   // click-the-library-icon-to-collapse gesture); clicking the other switches to
   // it, expanding first if collapsed.
@@ -754,7 +764,7 @@ export default function RightColumn({
         <div className="flex items-center gap-1">
           <button
             onClick={() => selectTab("library")}
-            className={`p-1 rounded-md transition-opacity ${
+            className={`relative p-1 rounded-md transition-opacity ${
               activeTab === "library" ? "opacity-100" : "opacity-40 hover:opacity-100"
             }`}
             title={
@@ -767,11 +777,13 @@ export default function RightColumn({
             aria-label="Library"
           >
             <Image src="/library.svg" alt="Library" width={20} height={20} />
+            {/* Collapsed hides the Comments tab — surface its unread here (§6). */}
+            {collapsed && unreadComments > 0 && <Badge dot className="absolute top-0 right-0" />}
           </button>
           {shareable && (
             <button
               onClick={() => selectTab("comments")}
-              className={`p-1 rounded-md transition-opacity ${
+              className={`relative p-1 rounded-md transition-opacity ${
                 activeTab === "comments"
                   ? "opacity-100 text-text"
                   : "opacity-40 hover:opacity-100 text-subtle"
@@ -788,6 +800,10 @@ export default function RightColumn({
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-8.5 5.5L4 21V6a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2H7l-2.5 2.5z" />
               </svg>
+              {/* Unread comments on this chapter, until you open the tab (§6). */}
+              {!collapsed && unreadComments > 0 && (
+                <Badge count={unreadComments} className="absolute -top-1.5 -right-2" />
+              )}
             </button>
           )}
         </div>

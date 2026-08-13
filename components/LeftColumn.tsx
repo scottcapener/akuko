@@ -10,6 +10,8 @@ import { Book, Section, Chapter, Scene } from "@/lib/types";
 import { Button, Modal } from "@/components/ui";
 import { DropLine } from "@/components/ui/DropLine";
 import BookOverview from "@/components/BookOverview";
+import { Badge } from "@/components/ui/Badge";
+import { useUnread } from "@/lib/useUnread";
 import { useTheme } from "@/lib/useTheme";
 import { useReorderList } from "@/lib/useReorderList";
 import { useReorderGrid } from "@/lib/useReorderGrid";
@@ -804,6 +806,7 @@ export default function LeftColumn({
   const router = useRouter();
   const supabase = createClient();
   const { theme, toggleTheme } = useTheme();
+  const { total: unreadTotal } = useUnread();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<Section | null>(null);
@@ -974,11 +977,13 @@ export default function LeftColumn({
         {onToggleCollapse ? (
           <button
             onClick={onToggleCollapse}
-            className="text-subtle hover:text-text transition-colors"
+            className="relative text-subtle hover:text-text transition-colors"
             title={collapsed ? "Expand book panel" : "Collapse book panel"}
             aria-label={collapsed ? "Expand book panel" : "Collapse book panel"}
           >
             <Image src="/book-open.svg" alt="Book" width={20} height={20} />
+            {/* Collapsed hides the account menu's Shared row — surface unread here. */}
+            {collapsed && unreadTotal > 0 && <Badge dot className="absolute -top-1 -right-1" />}
           </button>
         ) : (
           <Image src="/book-open.svg" alt="Book" width={20} height={20} />
@@ -1129,9 +1134,10 @@ export default function LeftColumn({
             <Link
               href="/shared"
               onClick={() => setMenuOpen(false)}
-              className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
+              className="flex w-full items-center justify-between px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
             >
-              Shared
+              <span>Shared</span>
+              {unreadTotal > 0 && <Badge count={unreadTotal} />}
             </Link>
 
             {/* Scene visibility — a user-level view preference, not a book edit.
@@ -1196,7 +1202,7 @@ export default function LeftColumn({
         />
         <button
           onClick={() => setMenuOpen((o) => !o)}
-          className="text-subtle hover:text-text transition-colors leading-none flex items-center justify-center"
+          className="relative text-subtle hover:text-text transition-colors leading-none flex items-center justify-center"
           title="Account"
           aria-label="Account menu"
         >
@@ -1205,6 +1211,8 @@ export default function LeftColumn({
             <circle cx="12" cy="12" r="1.5" />
             <circle cx="19" cy="12" r="1.5" />
           </svg>
+          {/* Menu closed: a dot flags new shared activity without opening it. */}
+          {!menuOpen && unreadTotal > 0 && <Badge dot className="absolute -top-1 -right-1" />}
         </button>
       </div>
       </div>

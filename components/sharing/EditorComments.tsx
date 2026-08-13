@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { findUniqueTextRange } from "@/lib/shared/anchor";
+import { refreshUnread } from "@/lib/useUnread";
 import type { CommentDTO } from "@/lib/shared/comments";
 import type { Scene } from "@/lib/types";
 
@@ -69,7 +70,9 @@ export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sharedChapterId: state.sharedChapterId }),
-    }).catch(() => {});
+    })
+      .then(() => refreshUnread()) // clear this chapter's badges everywhere
+      .catch(() => {});
   }, [chapterId]);
 
   useEffect(() => {
