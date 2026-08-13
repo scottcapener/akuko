@@ -22,6 +22,7 @@ export async function PATCH(request: Request) {
     penName?: unknown;
     bio?: unknown;
     avatarPath?: unknown;
+    notifyOnShare?: unknown;
   };
   try {
     body = await request.json();
@@ -31,7 +32,7 @@ export async function PATCH(request: Request) {
 
   // Build the patch from only the fields that were supplied, so a bio-only
   // autosave doesn't clobber the name and vice versa.
-  const patch: Record<string, string | null> = {};
+  const patch: Record<string, string | boolean | null> = {};
 
   if (body.displayName !== undefined) {
     const name = typeof body.displayName === "string" ? body.displayName.trim() : "";
@@ -61,6 +62,10 @@ export async function PATCH(request: Request) {
     } else {
       return NextResponse.json({ error: "Invalid avatar path." }, { status: 400 });
     }
+  }
+
+  if (body.notifyOnShare !== undefined) {
+    patch.notify_on_share = body.notifyOnShare === true;
   }
 
   if (Object.keys(patch).length === 0) {

@@ -106,6 +106,8 @@ function renderShareEmail({
               You're receiving this email because you have an account with Hot Cocoa and ${name}
               invited you to read and comment on their chapter. If you didn't expect this, you can
               safely ignore it.
+              <br />
+              <a href="${base}/unsubscribe" style="color:#615e5c;text-decoration:underline;">Unsubscribe from share notifications</a>
             </div>
           </td></tr>
         </table>
@@ -135,5 +137,7 @@ function renderShareEmailText({
     `You're receiving this email because you have an account with Hot Cocoa and ` +
       `${authorName} invited you to read and comment on their chapter. If you didn't ` +
       `expect this, you can safely ignore it.`,
+    ``,
+    `Unsubscribe from share notifications: ${base}/unsubscribe`,
   ].join("\n");
 }
