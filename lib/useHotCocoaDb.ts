@@ -1490,6 +1490,7 @@ export function useHotCocoaDb() {
   const infoChapterLoaded = infoChapter ? loadedChapters.has(infoChapter.id) : false;
 
   return {
+    userId,
     book,
     hydrated,
     saveStatus,

@@ -9,6 +9,7 @@ import { useReorderList } from "@/lib/useReorderList";
 import { useReorderGrid } from "@/lib/useReorderGrid";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
 import { SharingMenu } from "@/components/sharing/SharingMenu";
+import { EditorComments } from "@/components/sharing/EditorComments";
 
 // Renders children into document.body so fixed overlays escape transformed parents
 function Portal({ children }: { children: React.ReactNode }) {
@@ -501,9 +502,14 @@ interface Props {
   onReorderMusicLinks: (chapterId: string, from: number, to: number) => void;
   onReorderNotes: (chapterId: string, from: number, to: number) => void;
   onClose?: () => void;
-  // When true, show the sharing mini-menu at the column's bottom-right (§3.6).
-  // False for the hidden Book-Info chapter.
+  // When true, show the sharing mini-menu at the column's bottom-right (§3.6)
+  // and the Comments tab next to the Library icon (§3.7). False for the hidden
+  // Book-Info chapter.
   shareable?: boolean;
+  // The signed-in author — decides who may resolve/edit in the Comments tab.
+  currentUserId?: string | null;
+  // Scrolls the editor to a live scene when a comment card is clicked (§3.7).
+  onSceneClick?: (chapterId: string, sceneId: string) => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   // Pixel width of the expanded panel — the body below the header renders at
@@ -534,11 +540,32 @@ export default function RightColumn({
   onReorderNotes,
   onClose,
   shareable = false,
+  currentUserId,
+  onSceneClick,
   collapsed,
   onToggleCollapse,
   expandedWidth,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Library ↔ Comments tab (§3.7). Comments only exists on shareable chapters;
+  // Book Info forces Library.
+  const [activeTab, setActiveTab] = useState<"library" | "comments">("library");
+  useEffect(() => {
+    if (!shareable) setActiveTab("library");
+  }, [shareable]);
+  const showComments = shareable && activeTab === "comments";
+
+  // Clicking the active tab collapses/expands the panel (preserving the old
+  // click-the-library-icon-to-collapse gesture); clicking the other switches to
+  // it, expanding first if collapsed.
+  function selectTab(tab: "library" | "comments") {
+    if (tab === activeTab) {
+      onToggleCollapse?.();
+      return;
+    }
+    setActiveTab(tab);
+    if (collapsed) onToggleCollapse?.();
+  }
   useAutoScrollOnDrag(scrollRef);
   const imageReorder = useReorderGrid((from, to) => onReorderImages(chapter.id, from, to));
   const musicReorder = useReorderList((from, to) => onReorderMusicLinks(chapter.id, from, to));
@@ -718,24 +745,52 @@ export default function RightColumn({
         </Portal>
       )}
 
-      {/* Panel Header — library icon, always visible. Fixed h-16 so the Gallery
-          top lines up with the Book Cover and the first Scene. The icon doubles
-          as the collapse toggle (desktop only); it's a sibling before the
-          scrollable body below, not part of that scroll, so it never needs to
-          be sticky and never fades with the body. */}
+      {/* Panel Header — Library / Comments tabs (§3.7), always visible. Fixed
+          h-16 so the Gallery top lines up with the Book Cover and the first
+          Scene. The active tab's icon doubles as the collapse toggle (desktop
+          only); this header is a sibling before the scrollable body, not part of
+          that scroll, so it never needs to be sticky and never fades with it. */}
       <div className="bg-bg h-16 px-4 flex-shrink-0 flex items-center justify-between">
-        {onToggleCollapse ? (
+        <div className="flex items-center gap-1">
           <button
-            onClick={onToggleCollapse}
-            className="text-subtle hover:text-text transition-colors"
-            title={collapsed ? "Expand library panel" : "Collapse library panel"}
-            aria-label={collapsed ? "Expand library panel" : "Collapse library panel"}
+            onClick={() => selectTab("library")}
+            className={`p-1 rounded-md transition-opacity ${
+              activeTab === "library" ? "opacity-100" : "opacity-40 hover:opacity-100"
+            }`}
+            title={
+              activeTab === "library" && onToggleCollapse
+                ? collapsed
+                  ? "Expand panel"
+                  : "Collapse panel"
+                : "Library"
+            }
+            aria-label="Library"
           >
             <Image src="/library.svg" alt="Library" width={20} height={20} />
           </button>
-        ) : (
-          <Image src="/library.svg" alt="Library" width={20} height={20} />
-        )}
+          {shareable && (
+            <button
+              onClick={() => selectTab("comments")}
+              className={`p-1 rounded-md transition-opacity ${
+                activeTab === "comments"
+                  ? "opacity-100 text-text"
+                  : "opacity-40 hover:opacity-100 text-subtle"
+              }`}
+              title={
+                activeTab === "comments" && onToggleCollapse
+                  ? collapsed
+                    ? "Expand panel"
+                    : "Collapse panel"
+                  : "Comments"
+              }
+              aria-label="Comments"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-8.5 5.5L4 21V6a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2H7l-2.5 2.5z" />
+              </svg>
+            </button>
+          )}
+        </div>
         {onClose && (
           <button onClick={onClose} className="text-subtle/50 hover:text-subtle transition-colors md:hidden">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -764,6 +819,16 @@ export default function RightColumn({
             : undefined
         }
       >
+
+      {showComments ? (
+        <EditorComments
+          chapterId={chapter.id}
+          scenes={chapter.scenes}
+          currentUserId={currentUserId ?? ""}
+          onSceneClick={onSceneClick}
+        />
+      ) : (
+      <>
 
       {/* ── Images ── */}
       {loading ? (
@@ -1032,6 +1097,8 @@ export default function RightColumn({
           </div>
         )}
       </div>
+      )}
+      </>
       )}
       </div>
 
