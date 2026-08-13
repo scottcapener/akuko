@@ -358,7 +358,10 @@ from the editor.
 
 *Ships:* the feedback loop, reaching the author where they write.
 
-### Stage 3 — Notifications
+### Stage 3 — Notifications — ✅ Shipped
+Shipped as 3 PRs: (1) unread data layer (`getUnreadState` + `/api/shared/unread` + read cursors); (2) the
+badge component + placements across the nav, account menu, and editor; (3) notification settings +
+share-email unsubscribe (migration `015_notification_prefs.sql`).
 `shared_chapter_reads` wiring. Row badge, row dot, Comments-tab dot — unread-comment state working for owner
 and recipients alike. Notification preference + unsubscribe on the share email.
 
