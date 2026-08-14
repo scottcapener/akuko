@@ -25,6 +25,9 @@ export interface CommentDTO {
   updatedAt: string;
   resolvedAt: string | null;
   resolvedById: string | null;
+  /** Made against an older generation AND the quote no longer appears in the
+   *  current snapshot text (§7): render visible, attributed, but unanchored. */
+  stale: boolean;
 }
 
 export interface CommentsResponse {
@@ -59,10 +62,11 @@ export async function getComments(
 ): Promise<CommentsResponse | null> {
   const { data: chapter } = await supabase
     .from("shared_chapters")
-    .select("owner_id")
+    .select("owner_id, updated_at")
     .eq("id", sharedChapterId)
     .maybeSingle();
   if (!chapter) return null;
+  const generation = new Date(chapter.updated_at as string).getTime();
 
   const { data: rows } = await supabase
     .from("comments")
@@ -74,14 +78,18 @@ export async function getComments(
 
   // Scene identity/order for grouping + sorting.
   const sceneIds = [...new Set(comments.map((c) => c.shared_scene_id))];
-  const sceneMeta = new Map<string, { sceneId: string | null; position: number }>();
+  const sceneMeta = new Map<string, { sceneId: string | null; position: number; bodyText: string }>();
   if (sceneIds.length) {
     const { data: scenes } = await supabase
       .from("shared_scenes")
-      .select("id, scene_id, position")
+      .select("id, scene_id, position, body_text")
       .in("id", sceneIds);
     (scenes ?? []).forEach((s) =>
-      sceneMeta.set(s.id, { sceneId: s.scene_id, position: s.position ?? 0 })
+      sceneMeta.set(s.id, {
+        sceneId: s.scene_id,
+        position: s.position ?? 0,
+        bodyText: (s.body_text as string | null) ?? "",
+      })
     );
   }
 
@@ -103,6 +111,11 @@ export async function getComments(
 
   const dtos: CommentDTO[] = comments.map((c, i) => {
     const meta = sceneMeta.get(c.shared_scene_id);
+    // Stale: made against an older generation, and the quoted text no longer
+    // appears in the scene's current snapshot — so its offsets can't be trusted
+    // and it renders unanchored (§7).
+    const olderGeneration = new Date(c.snapshot_version).getTime() < generation;
+    const quoteGone = !(meta?.bodyText ?? "").includes(c.quote_text);
     return {
       id: c.id,
       sharedSceneId: c.shared_scene_id,
@@ -120,6 +133,7 @@ export async function getComments(
       updatedAt: c.updated_at,
       resolvedAt: c.resolved_at,
       resolvedById: c.resolved_by,
+      stale: olderGeneration && quoteGone,
     };
   });
 
@@ -189,5 +203,6 @@ export async function createComment(
     updatedAt: row.updated_at,
     resolvedAt: row.resolved_at,
     resolvedById: row.resolved_by,
+    stale: false, // made against the current generation
   };
 }
