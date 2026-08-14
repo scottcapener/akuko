@@ -428,6 +428,10 @@ recent-share-partners quick-list in the Share modal (§3.5).
 - **Fast-follow:** recent-share-partners quick-list (§3.5).
 - **Open item for Scott:** confirm the share-email From address (§5).
 
+> **Fast-follow / polish:** the post-Stage-4 punch-list (comment-card polish, Chapter Menu redesign, Read-view
+> design match, Shared-page item + author filter, deferred emails/recent-partners, and the needs-decision
+> backlog) is organized into stages 5–12 in [SHARED_WITH_YOU_UPDATES.md](SHARED_WITH_YOU_UPDATES.md).
+
 ---
 
 ## 9. Figma screens needed
