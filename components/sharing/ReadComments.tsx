@@ -54,6 +54,10 @@ export function ReadComments({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
   const [showStale, setShowStale] = useState(false);
+  // The Comments toggle moved out of the Read Header into this rail's own header
+  // (Stage 6). Collapsed → a thin strip showing just the icon, so the reader can
+  // reopen it; the prose widens meanwhile.
+  const [collapsed, setCollapsed] = useState(false);
 
   const isOwner = ownerId != null && currentUserId === ownerId;
   const railRef = useRef<HTMLDivElement>(null);
@@ -310,13 +314,32 @@ export function ReadComments({
     <aside
       ref={railRef}
       className="relative flex-shrink-0 border-l border-border-subtle"
-      style={{ width: RAIL_WIDTH }}
+      style={{ width: collapsed ? 48 : RAIL_WIDTH }}
     >
+      {/* Panel header — the Comments icon (Stage 6), sticky so it pins to the top
+          of the reading viewport like the other column headers. Doubles as the
+          collapse toggle. */}
+      <div className="sticky top-0 z-30 h-16 bg-bg flex items-center px-3">
+        <button
+          onClick={() => setCollapsed((v) => !v)}
+          aria-pressed={!collapsed}
+          aria-label={collapsed ? "Show comments" : "Hide comments"}
+          title="Comments"
+          className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+            collapsed ? "text-subtle hover:text-text hover:bg-hover" : "text-text bg-hover"
+          }`}
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20 12a8 8 0 01-11.6 7.1L4 20l1-4.4A8 8 0 1120 12z" />
+          </svg>
+        </button>
+      </div>
+
       {/* Sticky toggles — resolved (anchored, dimmed) and stale (detached; §7).
           Stale cards can't anchor to the changed prose, so they list here in the
           sticky panel rather than in the cascade. */}
-      {(resolvedCount > 0 || staleComments.length > 0) && (
-        <div className="sticky top-2 z-20 mx-3 mt-2 flex flex-col gap-2 items-start">
+      {!collapsed && (resolvedCount > 0 || staleComments.length > 0) && (
+        <div className="sticky top-[4.5rem] z-20 mx-3 mt-2 flex flex-col gap-2 items-start">
           {resolvedCount > 0 && (
             <button
               onClick={() => setShowResolved((v) => !v)}
@@ -353,7 +376,7 @@ export function ReadComments({
         </div>
       )}
 
-      {composer && (
+      {!collapsed && composer && (
         <div ref={composerRef} className="absolute right-3 left-3" style={{ top: 0 }}>
           <Composer
             onCancel={() => setComposer(null)}
@@ -362,7 +385,7 @@ export function ReadComments({
         </div>
       )}
 
-      {ordered.map((c) => (
+      {!collapsed && ordered.map((c) => (
         <div
           key={c.id}
           ref={(el) => {
@@ -385,6 +408,10 @@ export function ReadComments({
           />
         </div>
       ))}
+
+      {!collapsed && comments.length === 0 && !composer && (
+        <p className="px-4 pt-6 text-center text-xs text-subtle/60">Comments will appear here.</p>
+      )}
 
     </aside>
   );
