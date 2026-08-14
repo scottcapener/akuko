@@ -6,9 +6,10 @@ import { sanitizeProseHtml } from "@/lib/sanitize";
 // (see SHARED_WITH_YOU.md §1). Called under the AUTHOR's session, so the
 // "own …" RLS policies confine every live read to the caller's own rows and
 // the "owner writes" policies confine every snapshot write. Reused for both
-// first-share and (Stage 4) "Update shared copy" — it upserts shared_chapters
-// on the UNIQUE(chapter_id) key and fully replaces shared_scenes, so a
-// re-share is idempotent and lands in place.
+// first-share and "Update shared copy" (§7) — it upserts shared_chapters on the
+// UNIQUE(chapter_id) key and reconciles shared_scenes IN PLACE by scene_id, so a
+// re-share is idempotent, lands in place, and preserves the comments anchored to
+// those scenes.
 //
 // The snapshot copies the *text* (sanitized), plus a copy of book identity
 // (title, cover, position) so the recipient renders the chapter without ever
@@ -89,6 +90,17 @@ export async function snapshotChapter(
     unshared_at: null,
   };
 
+  // ── Scene snapshot rows: sanitize the HTML, derive the text projection ──
+  const sceneRows = (scenes ?? []).map((s, i) => {
+    const bodyHtml = sanitizeProseHtml(s.body ?? "");
+    return {
+      scene_id: s.id as string,
+      position: (s.position as number | null) ?? i,
+      body_html: bodyHtml,
+      body_text: htmlToText(bodyHtml),
+    };
+  });
+
   let sharedChapterId: string;
   if (existing) {
     sharedChapterId = existing.id;
@@ -97,12 +109,45 @@ export async function snapshotChapter(
       .update(snapshotRow)
       .eq("id", sharedChapterId);
     if (error) throw error;
-    // Replace the scene snapshot wholesale — re-share is a fresh copy. Safe in
-    // Stage 1 (no comments yet). Stage 4's "Update shared copy" must revisit
-    // this: comments reference shared_scene_id, so a delete+reinsert would drop
-    // them — §7 keeps comments across a re-share, so that path will update
-    // scenes in place (by scene_id) instead of recreating them.
-    await supabase.from("shared_scenes").delete().eq("shared_chapter_id", sharedChapterId);
+
+    // Re-share updates shared_scenes IN PLACE, keyed by scene_id, so each row
+    // keeps its id and the comments anchored to it survive (§7) — a wholesale
+    // delete+reinsert would cascade every comment away. Scenes still present are
+    // updated; newly-added scenes inserted; scenes removed from the live chapter
+    // are deleted (their comments go with the scene).
+    const { data: prior } = await supabase
+      .from("shared_scenes")
+      .select("id, scene_id")
+      .eq("shared_chapter_id", sharedChapterId);
+    const priorIdByScene = new Map(
+      (prior ?? []).map((p) => [p.scene_id as string | null, p.id as string])
+    );
+    const liveSceneIds = new Set(sceneRows.map((r) => r.scene_id));
+
+    const orphans = (prior ?? [])
+      .filter((p) => !liveSceneIds.has(p.scene_id as string))
+      .map((p) => p.id as string);
+    if (orphans.length) {
+      await supabase.from("shared_scenes").delete().in("id", orphans);
+    }
+
+    const newRows: Record<string, unknown>[] = [];
+    for (const r of sceneRows) {
+      const priorId = priorIdByScene.get(r.scene_id);
+      if (priorId) {
+        const { error: uErr } = await supabase
+          .from("shared_scenes")
+          .update({ position: r.position, body_html: r.body_html, body_text: r.body_text })
+          .eq("id", priorId);
+        if (uErr) throw uErr;
+      } else {
+        newRows.push({ shared_chapter_id: sharedChapterId, ...r });
+      }
+    }
+    if (newRows.length) {
+      const { error: iErr } = await supabase.from("shared_scenes").insert(newRows);
+      if (iErr) throw iErr;
+    }
   } else {
     const { data: inserted, error } = await supabase
       .from("shared_chapters")
@@ -111,22 +156,12 @@ export async function snapshotChapter(
       .single();
     if (error || !inserted) throw error ?? new Error("Failed to create snapshot");
     sharedChapterId = inserted.id;
-  }
 
-  // ── Snapshot the scenes: sanitize the HTML, derive the text projection ──
-  const sceneRows = (scenes ?? []).map((s, i) => {
-    const bodyHtml = sanitizeProseHtml(s.body ?? "");
-    return {
-      shared_chapter_id: sharedChapterId,
-      scene_id: s.id,
-      position: s.position ?? i,
-      body_html: bodyHtml,
-      body_text: htmlToText(bodyHtml),
-    };
-  });
-  if (sceneRows.length) {
-    const { error } = await supabase.from("shared_scenes").insert(sceneRows);
-    if (error) throw error;
+    const rows = sceneRows.map((r) => ({ shared_chapter_id: sharedChapterId, ...r }));
+    if (rows.length) {
+      const { error: sErr } = await supabase.from("shared_scenes").insert(rows);
+      if (sErr) throw sErr;
+    }
   }
 
   return { sharedChapterId, created: !existing };

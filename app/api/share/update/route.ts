@@ -9,7 +9,9 @@ export const runtime = "nodejs";
 // chapter in place. Recipients all see the new copy; existing grants are
 // untouched. Owner-only (snapshotChapter writes under the caller's session).
 //
-// Stale-comment handling on re-share is Stage 4 — there are no comments yet.
+// snapshotChapter reconciles shared_scenes by scene_id, so comments survive the
+// re-share; those whose quote no longer appears then render stale (§7, computed
+// in lib/shared/comments.ts against the bumped generation).
 //
 //   POST { chapterId }
 export async function POST(request: Request) {

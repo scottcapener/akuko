@@ -40,6 +40,7 @@ export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick 
   const [shared, setShared] = useState<boolean | null>(null); // null = loading
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
+  const [showStale, setShowStale] = useState(false);
 
   const isOwner = ownerId != null && currentUserId === ownerId;
 
@@ -80,6 +81,14 @@ export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick 
     setActiveId(null);
     setShared(null);
     load();
+  }, [load]);
+
+  // "Update shared copy" re-snapshots the chapter, which can newly stale some
+  // comments (§7); reload so they move to the "previous version" group at once.
+  useEffect(() => {
+    const onUpdated = () => load();
+    window.addEventListener("hc:shared-updated", onUpdated);
+    return () => window.removeEventListener("hc:shared-updated", onUpdated);
   }, [load]);
 
   // ── Tier-2 highlight — paint the active card's quote in the live scene ──
@@ -157,8 +166,13 @@ export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick 
     if (c.sceneId) onSceneClick?.(chapterId, c.sceneId);
   }
 
+  // Stale comments (§7) can't be anchored to the current text, so they leave the
+  // per-scene grouping and collect under their own "previous version" section.
+  const staleComments = comments.filter((c) => c.stale);
+  const live = comments.filter((c) => !c.stale);
+
   // ── Group by scene, in scene order (§3.7 tier 1) ──
-  const visible = comments.filter((c) => showResolved || !c.resolvedAt);
+  const visible = live.filter((c) => showResolved || !c.resolvedAt);
   const scenePos = new Map(scenes.map((s, i) => [s.id, i]));
   const sceneLabel = new Map(scenes.map((s) => [s.id, s.label]));
   const groups: Group[] = [];
@@ -187,7 +201,7 @@ export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick 
     return pa - pb;
   });
 
-  const resolvedCount = comments.filter((c) => c.resolvedAt).length;
+  const resolvedCount = live.filter((c) => c.resolvedAt).length;
 
   // ── Empty / loading states ──
   if (shared === null) {
@@ -243,6 +257,36 @@ export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick 
           </div>
         ))}
       </div>
+
+      {/* Comments made against text that has since changed (§7) — kept, still
+          attributed, but detached from the current draft. */}
+      {staleComments.length > 0 && (
+        <div className="mt-5 pt-4 border-t border-border-subtle">
+          <button
+            onClick={() => setShowStale((v) => !v)}
+            className="mb-3 px-2.5 py-1 rounded-md bg-panel border border-border-subtle text-xs text-subtle hover:text-text transition-colors"
+          >
+            {showStale ? "Hide" : "Show"} {staleComments.length} from a previous version
+          </button>
+          {showStale && (
+            <div className="flex flex-col gap-2">
+              {staleComments.map((c) => (
+                <EditorCommentCard
+                  key={c.id}
+                  comment={c}
+                  active={false}
+                  isMine={c.authorId === currentUserId}
+                  isOwner={isOwner}
+                  onSelect={() => c.sceneId && onSceneClick?.(chapterId, c.sceneId)}
+                  onEdit={(body) => editComment(c.id, body)}
+                  onDelete={() => deleteComment(c.id)}
+                  onToggleResolved={() => toggleResolved(c)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -271,6 +315,7 @@ function EditorCommentCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
   const resolved = !!comment.resolvedAt;
+  const stale = comment.stale;
 
   function saveEdit() {
     const body = draft.trim();
@@ -283,8 +328,12 @@ function EditorCommentCard({
       onClick={onSelect}
       className={`bg-panel rounded-xl p-3 border cursor-pointer transition-colors ${
         active ? "border-accent/60" : "border-border-subtle hover:border-hover"
-      } ${resolved ? "opacity-60" : ""}`}
+      } ${resolved || stale ? "opacity-60" : ""}`}
     >
+      {/* On stale comments the quote no longer matches the draft, so flag it. */}
+      {stale && (
+        <p className="text-[10px] uppercase tracking-wide text-subtle/70 mb-1.5">From a previous version</p>
+      )}
       {/* Quoted snapshot text — the anchor, shown since there's no adjacent rail. */}
       <p className="text-[11px] text-subtle border-l-2 border-hover pl-2 mb-2 line-clamp-2 italic">
         {comment.quoteText}

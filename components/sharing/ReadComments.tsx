@@ -53,6 +53,7 @@ export function ReadComments({
   const [composer, setComposer] = useState<Composer | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
+  const [showStale, setShowStale] = useState(false);
 
   const isOwner = ownerId != null && currentUserId === ownerId;
   const railRef = useRef<HTMLDivElement>(null);
@@ -154,6 +155,7 @@ export function ReadComments({
     };
 
     for (const c of comments) {
+      if (c.stale) continue; // offsets index into old text — never paint (§7)
       if (c.resolvedAt) draw(c, resolved);
       else if (c.id === activeId) draw(c, active);
       else draw(c, inactive);
@@ -176,8 +178,13 @@ export function ReadComments({
     };
   }, [comments, activeId, composer, proseReady]);
 
+  // Stale comments (§7) index into text that has since changed, so they leave the
+  // anchored stack and collect in a separate section — visible, attributed, but
+  // not tied to a spot in the prose.
+  const staleComments = comments.filter((c) => c.stale);
+
   // ── Stacking layout — measure anchors + card heights, cascade downward ──
-  const visible = comments.filter((c) => showResolved || !c.resolvedAt);
+  const visible = comments.filter((c) => !c.stale && (showResolved || !c.resolvedAt));
   // Sort by scene order then quote position (§3.4).
   const ordered = [...visible].sort(
     (a, b) => a.scenePosition - b.scenePosition || a.quoteStart - b.quoteStart
@@ -305,14 +312,45 @@ export function ReadComments({
       className="relative flex-shrink-0 border-l border-border-subtle"
       style={{ width: RAIL_WIDTH }}
     >
-      {/* Resolved toggle — sticky at the top of the rail so it's always reachable. */}
-      {resolvedCount > 0 && (
-        <button
-          onClick={() => setShowResolved((v) => !v)}
-          className="sticky top-2 z-10 ml-3 mt-2 px-2.5 py-1 rounded-md bg-panel border border-border-subtle text-xs text-subtle hover:text-text transition-colors"
-        >
-          {showResolved ? "Hide" : "Show"} {resolvedCount} resolved
-        </button>
+      {/* Sticky toggles — resolved (anchored, dimmed) and stale (detached; §7).
+          Stale cards can't anchor to the changed prose, so they list here in the
+          sticky panel rather than in the cascade. */}
+      {(resolvedCount > 0 || staleComments.length > 0) && (
+        <div className="sticky top-2 z-20 mx-3 mt-2 flex flex-col gap-2 items-start">
+          {resolvedCount > 0 && (
+            <button
+              onClick={() => setShowResolved((v) => !v)}
+              className="px-2.5 py-1 rounded-md bg-panel border border-border-subtle text-xs text-subtle hover:text-text transition-colors"
+            >
+              {showResolved ? "Hide" : "Show"} {resolvedCount} resolved
+            </button>
+          )}
+          {staleComments.length > 0 && (
+            <button
+              onClick={() => setShowStale((v) => !v)}
+              className="px-2.5 py-1 rounded-md bg-panel border border-border-subtle text-xs text-subtle hover:text-text transition-colors"
+            >
+              {showStale ? "Hide" : "Show"} {staleComments.length} from a previous version
+            </button>
+          )}
+          {showStale && staleComments.length > 0 && (
+            <div className="w-full max-h-[60vh] overflow-y-auto flex flex-col gap-2">
+              {staleComments.map((c) => (
+                <CommentCard
+                  key={c.id}
+                  comment={c}
+                  active={false}
+                  isMine={c.authorId === currentUserId}
+                  isOwner={isOwner}
+                  onSelect={() => {}}
+                  onEdit={(body) => editComment(c.id, body)}
+                  onDelete={() => deleteComment(c.id)}
+                  onToggleResolved={() => toggleResolved(c)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {composer && (
@@ -418,6 +456,7 @@ function CommentCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
   const resolved = !!comment.resolvedAt;
+  const stale = comment.stale;
 
   function saveEdit() {
     const body = draft.trim();
@@ -430,8 +469,17 @@ function CommentCard({
       onClick={onSelect}
       className={`bg-panel rounded-xl p-3 border transition-colors ${
         active ? "border-accent/60" : "border-border-subtle hover:border-hover"
-      } ${resolved ? "opacity-60" : ""}`}
+      } ${resolved || stale ? "opacity-60" : ""}`}
     >
+      {/* Stale: no highlight in the prose, so label it and show the old quote. */}
+      {stale && (
+        <>
+          <p className="text-[10px] uppercase tracking-wide text-subtle/70 mb-1.5">From a previous version</p>
+          <p className="text-[11px] text-subtle border-l-2 border-hover pl-2 mb-2 line-clamp-2 italic">
+            {comment.quoteText}
+          </p>
+        </>
+      )}
       <div className="flex items-center gap-2">
         <Avatar name={comment.authorName} src={comment.authorAvatarUrl} size={22} />
         <span className="text-text text-xs font-medium flex-1 truncate">{comment.authorName}</span>

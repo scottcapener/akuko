@@ -18,6 +18,7 @@ export function SharingMenu({ chapterId }: { chapterId: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
+  const [confirmUpdate, setConfirmUpdate] = useState(false);
   const [busy, setBusy] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -36,6 +37,7 @@ export function SharingMenu({ chapterId }: { chapterId: string }) {
     setState({ ...EMPTY, chapterId });
     setMenuOpen(false);
     setConfirmStop(false);
+    setConfirmUpdate(false);
     load();
   }, [chapterId, load]);
 
@@ -58,6 +60,7 @@ export function SharingMenu({ chapterId }: { chapterId: string }) {
 
   function openMenu() {
     setConfirmStop(false);
+    setConfirmUpdate(false);
     setMenuOpen((v) => !v);
     load(); // refresh counts on open
   }
@@ -75,10 +78,16 @@ export function SharingMenu({ chapterId }: { chapterId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chapterId }),
       });
-      if (res.ok) setState(await res.json());
+      if (res.ok) {
+        setState(await res.json());
+        // The re-share may have made comments stale (§7); tell an open Comments
+        // tab to reload so the "previous version" grouping appears immediately.
+        window.dispatchEvent(new CustomEvent("hc:shared-updated"));
+      }
     } finally {
       setBusy(false);
       setMenuOpen(false);
+      setConfirmUpdate(false);
     }
   }
 
@@ -137,13 +146,37 @@ export function SharingMenu({ chapterId }: { chapterId: string }) {
 
               <div className="h-px bg-border-subtle my-1.5 mx-3" />
 
-              <button
-                onClick={updateCopy}
-                disabled={busy}
-                className="block w-full text-left px-4 py-2.5 text-sm text-text hover:bg-hover transition-colors disabled:opacity-50"
-              >
-                Update shared copy
-              </button>
+              {confirmUpdate ? (
+                <div className="px-4 py-2.5">
+                  <p className="text-xs text-subtle leading-relaxed mb-2">
+                    Recipients will see your current draft. Comments on passages you’ve changed move
+                    to “a previous version.”
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={updateCopy}
+                      disabled={busy}
+                      className="text-sm text-accent font-medium hover:text-accent-hi transition-colors disabled:opacity-50"
+                    >
+                      Update copy
+                    </button>
+                    <button
+                      onClick={() => setConfirmUpdate(false)}
+                      disabled={busy}
+                      className="text-sm text-subtle hover:text-text transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setConfirmStop(false); setConfirmUpdate(true); }}
+                  className="block w-full text-left px-4 py-2.5 text-sm text-text hover:bg-hover transition-colors"
+                >
+                  Update shared copy
+                </button>
+              )}
 
               {confirmStop ? (
                 <button
@@ -155,7 +188,7 @@ export function SharingMenu({ chapterId }: { chapterId: string }) {
                 </button>
               ) : (
                 <button
-                  onClick={() => setConfirmStop(true)}
+                  onClick={() => { setConfirmUpdate(false); setConfirmStop(true); }}
                   className="block w-full text-left px-4 py-2.5 text-sm text-error hover:bg-hover transition-colors"
                 >
                   Stop sharing
