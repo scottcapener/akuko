@@ -28,8 +28,9 @@ function todayKey(): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
-// URL of the full tips page. Opened in a new tab from "View all" (per spec, the
-// How to Use Hot Cocoa page always opens in a new tab).
+// URL of the full tips page, opened from "View all". Navigates in place rather
+// than in a new tab — the How to Use page lives in the Workspace group and carries
+// its own nav panel to get back.
 const HOW_TO_URL = "/how-to";
 
 function CloseIcon() {
@@ -107,8 +108,6 @@ export default function TipsCard() {
         <div className="mt-3 flex items-center gap-2">
           <a
             href={HOW_TO_URL}
-            target="_blank"
-            rel="noopener noreferrer"
             onClick={dismiss}
             className="flex-1 rounded-lg bg-hover py-1.5 text-center text-xs text-muted transition-colors hover:text-text"
           >

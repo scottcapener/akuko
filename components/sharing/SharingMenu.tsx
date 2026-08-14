@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { ShareModal } from "./ShareModal";
+import { useUnread } from "@/lib/useUnread";
 import type { ShareState } from "@/lib/shared/types";
 
 // The sharing mini-menu (SHARED_WITH_YOU.md §3.6): a ••• at the bottom-right of
@@ -107,6 +108,12 @@ export function SharingMenu({ chapterId }: { chapterId: string }) {
 
   const count = state.recipients.length;
 
+  // The dot signals *new comments to look at* on this chapter — not merely that
+  // the chapter is shared (§6). Same unread source as the Comments-tab badge.
+  const { chapters: unreadChapters } = useUnread();
+  const unreadComments =
+    unreadChapters.find((c) => c.chapterId === chapterId)?.unreadComments ?? 0;
+
   return (
     <div ref={rootRef} className="relative">
       {menuOpen && (
@@ -210,7 +217,7 @@ export function SharingMenu({ chapterId }: { chapterId: string }) {
           <circle cx="12" cy="12" r="1.6" />
           <circle cx="19" cy="12" r="1.6" />
         </svg>
-        {state.shared && (
+        {unreadComments > 0 && (
           <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-accent" />
         )}
       </button>

@@ -26,6 +26,14 @@ interface Props {
   currentUserId: string;
   /** Scrolls the editor to a live scene (reused Book-Panel scene-scroll). */
   onSceneClick?: (chapterId: string, sceneId: string) => void;
+  /**
+   * Whether the Comments tab is the one on screen. On desktop the tab stays
+   * mounted behind the Library so the two can cross-slide, so "opening" it is a
+   * prop flip, not a mount — the read cursor must only advance while it's
+   * actually visible (§6), or unread badges would clear the instant a chapter
+   * loads. Defaults true for the mobile panel, where it's only rendered when shown.
+   */
+  active?: boolean;
 }
 
 interface Group {
@@ -34,10 +42,31 @@ interface Group {
   comments: CommentDTO[];
 }
 
-export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick }: Props) {
-  const [comments, setComments] = useState<CommentDTO[]>([]);
-  const [ownerId, setOwnerId] = useState<string | null>(null);
-  const [shared, setShared] = useState<boolean | null>(null); // null = loading
+// The tab unmounts every time the author switches back to the Library tab, and
+// re-mounting used to reset to a skeleton and re-fetch — a visible flash on each
+// switch. Cache the last-loaded conversation per chapter (module scope, survives
+// unmount) so a re-mount paints the known state immediately and revalidates in
+// the background. Fresh chapters still show the skeleton once, which is honest.
+type CachedComments = {
+  shared: boolean;
+  comments: CommentDTO[];
+  ownerId: string | null;
+  sharedChapterId: string | null;
+};
+const commentsCache = new Map<string, CachedComments>();
+
+export function EditorComments({
+  chapterId,
+  scenes,
+  currentUserId,
+  onSceneClick,
+  active = true,
+}: Props) {
+  const seeded = commentsCache.get(chapterId);
+  const [comments, setComments] = useState<CommentDTO[]>(seeded?.comments ?? []);
+  const [ownerId, setOwnerId] = useState<string | null>(seeded?.ownerId ?? null);
+  const [sharedChapterId, setSharedChapterId] = useState<string | null>(seeded?.sharedChapterId ?? null);
+  const [shared, setShared] = useState<boolean | null>(seeded?.shared ?? null); // null = loading
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
   const [showStale, setShowStale] = useState(false);
@@ -55,33 +84,62 @@ export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick 
     if (!state.sharedChapterId) {
       setShared(false);
       setComments([]);
+      setSharedChapterId(null);
+      commentsCache.set(chapterId, { shared: false, comments: [], ownerId: null, sharedChapterId: null });
       return;
     }
     setShared(true);
+    setSharedChapterId(state.sharedChapterId);
     const res = await fetch(
       `/api/comments?sharedChapterId=${encodeURIComponent(state.sharedChapterId)}`
     );
     if (!res.ok) return;
     const data = await res.json();
-    setComments(data.comments ?? []);
+    const loaded: CommentDTO[] = data.comments ?? [];
+    setComments(loaded);
     setOwnerId(data.ownerId ?? null);
-    // Opening the Comments tab is "seeing" this chapter — advance the read
-    // cursor so its unread badges clear (§6). Best-effort; fire and forget.
+    commentsCache.set(chapterId, {
+      shared: true,
+      comments: loaded,
+      ownerId: data.ownerId ?? null,
+      sharedChapterId: state.sharedChapterId,
+    });
+    // NB: advancing the read cursor ("seen") is handled by the active-gated
+    // effect below, not here — load() also runs while the tab is mounted but
+    // hidden behind the Library, and marking seen then would wrongly clear
+    // unread badges before the author has looked (§6).
+  }, [chapterId]);
+
+  // Opening the Comments tab is "seeing" this chapter — advance the read cursor
+  // so its unread badges clear everywhere (§6). Only while actually visible.
+  useEffect(() => {
+    if (!active || !sharedChapterId) return;
     fetch("/api/shared/seen", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sharedChapterId: state.sharedChapterId }),
+      body: JSON.stringify({ sharedChapterId }),
     })
-      .then(() => refreshUnread()) // clear this chapter's badges everywhere
+      .then(() => refreshUnread())
       .catch(() => {});
-  }, [chapterId]);
+  }, [active, sharedChapterId]);
 
   useEffect(() => {
-    setComments([]);
+    // Seed from cache (no skeleton on a revisit); only a never-loaded chapter
+    // falls back to the loading state. Then revalidate.
+    const cached = commentsCache.get(chapterId);
+    setComments(cached?.comments ?? []);
+    setOwnerId(cached?.ownerId ?? null);
+    setSharedChapterId(cached?.sharedChapterId ?? null);
     setActiveId(null);
-    setShared(null);
+    setShared(cached?.shared ?? null);
     load();
-  }, [load]);
+  }, [chapterId, load]);
+
+  // Revalidate when the tab is (re)opened, so a conversation that changed while
+  // it sat hidden behind the Library refreshes the moment it comes into view.
+  useEffect(() => {
+    if (active) load();
+  }, [active, load]);
 
   // "Update shared copy" re-snapshots the chapter, which can newly stale some
   // comments (§7); reload so they move to the "previous version" group at once.
@@ -127,6 +185,20 @@ export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick 
     };
   }, []);
 
+  // Update state and the module cache together, so switching tabs after a local
+  // edit doesn't momentarily paint the pre-mutation comments from the cache.
+  const applyComments = useCallback(
+    (fn: (prev: CommentDTO[]) => CommentDTO[]) => {
+      setComments((prev) => {
+        const next = fn(prev);
+        const c = commentsCache.get(chapterId);
+        if (c) commentsCache.set(chapterId, { ...c, comments: next });
+        return next;
+      });
+    },
+    [chapterId]
+  );
+
   // ── Actions (RLS enforces permissions; UI mirrors §3.4) ──
   async function editComment(id: string, body: string) {
     const res = await fetch(`/api/comments/${id}`, {
@@ -134,12 +206,12 @@ export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ body }),
     });
-    if (res.ok) setComments((prev) => prev.map((c) => (c.id === id ? { ...c, body } : c)));
+    if (res.ok) applyComments((prev) => prev.map((c) => (c.id === id ? { ...c, body } : c)));
   }
 
   async function deleteComment(id: string) {
     const res = await fetch(`/api/comments/${id}`, { method: "DELETE" });
-    if (res.ok) setComments((prev) => prev.filter((c) => c.id !== id));
+    if (res.ok) applyComments((prev) => prev.filter((c) => c.id !== id));
   }
 
   async function toggleResolved(c: CommentDTO) {
@@ -150,7 +222,7 @@ export function EditorComments({ chapterId, scenes, currentUserId, onSceneClick 
       body: JSON.stringify({ resolved }),
     });
     if (res.ok) {
-      setComments((prev) =>
+      applyComments((prev) =>
         prev.map((x) =>
           x.id === c.id ? { ...x, resolvedAt: resolved ? new Date().toISOString() : null } : x
         )
