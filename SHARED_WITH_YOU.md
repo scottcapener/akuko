@@ -336,8 +336,8 @@ Opening a chapter in the read view **or** opening the editor Comments tab upsert
 
 Each stage is independently shippable and reviewable.
 
-### Stage 1 — Share & read (the MVP)
-Migration `012_chapter_sharing.sql` (`shared_chapters`, `shared_scenes`, `chapter_shares`,
+### Stage 1 — Share & read (the MVP) — ✅ Shipped
+Migrations `012_chapter_sharing.sql` + `013_share_redemption.sql` (`shared_chapters`, `shared_scenes`, `chapter_shares`,
 `shared_chapter_reads`, the widened profiles read policy, RLS). Snapshot/share action reusing
 `sanitizeProseHtml`. `resend` package + `lib/email/` + the "shared a chapter with you" email. The
 **bottom-right sharing mini-menu** + **Share modal** (email input, current recipients with revoke,
@@ -348,14 +348,20 @@ toggle, arrow navigation). Account-menu "Shared with you" row (no badge yet). Si
 
 *Ships:* share a chapter with a specific person by email and have them read it, with book context — the core of the feature, useful even before comments.
 
-### Stage 2 — Comments (both surfaces)
-`comments` table + RLS. **Read view:** highlight-to-comment, offset anchoring, right-column positioning +
-stacking, all four permission states (incl. other-recipient read-only), edit/delete/resolve. **Editor:**
-Comments tab next to the Library icon, tier-1 grouping + tier-2 opportunistic highlight, resolve from the editor.
+### Stage 2 — Comments (both surfaces) — ✅ Shipped
+Shipped as 3 PRs: (1) migration `014_comments.sql` + data layer + CRUD API; (2) read-view comments; (3) the
+editor Comments tab.
+Migration `014_comments.sql` + RLS. **Read view:** highlight-to-comment, offset anchoring, right-column
+positioning + stacking, all four permission states (incl. other-recipient read-only), edit/delete/resolve.
+**Editor:** Comments tab next to the Library icon, tier-1 grouping + tier-2 opportunistic highlight, resolve
+from the editor.
 
 *Ships:* the feedback loop, reaching the author where they write.
 
-### Stage 3 — Notifications
+### Stage 3 — Notifications — ✅ Shipped
+Shipped as 3 PRs: (1) unread data layer (`getUnreadState` + `/api/shared/unread` + read cursors); (2) the
+badge component + placements across the nav, account menu, and editor; (3) notification settings +
+share-email unsubscribe (migration `015_notification_prefs.sql`).
 `shared_chapter_reads` wiring. Row badge, row dot, Comments-tab dot — unread-comment state working for owner
 and recipients alike. Notification preference + unsubscribe on the share email.
 
