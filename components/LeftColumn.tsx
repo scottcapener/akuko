@@ -82,16 +82,19 @@ function ConfirmModal({
   confirmLabel,
   onConfirm,
   onCancel,
+  extra,
 }: {
   message: React.ReactNode;
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  extra?: React.ReactNode;
 }) {
   return (
     <Modal onClose={onCancel} maxWidth="max-w-sm" backdrop="dark">
       <div className="p-5 flex flex-col gap-4">
         <p className="text-sm text-text leading-relaxed">{message}</p>
+        {extra}
         <div className="flex items-center gap-3">
           <button
             onClick={onConfirm}
@@ -811,6 +814,29 @@ export default function LeftColumn({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<Section | null>(null);
   const [confirmDeleteChapter, setConfirmDeleteChapter] = useState<Chapter | null>(null);
+  // Is the chapter pending deletion currently shared? (§7) When it is, the
+  // delete modal offers to also stop sharing; otherwise the snapshot + comments
+  // survive the live-chapter delete (chapter_id FK → null).
+  const [deleteChapterShared, setDeleteChapterShared] = useState(false);
+  const [alsoStopSharing, setAlsoStopSharing] = useState(false);
+  useEffect(() => {
+    setAlsoStopSharing(false);
+    setDeleteChapterShared(false);
+    const chapter = confirmDeleteChapter;
+    if (!chapter) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/share?chapterId=${encodeURIComponent(chapter.id)}`);
+        if (!res.ok || cancelled) return;
+        const state = await res.json();
+        if (!cancelled) setDeleteChapterShared(!!state.shared);
+      } catch {
+        // Leave it as "not shared" — the checkbox just won't offer.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [confirmDeleteChapter]);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -961,10 +987,45 @@ export default function LeftColumn({
             <>
               Delete <strong className="text-text">{confirmDeleteChapter.title}</strong>?{" "}
               All scenes and library items will be permanently deleted.
+              {deleteChapterShared && (
+                <>
+                  {" "}This chapter is shared — the copy your readers have keeps working unless you
+                  stop sharing too.
+                </>
+              )}
             </>
           }
+          extra={
+            deleteChapterShared ? (
+              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={alsoStopSharing}
+                  onChange={(e) => setAlsoStopSharing(e.target.checked)}
+                  className="mt-0.5 accent-accent"
+                />
+                <span className="text-xs text-subtle leading-relaxed">
+                  Also stop sharing this chapter — removes recipients’ access and deletes their
+                  comments.
+                </span>
+              </label>
+            ) : undefined
+          }
           confirmLabel="Delete chapter"
-          onConfirm={() => { onDeleteChapter(confirmDeleteChapter.id); setConfirmDeleteChapter(null); }}
+          onConfirm={async () => {
+            const { id } = confirmDeleteChapter;
+            // Stop sharing BEFORE deleting the live chapter: the snapshot is keyed
+            // by chapter_id, which the delete nulls out (§7), so it must go first.
+            if (deleteChapterShared && alsoStopSharing) {
+              try {
+                await fetch(`/api/share?chapterId=${encodeURIComponent(id)}`, { method: "DELETE" });
+              } catch {
+                // Best-effort; still delete the chapter (its snapshot just lingers).
+              }
+            }
+            onDeleteChapter(id);
+            setConfirmDeleteChapter(null);
+          }}
           onCancel={() => setConfirmDeleteChapter(null)}
         />
       )}
