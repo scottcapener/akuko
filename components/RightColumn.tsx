@@ -557,6 +557,11 @@ export default function RightColumn({
   }, [shareable]);
   const showComments = shareable && activeTab === "comments";
 
+  // Two layouts share this component: the desktop side panel (collapsible, tabs
+  // cross-slide, §3.7 / 5.3) and the mobile full-screen panel (an X returns to
+  // Write). The collapse capability is the desktop tell.
+  const isMobilePanel = !onToggleCollapse;
+
   // Unread comments on THIS chapter drive the Comments-tab count + the collapsed
   // library-icon dot (§6). Cleared when the tab opens (EditorComments marks seen
   // → refreshUnread). Book Info isn't shareable, so it never shows a badge.
@@ -757,62 +762,98 @@ export default function RightColumn({
 
       {/* Panel Header — Library / Comments tabs (§3.7), always visible. Fixed
           h-16 so the Gallery top lines up with the Book Cover and the first
-          Scene. The active tab's icon doubles as the collapse toggle (desktop
-          only); this header is a sibling before the scrollable body, not part of
+          Scene. This header is a sibling before the scrollable body, not part of
           that scroll, so it never needs to be sticky and never fades with it. */}
       <div className="bg-bg h-16 px-4 flex-shrink-0 flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => selectTab("library")}
-            className={`relative p-1 rounded-md transition-opacity ${
-              activeTab === "library" ? "opacity-100" : "opacity-40 hover:opacity-100"
-            }`}
-            title={
-              activeTab === "library" && onToggleCollapse
-                ? collapsed
-                  ? "Expand panel"
-                  : "Collapse panel"
-                : "Library"
-            }
-            aria-label="Library"
-          >
-            <Image src="/library.svg" alt="Library" width={20} height={20} />
-            {/* Collapsed hides the Comments tab — surface its unread here (§6). */}
-            {collapsed && unreadComments > 0 && <Badge dot className="absolute top-0 right-0" />}
-          </button>
-          {shareable && (
+        {isMobilePanel ? (
+          <>
+            {/* Mobile — both tab icons on the left, X on the right returns to the
+                Write view (unchanged; the spec keeps mobile as-is). */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => selectTab("library")}
+                className={`relative p-1 rounded-md transition-opacity ${
+                  activeTab === "library" ? "opacity-100" : "opacity-40 hover:opacity-100"
+                }`}
+                aria-label="Library"
+              >
+                <Image src="/library.svg" alt="Library" width={20} height={20} />
+              </button>
+              {shareable && (
+                <button
+                  onClick={() => selectTab("comments")}
+                  className={`relative p-1 rounded-md transition-opacity ${
+                    activeTab === "comments"
+                      ? "opacity-100 text-text"
+                      : "opacity-40 hover:opacity-100 text-subtle"
+                  }`}
+                  aria-label="Comments"
+                >
+                  <CommentsGlyph />
+                  {unreadComments > 0 && (
+                    <Badge count={unreadComments} className="absolute -top-1.5 -right-2" />
+                  )}
+                </button>
+              )}
+            </div>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="text-subtle/50 hover:text-subtle transition-colors"
+                aria-label="Close"
+              >
+                <CloseGlyph />
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Desktop (5.3) — the active tab's icon sits on the left and doubles
+                as the collapse toggle. The switch affordance sits on the right:
+                the Comments icon while Library is up, an X (back to Library)
+                while Comments is up. The body below cross-slides to match. */}
             <button
-              onClick={() => selectTab("comments")}
-              className={`relative p-1 rounded-md transition-opacity ${
-                activeTab === "comments"
-                  ? "opacity-100 text-text"
-                  : "opacity-40 hover:opacity-100 text-subtle"
-              }`}
-              title={
-                activeTab === "comments" && onToggleCollapse
-                  ? collapsed
-                    ? "Expand panel"
-                    : "Collapse panel"
-                  : "Comments"
-              }
-              aria-label="Comments"
+              onClick={() => selectTab(activeTab)}
+              className="relative p-1 rounded-md text-text hover:opacity-80 transition-opacity"
+              title={collapsed ? "Expand panel" : "Collapse panel"}
+              aria-label={showComments ? "Comments" : "Library"}
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-8.5 5.5L4 21V6a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2H7l-2.5 2.5z" />
-              </svg>
-              {/* Unread comments on this chapter, until you open the tab (§6). */}
-              {!collapsed && unreadComments > 0 && (
-                <Badge count={unreadComments} className="absolute -top-1.5 -right-2" />
+              {showComments ? (
+                <CommentsGlyph />
+              ) : (
+                <Image src="/library.svg" alt="Library" width={20} height={20} />
+              )}
+              {/* Collapsed hides the right affordance — surface unread here (§6). */}
+              {collapsed && !showComments && unreadComments > 0 && (
+                <Badge dot className="absolute top-0 right-0" />
               )}
             </button>
-          )}
-        </div>
-        {onClose && (
-          <button onClick={onClose} className="text-subtle/50 hover:text-subtle transition-colors md:hidden">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+
+            {!collapsed &&
+              shareable &&
+              (showComments ? (
+                <button
+                  onClick={() => selectTab("library")}
+                  className="p-1 rounded-md text-subtle/60 hover:text-subtle transition-colors"
+                  title="Back to library"
+                  aria-label="Close comments"
+                >
+                  <CloseGlyph />
+                </button>
+              ) : (
+                <button
+                  onClick={() => selectTab("comments")}
+                  className="relative p-1 rounded-md opacity-40 hover:opacity-100 text-subtle transition-opacity"
+                  title="Comments"
+                  aria-label="Comments"
+                >
+                  <CommentsGlyph />
+                  {unreadComments > 0 && (
+                    <Badge count={unreadComments} className="absolute -top-1.5 -right-2" />
+                  )}
+                </button>
+              ))}
+          </>
         )}
       </div>
 
@@ -822,8 +863,7 @@ export default function RightColumn({
           it's just progressively revealed or hidden by the ancestor's overflow-hidden
           as that column width tweens, concurrently with this opacity. */}
       <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto"
+        className="relative flex-1 overflow-hidden"
         style={
           expandedWidth != null
             ? {
@@ -836,14 +876,16 @@ export default function RightColumn({
         }
       >
 
-      {showComments ? (
-        <EditorComments
-          chapterId={chapter.id}
-          scenes={chapter.scenes}
-          currentUserId={currentUserId ?? ""}
-          onSceneClick={onSceneClick}
-        />
-      ) : (
+      {/* Library layer — always mounted so returning from Comments never remounts
+          (and re-flashes) the image thumbnails. Slides left + fades out beneath
+          the Comments layer when the Comments tab is up (5.3). */}
+      <div
+        ref={scrollRef}
+        className={`absolute inset-0 overflow-y-auto transition-[transform,opacity] duration-200 ease-in-out ${
+          showComments ? "-translate-x-full opacity-0 pointer-events-none" : "translate-x-0 opacity-100"
+        }`}
+        aria-hidden={showComments}
+      >
       <>
 
       {/* ── Images ── */}
@@ -1115,6 +1157,27 @@ export default function RightColumn({
       </div>
       )}
       </>
+      </div>
+
+      {/* Comments layer — cross-slides in from the right over the Library
+          (§3.7 / 5.3). Kept mounted on shareable chapters so it can slide both
+          ways without a remount; `active` gates the read cursor so unread badges
+          only clear once it's actually on screen (§6). */}
+      {shareable && (
+        <div
+          className={`absolute inset-0 overflow-y-auto transition-[transform,opacity] duration-200 ease-in-out ${
+            showComments ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 pointer-events-none"
+          }`}
+          aria-hidden={!showComments}
+        >
+          <EditorComments
+            chapterId={chapter.id}
+            scenes={chapter.scenes}
+            currentUserId={currentUserId ?? ""}
+            onSceneClick={onSceneClick}
+            active={showComments}
+          />
+        </div>
       )}
       </div>
 
@@ -1137,5 +1200,23 @@ export default function RightColumn({
         </div>
       )}
     </div>
+  );
+}
+
+// ── Header glyphs ─────────────────────────────────────────────────────────────
+
+function CommentsGlyph() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m-8.5 5.5L4 21V6a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2H7l-2.5 2.5z" />
+    </svg>
+  );
+}
+
+function CloseGlyph() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
   );
 }

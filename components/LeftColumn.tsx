@@ -1038,7 +1038,7 @@ export default function LeftColumn({
         {onToggleCollapse ? (
           <button
             onClick={onToggleCollapse}
-            className="relative text-subtle hover:text-text transition-colors"
+            className="relative cursor-pointer text-subtle hover:text-text transition-colors"
             title={collapsed ? "Expand book panel" : "Collapse book panel"}
             aria-label={collapsed ? "Expand book panel" : "Collapse book panel"}
           >

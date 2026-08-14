@@ -124,8 +124,6 @@ export default function SettingsPage() {
                   <br />
                   <a
                     href="/how-to"
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="text-accent hover:underline"
                   >
                     How to use Hot Cocoa →

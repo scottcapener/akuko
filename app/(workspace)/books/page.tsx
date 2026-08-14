@@ -298,7 +298,7 @@ export default function BooksPage() {
         {importError && <p className="text-xs text-error -mt-3">{importError}</p>}
 
         {/* Book grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {books.map((b) => (
             <BookCard
               key={b.id}
