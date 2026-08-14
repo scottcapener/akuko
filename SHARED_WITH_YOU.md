@@ -61,9 +61,14 @@ been granted.
 
 ---
 
-## 2. Schema (migration `012_chapter_sharing.sql`)
+## 2. Schema (migrations `012`–`015`)
 
-`012` is the next free number — `010_book_info` and `011_account_profile` already exist.
+> **As shipped:** the schema landed across four migrations, one per stage, not the single `012` this
+> section was first drafted around:
+> - `012_chapter_sharing.sql` — `shared_chapters`, `shared_scenes`, `chapter_shares`, `shared_chapter_reads`, the `has_shared_access` predicate + RLS, and the widened profiles read policy.
+> - `013_share_redemption.sql` — the email-match redemption RPC (§4).
+> - `014_comments.sql` — the `comments` table + RLS + the owner-only resolve function.
+> - `015_notification_prefs.sql` — `profiles.notify_on_share boolean not null default true` (§6).
 
 ```
 shared_chapters                                     -- the snapshot; one per live chapter
@@ -97,6 +102,9 @@ comments
 
 shared_chapter_reads
   shared_chapter_id, user_id, last_seen_at           PK (shared_chapter_id, user_id)
+
+profiles                                             -- pre-existing; 015 adds one column
+  … , notify_on_share (boolean, default true)        -- gates the share email (§6)
 ```
 
 `shared_chapter_reads` does double duty: **no row = unread shared chapter**; `comment.created_at >
@@ -159,8 +167,12 @@ work. Never sanitize only on render.
 
 ### 3.1 Account menu ([LeftColumn.tsx:1038](components/LeftColumn.tsx:1038))
 
-New row above `Account`, label **"Shared with you"**, with a count badge (§6). No shares yet → the row still
-shows and routes to the empty `/shared`. Sharing starts from a chapter (§3.6), not from this row.
+New row above `Account`, label **"Shared with you"**, with a **count badge** (§6). No shares yet → the row
+still shows and routes to the empty `/shared`. Sharing starts from a chapter (§3.6), not from this row.
+
+> **As shipped:** the count badge lives on this row in both the workspace nav and the writer's `•••` account
+> menu. When the panel is *collapsed* (so the row is hidden), the presence indicator moves to a **dot** on the
+> collapsed panel icon / account launcher instead — see §6.
 
 ### 3.2 `/shared` — the Shared With You feed
 
@@ -230,7 +242,7 @@ snapshot actions (they are **not** in the Share modal):
 - **Not yet shared:** one item — **"Share this chapter…"** → opens the Share modal (§3.5); the first confirm creates the snapshot.
 - **Already shared:**
   - **"Manage sharing…"** → the Share modal (add/remove recipients).
-  - **"Update shared copy"** → re-snapshots the chapter in place (§7); confirm warns that comments on changed text will be marked stale. Offer only when the live text has diverged from the snapshot.
+  - **"Update shared copy"** → re-snapshots the chapter in place (§7); a confirm step warns that comments on changed passages will move to a previous version. *Spec intent: offer only when the live text has diverged from the snapshot — **not yet implemented**, the action is always offered (harmless, since comments now survive the re-share). Divergence-gating is a Stage 4 polish item.*
   - **"Stop sharing"** → revokes all grants and deletes the snapshot + its comments (§7).
 
 The button also reflects state at a glance (unshared vs. "Shared with N").
@@ -296,6 +308,12 @@ book + chapter and deep-linking to `/shared/[sharedChapterId]`. Works for existi
 recipients — the auth gate handles the rest. Needs a footer unsubscribe link and a per-user notification
 preference.
 
+> **As shipped:** the preference is `profiles.notify_on_share` (default on), toggled from **Settings →
+> Notifications**. The share flow skips emailing accounts that opted out (pending/no-account recipients always
+> get it — it's how they discover the share), read through the service-role client so a recipient's preference
+> is never exposed to the author. The email footer links to `/unsubscribe`, which — since there are no tokens
+> (§4) — identifies the person by their signed-in session and flips their own `notify_on_share` off.
+
 Open item for Scott: confirm the From address for share mail (`noreply@hotcocoa.app` matches signup; a
 repliable address may read better for a personal "someone shared with you" note).
 
@@ -305,15 +323,32 @@ Comment activity stays in-app (dots/badges, §6) in v1 — no per-comment email.
 
 ## 6. Notifications
 
-Badge count on the account-menu "Shared with you" row = distinct unread items **for you**:
-- Chapters shared with you that have no `shared_chapter_reads` row yet
-- Chapters you have access to (as owner **or** recipient) with comments newer than your `last_seen_at`
+One unread source (`getUnreadState` → `GET /api/shared/unread`) feeds every badge. A chapter is **unread for
+you** when:
+- it was shared with you and has no `shared_chapter_reads` row yet (a new share you've never opened), **or**
+- you have access to it (as owner **or** recipient) and it has comments by someone else newer than your `last_seen_at`.
 
-Dots (not counts):
-- On the account-menu row
-- On the editor's **Comments tab**, scoped to the open chapter (§3.7)
+**Counts** (numbers):
+- **Account-menu "Shared with you" row** (workspace nav + writer's `•••` menu) = the number of **unread
+  chapters**. A chapter with three new comments counts once — the badge answers "how many chapters need my
+  attention," not "how many comments." (`> 9` renders as `9+`.)
+- **Editor Comments tab icon** = the number of unread comments **on the open chapter**.
 
-Opening a chapter in the read view **or** opening the editor Comments tab upserts `last_seen_at = now()`.
+**Dots** (presence only, where a count doesn't fit): the account launcher (`•••`) and the collapsed
+Book-panel icon (any unread chapters); the collapsed Library-panel icon (the open chapter has unread
+comments).
+
+> **As shipped — reconciled from the first draft:** this section originally called for a dot on the
+> account-menu row and on the Comments tab. The Stage 3 Figma put a **count** on both (matching §3.1's "count
+> badge"), so counts are used there; **dots** are reserved for the launcher + collapsed-panel icons above.
+> "Distinct unread items" is implemented as **unread chapters** (per the count decision).
+
+Opening a chapter in the read view **or** opening the editor Comments tab upserts `last_seen_at = now()` and
+refreshes every badge at once.
+
+> **Known gap:** the `/shared` feed's per-row unread dot (§3.2) currently reflects only *never-opened*
+> (`feed.ts`), not the newer-comments half of the definition above — so a chapter you've opened that then gets
+> a new comment lights the account badge but not its feed row. Alignment is a Stage 4 polish item.
 
 ---
 
@@ -321,7 +356,7 @@ Opening a chapter in the read view **or** opening the editor Comments tab upsert
 
 | Case | Resolution |
 | --- | --- |
-| **Update shared copy** | Re-snapshots in place; bumps `shared_chapters.updated_at` (generation). Comments keep their `shared_scene_id` anchor; if `quote_text` no longer appears in the new body, the comment renders **stale** — visible, attributed, unhighlighted. No versioning in v1. |
+| **Update shared copy** | Re-snapshots in place; bumps `shared_chapters.updated_at` (generation). **As shipped:** `snapshotChapter` reconciles `shared_scenes` by `scene_id` (update / insert / delete) so comments keep their `shared_scene_id` anchor and survive the re-share. A comment whose `quote_text` no longer appears then renders **stale** — attributed, unhighlighted, and collapsed behind a **"Show N from a previous version"** toggle in *both* the editor Comments tab and the read view (its offsets can't anchor to the changed prose). No versioning in v1. |
 | **Adding a recipient after commenting has started** | New grant only. They immediately see the current snapshot **and the existing conversation** — one thread, not a fresh silo. |
 | **Author revokes one recipient** | Sets `chapter_shares.revoked_at`. That person loses access; their existing comments **persist**, still attributed, still visible to everyone else with access. |
 | **Author stops sharing entirely** | Revokes all grants and deletes the snapshot + its comments. Distinct from revoking one person. |
@@ -362,14 +397,36 @@ from the editor.
 Shipped as 3 PRs: (1) unread data layer (`getUnreadState` + `/api/shared/unread` + read cursors); (2) the
 badge component + placements across the nav, account menu, and editor; (3) notification settings +
 share-email unsubscribe (migration `015_notification_prefs.sql`).
-`shared_chapter_reads` wiring. Row badge, row dot, Comments-tab dot — unread-comment state working for owner
-and recipients alike. Notification preference + unsubscribe on the share email.
+`shared_chapter_reads` wiring. Account-menu row **count**, launcher + collapsed-panel **dots**, Comments-tab
+**count** (see §6 for why counts vs. dots) — unread state working for owner and recipients alike. Notification
+preference + unsubscribe on the share email.
 
-### Stage 4 — Edges & polish
-Update-shared-copy / stale comments. Delete-chapter modal's "also stop sharing" checkbox. Revoke one / stop
-sharing all / remove-from-my-list. "Show N from previous version" grouping. Mobile read view + comment sheet +
-collapsed Book Panel. Resolved-comment display. Empty states throughout. **Fast-follow:** recent-share-partners
-quick-list in the Share modal (§3.5).
+### Stage 4 — Edges & polish — ◐ Partial (A, B shipped)
+Original scope: update-shared-copy / stale comments; delete-chapter "also stop sharing" checkbox; revoke one /
+stop sharing all / remove-from-my-list; "Show N from previous version" grouping; mobile read view + comment
+sheet + collapsed Book Panel; resolved-comment display; empty states throughout. **Fast-follow:**
+recent-share-partners quick-list in the Share modal (§3.5).
+
+**Shipped (2 PRs):**
+- **A — Re-share preserves comments + stale rendering.** `snapshotChapter` reconciles `shared_scenes` by
+  `scene_id` (fixing a latent bug where re-share cascade-deleted every comment); stale detection in
+  `getComments`; "Show N from a previous version" grouping in both the editor and read view; "Update shared
+  copy" confirm + live refresh. (Covers the "Show N from previous version" item too.)
+- **B — Delete-chapter "also stop sharing" checkbox.** Default unchecked, shown only when the chapter is
+  shared; stops sharing before deleting so the snapshot (keyed by `chapter_id`) is removed in the right order.
+
+**Outstanding:**
+- **C — Remove-from-my-list** (recipient self-revoke of their own grant). The RLS policy exists; no UI yet.
+- **D — Mobile read view.** The Book Panel, comments rail, and comments toggle are all desktop-only
+  (`hidden md:*`), so mobile currently shows prose only. Needs the inline comment markers + bottom sheet +
+  collapsed Book-Panel drawer (§3.3/§7). Needs Figma.
+- Revoke-one / stop-sharing-all already shipped in Stages 1–2 (Share modal `×` + mini-menu "Stop sharing").
+- Resolved-comment display shipped in Stage 2 ("Show N resolved" toggle, both surfaces).
+- **Divergence-gating** on "Update shared copy" (§3.6) — not implemented.
+- **Feed row dot vs. comment-unread** alignment (§6 known gap).
+- Empty-states pass — feed / read-view / comments empties exist; no dedicated audit was done.
+- **Fast-follow:** recent-share-partners quick-list (§3.5).
+- **Open item for Scott:** confirm the share-email From address (§5).
 
 ---
 
