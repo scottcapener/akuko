@@ -190,7 +190,7 @@ One shared chapter, with book context.
 
 - **Center:** prose. `font-serif text-manuscript-l indent-9`, `max-w-[700px]` — identical typography to the editor so the draft reads the way it was written. Scenes render as continuous prose separated by a scene-break mark. Scene **labels are hidden** (author workspace metadata, not the draft).
 - **Left column — read-only Book Panel:** book cover (signed URL), book title, author (`pen_name || display_name`) + avatar, and the list of that book's chapters **that have also been shared with the reader**, in `book_position` order. Clicking a chapter loads its read view. Not editable. The reader may toggle list/grid view; this toggle needs its **own** localStorage key (the editor's `hc.sectionViews` is keyed by section id — these are a flat, sectionless list in book order).
-- **Left/right arrows** move between the reader's accessible chapters of this book in book order — a different ordering from the feed's share order, deliberately.
+- **Left/right arrow keys** move between the reader's accessible chapters of this book in book order — a different ordering from the feed's share order, deliberately. *(Stage 10.2 replaced the on-screen prev/next arrows with keyboard-only ←/→; sibling chapters are prefetched so the move is instant.)*
 - **Right column:** comments (§3.4).
 - **Not shown:** the chapter Library (images, notes, music, links) — the author's workspace, not the draft.
 - `← Back` returns to `/shared`.
