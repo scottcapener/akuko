@@ -58,7 +58,11 @@ export function ReadComments({
   const [comments, setComments] = useState<CommentDTO[]>([]);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [composer, setComposer] = useState<Composer | null>(null);
+  // `activeId` = the *selected* comment (set only by a click). `hoverId` = the
+  // comment the pointer is over. Hovering tints that comment's text highlight
+  // accent (below) but must NOT select the card — only a click does that.
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
   // The Comments toggle moved out of the Read Header into this rail's own header
   // (Stage 6). Collapsed → a thin strip showing just the icon, so the reader can
   // reopen it; the prose widens meanwhile.
@@ -94,6 +98,19 @@ export function ReadComments({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Clicking anywhere outside a comment card deselects the current one. Clicks
+  // inside a card are handled by the card itself (select / edit). Selecting prose
+  // opens the composer, which already clears the selection separately.
+  useEffect(() => {
+    if (!activeId) return;
+    function onDown(e: MouseEvent) {
+      if ((e.target as Element | null)?.closest("[data-comment-card]")) return;
+      setActiveId(null);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [activeId]);
 
   // Rebuild the per-scene text maps from the current DOM. Called from relayout
   // (a layout effect) so maps are always fresh before anchors are measured —
@@ -174,10 +191,14 @@ export function ReadComments({
       if (r) target.add(r);
     };
 
+    // The accent (active) highlight follows the pointer when hovering a card,
+    // otherwise the selected card — hover previews a comment's text without
+    // selecting it.
+    const highlightId = hoverId ?? activeId;
     for (const c of comments) {
       if (c.stale) continue; // offsets index into old text — never paint (§7)
       if (c.resolvedAt) draw(c, resolved);
-      else if (c.id === activeId) draw(c, active);
+      else if (c.id === highlightId) draw(c, active);
       else draw(c, inactive);
     }
     // The composer's pending range reads as active.
@@ -196,7 +217,7 @@ export function ReadComments({
       CSSHighlights.delete("hc-comment-active");
       CSSHighlights.delete("hc-comment-resolved");
     };
-  }, [comments, activeId, composer, proseReady]);
+  }, [comments, activeId, hoverId, composer, proseReady]);
 
   // Stale comments (§7) index into text that has since changed, so they can't be
   // anchored in the prose; they still show, listed at the top of the rail. Stage 7
@@ -225,7 +246,12 @@ export function ReadComments({
       ? firstScene.getBoundingClientRect().top - scrollRectTop + scrollTop
       : 0;
 
-    let prevBottom = -Infinity;
+    // Gather every card AND the pending composer into one anchored set, ordered
+    // by anchor position, then cascade the whole set downward with a fixed gap.
+    // The composer is just another participant, so a new (unsaved) comment pushes
+    // the existing cards out of its way instead of landing on top of them —
+    // nothing in the rail ever overlaps.
+    const items: { el: HTMLElement; centerY: number; quoteStart: number }[] = [];
     for (const c of ordered) {
       const el = cardRefs.current.get(c.id);
       if (!el) continue;
@@ -235,16 +261,26 @@ export function ReadComments({
       const centerY = rect
         ? rect.top + rect.height / 2 - scrollRectTop + scrollTop
         : minTop;
-      const desired = Math.max(minTop, centerY - el.offsetHeight / 2);
-      const top = Math.max(desired, prevBottom + GAP);
-      el.style.top = `${top}px`;
-      prevBottom = top + el.offsetHeight;
+      items.push({ el, centerY, quoteStart: c.quoteStart });
     }
-
-    // Composer floats at its own anchor, clamped below the last card.
     if (composerRef.current && composer) {
-      const top = Math.max(minTop, composer.anchorY - composerRef.current.offsetHeight / 2);
-      composerRef.current.style.top = `${top}px`;
+      items.push({ el: composerRef.current, centerY: composer.anchorY, quoteStart: composer.quoteStart });
+    }
+    // Anchor order = document order. Sort by the highlight's vertical anchor, but
+    // when two highlights share a line (same Y — e.g. both in one paragraph)
+    // fall back to quote position so the earlier quote stacks first. Without the
+    // tiebreak, a new composer on the same line as an existing card would sort
+    // after it and appear below, then jump into place only once saved.
+    items.sort((a, b) =>
+      Math.abs(a.centerY - b.centerY) < 1 ? a.quoteStart - b.quoteStart : a.centerY - b.centerY
+    );
+
+    let prevBottom = -Infinity;
+    for (const item of items) {
+      const desired = Math.max(minTop, item.centerY - item.el.offsetHeight / 2);
+      const top = Math.max(desired, prevBottom + GAP);
+      item.el.style.top = `${top}px`;
+      prevBottom = top + item.el.offsetHeight;
     }
 
     // Grow the rail so absolutely-positioned cards are all scrollable.
@@ -340,9 +376,7 @@ export function ReadComments({
           aria-pressed={!collapsed}
           aria-label={collapsed ? "Show comments" : "Hide comments"}
           title="Comments"
-          className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
-            collapsed ? "text-subtle hover:text-text hover:bg-hover" : "text-text bg-hover"
-          }`}
+          className="w-8 h-8 flex items-center justify-center text-subtle hover:text-text transition-colors"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M20 12a8 8 0 01-11.6 7.1L4 20l1-4.4A8 8 0 1120 12z" />
@@ -390,7 +424,8 @@ export function ReadComments({
           }}
           className="absolute right-3 left-3"
           style={{ top: 0 }}
-          onMouseEnter={() => !c.resolvedAt && setActiveId(c.id)}
+          onMouseEnter={() => !c.resolvedAt && setHoverId(c.id)}
+          onMouseLeave={() => setHoverId((h) => (h === c.id ? null : h))}
         >
           <CommentCard
             comment={c}
@@ -425,10 +460,23 @@ function Composer({
   onCancel: () => void;
 }) {
   const [value, setValue] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     ref.current?.focus();
   }, []);
+
+  // Clicking outside the composer: a blank draft cancels (the highlight was just
+  // exploratory), but a draft with text is left untouched — the reader keeps
+  // their in-progress comment until they explicitly Save or Cancel.
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (rootRef.current?.contains(e.target as Node)) return;
+      if (value.trim() === "") onCancel();
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [value, onCancel]);
 
   function submit() {
     const body = value.trim();
@@ -436,10 +484,10 @@ function Composer({
   }
 
   return (
-    <div className="bg-panel border border-accent/60 rounded-xl p-3 shadow-lg">
+    <div ref={rootRef} className="bg-panel border-2 border-accent rounded-xl p-3 shadow-lg">
       {/* Author profile line — the composer always shows who's commenting (7.3). */}
       <div className="flex items-center gap-2 mb-2">
-        <Avatar name={author?.name ?? "You"} src={author?.avatarUrl ?? null} size={22} />
+        <Avatar name={author?.name ?? "You"} src={author?.avatarUrl ?? null} size={16} />
         <span className="text-text text-xs font-medium truncate">{author?.name ?? "You"}</span>
       </div>
       <textarea
@@ -455,14 +503,14 @@ function Composer({
         className="w-full bg-transparent text-text text-sm placeholder:text-subtle/50 resize-none focus:outline-none"
       />
       {/* Cancel / Save — the checkmark is reserved for resolve only (7.2). */}
-      <div className="flex justify-end gap-2 mt-1.5">
+      <div className="flex justify-end items-center gap-2 mt-1.5">
         <button onClick={onCancel} className="text-xs text-subtle hover:text-text transition-colors">
           Cancel
         </button>
         <button
           onClick={submit}
           disabled={!value.trim()}
-          className="text-xs text-accent hover:text-accent-hi font-medium disabled:opacity-30 transition-colors"
+          className="text-xs font-medium px-3 py-1 rounded-md bg-accent text-on-accent hover:bg-accent-hi disabled:opacity-30 transition-colors"
         >
           Save
         </button>
@@ -495,6 +543,22 @@ function CommentCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
   const resolved = !!comment.resolvedAt;
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  // Character offset to drop the caret at when edit mode opens (where the click
+  // landed); null → fall back to the end of the text.
+  const caretRef = useRef<number | null>(null);
+
+  // On entering edit mode, focus the textarea and place the caret where the
+  // reader clicked (or at the end as a fallback).
+  useLayoutEffect(() => {
+    if (!editing) return;
+    const el = taRef.current;
+    if (!el) return;
+    el.focus();
+    const pos = caretRef.current ?? el.value.length;
+    el.setSelectionRange(pos, pos);
+    caretRef.current = null;
+  }, [editing]);
 
   function saveEdit() {
     const body = draft.trim();
@@ -504,14 +568,15 @@ function CommentCard({
 
   return (
     <div
+      data-comment-card
       onClick={onSelect}
-      className={`bg-panel rounded-xl p-3 border transition-colors ${
-        active ? "border-accent/60" : "border-border-subtle hover:border-hover"
+      className={`bg-panel rounded-xl p-3 border-2 transition-colors ${
+        active ? "border-accent" : "border-border-subtle hover:bg-elevated"
       } ${resolved ? "opacity-60" : ""}`}
     >
       {/* Author profile line — always shown (Stage 7); no quoted snippet. */}
       <div className="flex items-center gap-2">
-        <Avatar name={comment.authorName} src={comment.authorAvatarUrl} size={22} />
+        <Avatar name={comment.authorName} src={comment.authorAvatarUrl} size={16} />
         <span className="text-text text-xs font-medium flex-1 truncate">{comment.authorName}</span>
 
         <div className="flex items-center gap-1 flex-shrink-0 text-subtle">
@@ -547,7 +612,7 @@ function CommentCard({
       </div>
 
       {editing ? (
-        <div className="mt-2">
+        <div className="mt-1.5">
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -559,10 +624,10 @@ function CommentCard({
               }
             }}
             rows={2}
-            autoFocus
-            className="w-full bg-bg border border-hover rounded-lg p-2 text-text text-sm resize-none focus:outline-none focus:border-accent/60"
+            ref={taRef}
+            className="w-full p-0 bg-transparent text-text text-sm resize-none focus:outline-none"
           />
-          <div className="flex justify-end gap-2 mt-1.5">
+          <div className="flex justify-end items-center gap-2 mt-1.5">
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -578,7 +643,7 @@ function CommentCard({
                 e.stopPropagation();
                 saveEdit();
               }}
-              className="text-xs text-accent hover:text-accent-hi font-medium"
+              className="text-xs font-medium px-3 py-1 rounded-md bg-accent text-on-accent hover:bg-accent-hi transition-colors"
             >
               Save
             </button>
@@ -588,8 +653,12 @@ function CommentCard({
         <p
           className={`mt-1.5 text-sm text-text whitespace-pre-wrap ${isMine && !resolved ? "cursor-text" : ""}`}
           onClick={(e) => {
+            // My own comment: tapping the text selects the card AND opens the
+            // editor; tapping elsewhere on the card only selects (card onClick).
             if (isMine && !resolved) {
               e.stopPropagation();
+              caretRef.current = caretOffsetFromPoint(e.clientX, e.clientY);
+              onSelect();
               setEditing(true);
             }
           }}
@@ -599,6 +668,24 @@ function CommentCard({
       )}
     </div>
   );
+}
+
+// Map a click point to a character offset within the text node under it. The
+// comment body renders as a single text node, so the offset indexes straight
+// into the draft string — used to seat the edit caret where the reader clicked.
+function caretOffsetFromPoint(x: number, y: number): number | null {
+  const doc = document as Document & {
+    caretRangeFromPoint?(x: number, y: number): Range | null;
+    caretPositionFromPoint?(x: number, y: number): { offset: number; offsetNode: Node } | null;
+  };
+  if (doc.caretRangeFromPoint) {
+    const r = doc.caretRangeFromPoint(x, y);
+    if (r && r.startContainer.nodeType === Node.TEXT_NODE) return r.startOffset;
+  } else if (doc.caretPositionFromPoint) {
+    const p = doc.caretPositionFromPoint(x, y);
+    if (p && p.offsetNode.nodeType === Node.TEXT_NODE) return p.offset;
+  }
+  return null;
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────

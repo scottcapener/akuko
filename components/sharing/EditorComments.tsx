@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { findUniqueTextRange } from "@/lib/shared/anchor";
 import { refreshUnread } from "@/lib/useUnread";
@@ -303,6 +303,22 @@ function EditorCommentCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
   const resolved = !!comment.resolvedAt;
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  // Character offset to drop the caret at when edit mode opens (where the click
+  // landed); null → fall back to the end of the text.
+  const caretRef = useRef<number | null>(null);
+
+  // On entering edit mode, focus the textarea and place the caret where the
+  // author clicked (or at the end as a fallback).
+  useLayoutEffect(() => {
+    if (!editing) return;
+    const el = taRef.current;
+    if (!el) return;
+    el.focus();
+    const pos = caretRef.current ?? el.value.length;
+    el.setSelectionRange(pos, pos);
+    caretRef.current = null;
+  }, [editing]);
 
   function saveEdit() {
     const body = draft.trim();
@@ -313,14 +329,14 @@ function EditorCommentCard({
   return (
     <div
       onClick={onSelect}
-      className={`bg-panel rounded-xl p-3 border cursor-pointer transition-colors ${
-        active ? "border-accent/60" : "border-border-subtle hover:border-hover"
+      className={`bg-panel rounded-xl p-3 border-2 cursor-pointer transition-colors ${
+        active ? "border-accent" : "border-border-subtle hover:bg-elevated"
       } ${resolved ? "opacity-60" : ""}`}
     >
       {/* Author profile line — always shown (Stage 7); no quoted snippet, no
           scene label. */}
       <div className="flex items-center gap-2">
-        <Avatar name={comment.authorName} src={comment.authorAvatarUrl} size={20} />
+        <Avatar name={comment.authorName} src={comment.authorAvatarUrl} size={16} />
         <span className="text-text text-xs font-medium flex-1 truncate">{comment.authorName}</span>
 
         <div className="flex items-center gap-1 flex-shrink-0 text-subtle">
@@ -354,7 +370,7 @@ function EditorCommentCard({
       </div>
 
       {editing ? (
-        <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+        <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -366,10 +382,10 @@ function EditorCommentCard({
               }
             }}
             rows={2}
-            autoFocus
-            className="w-full bg-bg border border-hover rounded-lg p-2 text-text text-sm resize-none focus:outline-none focus:border-accent/60"
+            ref={taRef}
+            className="w-full p-0 bg-transparent text-text text-sm resize-none focus:outline-none"
           />
-          <div className="flex justify-end gap-2 mt-1.5">
+          <div className="flex justify-end items-center gap-2 mt-1.5">
             <button
               onClick={() => {
                 setDraft(comment.body);
@@ -379,7 +395,10 @@ function EditorCommentCard({
             >
               Cancel
             </button>
-            <button onClick={saveEdit} className="text-xs text-accent hover:text-accent-hi font-medium">
+            <button
+              onClick={saveEdit}
+              className="text-xs font-medium px-3 py-1 rounded-md bg-accent text-on-accent hover:bg-accent-hi transition-colors"
+            >
               Save
             </button>
           </div>
@@ -390,8 +409,12 @@ function EditorCommentCard({
             isMine && !resolved ? "cursor-text" : ""
           }`}
           onClick={(e) => {
+            // My own comment: tapping the text selects the card AND opens the
+            // editor; tapping elsewhere on the card only selects (card onClick).
             if (isMine && !resolved) {
               e.stopPropagation();
+              caretRef.current = caretOffsetFromPoint(e.clientX, e.clientY);
+              onSelect();
               setEditing(true);
             }
           }}
@@ -401,6 +424,24 @@ function EditorCommentCard({
       )}
     </div>
   );
+}
+
+// Map a click point to a character offset within the text node under it. The
+// comment body renders as a single text node, so the offset indexes straight
+// into the draft string — used to seat the edit caret where the author clicked.
+function caretOffsetFromPoint(x: number, y: number): number | null {
+  const doc = document as Document & {
+    caretRangeFromPoint?(x: number, y: number): Range | null;
+    caretPositionFromPoint?(x: number, y: number): { offset: number; offsetNode: Node } | null;
+  };
+  if (doc.caretRangeFromPoint) {
+    const r = doc.caretRangeFromPoint(x, y);
+    if (r && r.startContainer.nodeType === Node.TEXT_NODE) return r.startOffset;
+  } else if (doc.caretPositionFromPoint) {
+    const p = doc.caretPositionFromPoint(x, y);
+    if (p && p.offsetNode.nodeType === Node.TEXT_NODE) return p.offset;
+  }
+  return null;
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
