@@ -524,6 +524,7 @@ export default function WritePage() {
     shareable: !bookView,
     currentUserId: store.userId,
     onSceneClick: handleSceneClick,
+    onDeleteChapter: store.deleteChapter,
   };
 
   const bookInfoProps = {

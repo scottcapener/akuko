@@ -7,7 +7,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Book, Section, Chapter, Scene } from "@/lib/types";
-import { Button, Modal } from "@/components/ui";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { DropLine } from "@/components/ui/DropLine";
 import BookOverview from "@/components/BookOverview";
 import { Badge } from "@/components/ui/Badge";
@@ -76,38 +77,6 @@ interface Props {
 }
 
 // ── Confirmation modal ────────────────────────────────────────────────────────
-
-function ConfirmModal({
-  message,
-  confirmLabel,
-  onConfirm,
-  onCancel,
-  extra,
-}: {
-  message: React.ReactNode;
-  confirmLabel: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-  extra?: React.ReactNode;
-}) {
-  return (
-    <Modal onClose={onCancel} maxWidth="max-w-sm" backdrop="dark">
-      <div className="p-5 flex flex-col gap-4">
-        <p className="text-sm text-text leading-relaxed">{message}</p>
-        {extra}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onConfirm}
-            className="px-4 py-2 rounded-lg bg-red-900/40 text-error text-xs font-semibold hover:bg-red-900/60 transition-colors"
-          >
-            {confirmLabel}
-          </button>
-          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
 
 // ── Pane badge ────────────────────────────────────────────────────────────────
 
@@ -997,18 +966,16 @@ export default function LeftColumn({
           }
           extra={
             deleteChapterShared ? (
-              <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={alsoStopSharing}
-                  onChange={(e) => setAlsoStopSharing(e.target.checked)}
-                  className="mt-0.5 accent-accent"
-                />
-                <span className="text-xs text-subtle leading-relaxed">
-                  Also stop sharing this chapter — removes recipients’ access and deletes their
-                  comments.
-                </span>
-              </label>
+              <Checkbox
+                checked={alsoStopSharing}
+                onChange={setAlsoStopSharing}
+                label={
+                  <>
+                    Also stop sharing this chapter — removes recipients’ access and deletes their
+                    comments.
+                  </>
+                }
+              />
             ) : undefined
           }
           confirmLabel="Delete chapter"
