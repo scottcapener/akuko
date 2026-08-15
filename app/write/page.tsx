@@ -12,6 +12,7 @@ import BookInfoColumn from "@/components/BookInfoColumn";
 import RightColumn from "@/components/RightColumn";
 import { ConflictModal } from "@/components/ConflictModal";
 import { InstallHint } from "@/components/InstallHint";
+import WhatsNewModal from "@/components/WhatsNewModal";
 import { SceneDragProvider } from "@/lib/useSceneDrag";
 import { ChapterDragProvider } from "@/lib/useChapterDrag";
 import { useLocalStorageState } from "@/lib/useLocalStorageState";
@@ -713,6 +714,7 @@ export default function WritePage() {
         <ConflictModal conflicts={store.conflicts} onResolve={store.resolveConflict} />
       )}
       <InstallHint />
+      <WhatsNewModal />
     </div>
     </ChapterDragProvider>
     </SceneDragProvider>

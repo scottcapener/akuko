@@ -96,7 +96,12 @@ export default function SettingsPage() {
     <div className="min-h-full bg-bg px-6 py-10">
       <div className="max-w-2xl mx-auto flex flex-col gap-8">
 
-        <h1 className="text-text text-xl font-semibold">Settings</h1>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-text text-xl font-semibold">Settings</h1>
+          <a href="/updates" className="text-sm text-accent hover:underline flex-shrink-0">
+            View updates →
+          </a>
+        </div>
 
         <div className="flex flex-col gap-3">
           <SectionHeading
