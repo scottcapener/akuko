@@ -5,14 +5,20 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ensureDevSession } from "@/lib/ensureDevSession";
 import { useLocalStorageState } from "@/lib/useLocalStorageState";
+import { useColumnResize } from "@/lib/useColumnResize";
 import { ReadComments } from "@/components/sharing/ReadComments";
 import { refreshUnread } from "@/lib/useUnread";
 import type { ReadView, BookPanelChapter } from "@/lib/shared/read";
 
 // The read view (§3.3): one shared chapter as continuous prose, with a
 // read-only Book Panel (the reader's accessible chapters of this book) and a
-// comments column (Stage 2 fills it). A Read Header carries book identity + the
-// × back to the feed. No editor Library — this is the draft, not the workspace.
+// comments column. A Read Header carries book identity + the × back to the feed.
+// No editor Library — this is the draft, not the workspace.
+
+// Loaded read views, cached at module scope so moving between a book's chapters
+// is instant: after a chapter loads we prefetch its siblings into this map
+// (Stage 10.1), and a revisit seeds from here before revalidating.
+const readViewCache = new Map<string, ReadView>();
 
 export default function SharedReadPage({
   params,
@@ -24,6 +30,14 @@ export default function SharedReadPage({
   const [view, setView] = useState<ReadView | null>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "notfound">("loading");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Resizable left Book Panel, same mechanism as the writer's panels (Stage 10.3).
+  // Gate the stored width behind mount so SSR (which can't read localStorage)
+  // and hydration agree.
+  const left = useColumnResize("hc.read.leftWidth", 280, 200, 440, 1);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const leftWidth = mounted ? left.width : 280;
 
   // Prose + comments rail share this scroll container so cards scroll with text.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -37,6 +51,13 @@ export default function SharedReadPage({
   useEffect(() => {
     const supabase = createClient();
     let cancelled = false;
+
+    // Seed from cache for an instant paint on sibling navigation; otherwise show
+    // the loading skeleton. Either way we revalidate below.
+    const cached = readViewCache.get(sharedChapterId);
+    if (cached) { setView(cached); setStatus("ok"); }
+    else { setView(null); setStatus("loading"); }
+
     (async () => {
       await ensureDevSession(supabase);
       const { data: { user } } = await supabase.auth.getUser();
@@ -50,18 +71,50 @@ export default function SharedReadPage({
         const res = await fetch(`/api/shared/${sharedChapterId}`);
         if (cancelled) return;
         if (res.status === 404) { setStatus("notfound"); return; }
-        const data = await res.json();
-        setView(data as ReadView);
+        const data = (await res.json()) as ReadView;
+        readViewCache.set(sharedChapterId, data);
+        setView(data);
         setStatus("ok");
         // The view fetch marked this chapter seen server-side; refresh the
         // shared unread store so the account/nav badges reflect it (§6).
         refreshUnread();
+        // Prefetch the reader's other chapters of this book so moving between
+        // them is instant (Stage 10.1). Fire-and-forget; skip ones already cached.
+        for (const ch of data.chapters) {
+          if (ch.sharedChapterId === sharedChapterId || readViewCache.has(ch.sharedChapterId)) continue;
+          fetch(`/api/shared/${ch.sharedChapterId}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => { if (d) readViewCache.set(ch.sharedChapterId, d as ReadView); })
+            .catch(() => {});
+        }
       } catch {
-        if (!cancelled) setStatus("notfound");
+        if (!cancelled && !cached) setStatus("notfound");
       }
     })();
     return () => { cancelled = true; };
   }, [sharedChapterId, router]);
+
+  // Arrow-key chapter navigation (Stage 10.2) — keyboard only, no on-screen
+  // arrows. Left/Right move to the previous/next accessible chapter in book
+  // order. Ignored while typing (a comment composer, etc.).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      const chapters = view?.chapters ?? [];
+      const idx = chapters.findIndex((c) => c.current);
+      if (idx < 0) return;
+      const next = e.key === "ArrowLeft" ? chapters[idx - 1] : chapters[idx + 1];
+      if (next) {
+        e.preventDefault();
+        router.push(`/shared/${next.sharedChapterId}`);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, router]);
 
   if (status === "notfound") {
     return (
@@ -85,10 +138,17 @@ export default function SharedReadPage({
       <ReadHeader view={view} onExit={() => router.push("/shared")} />
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* Left — read-only Book Panel (desktop). */}
-        <div className="hidden md:flex w-[280px] flex-shrink-0 border-r border-border-subtle">
+        {/* Left — read-only Book Panel (desktop), resizable via the divider. */}
+        <div
+          className="hidden md:flex flex-shrink-0 overflow-hidden"
+          style={{ width: leftWidth }}
+        >
           {view && <BookPanel view={view} />}
         </div>
+        <div
+          onMouseDown={left.onMouseDown}
+          className="hidden md:block relative z-10 w-px flex-shrink-0 bg-border-subtle hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60 before:absolute before:inset-y-0 before:-left-1 before:-right-1 before:content-['']"
+        />
 
         {/* Center + right share one scroll container so comment cards scroll
             with the prose they anchor to (§3.4). */}
@@ -178,17 +238,10 @@ function ReadHeader({
 // ── Book Panel (read-only) ─────────────────────────────────────────────────────
 
 function BookPanel({ view }: { view: ReadView }) {
-  const router = useRouter();
   // Its OWN view-mode key — these are a flat, sectionless list in book order,
   // distinct from the editor's per-section hc.sectionViews (§3.3).
   const [mode, setMode] = useLocalStorageState<"list" | "grid">("hc.sharedBookView", "list");
   const chapters = view.chapters;
-  const currentIndex = chapters.findIndex((c) => c.current);
-
-  function go(delta: number) {
-    const next = chapters[currentIndex + delta];
-    if (next) router.push(`/shared/${next.sharedChapterId}`);
-  }
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -202,30 +255,11 @@ function BookPanel({ view }: { view: ReadView }) {
         </svg>
       </div>
 
-      {/* Chapters header — label, prev/next, list/grid toggle */}
+      {/* Chapters header — label + list/grid toggle. Chapter navigation is
+          keyboard-only now (←/→); the on-screen arrows were removed (Stage 10.2). */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <p className="text-label-m uppercase text-subtle">Chapters</p>
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => go(-1)}
-            disabled={currentIndex <= 0}
-            aria-label="Previous chapter"
-            className="w-6 h-6 flex items-center justify-center rounded text-subtle hover:text-text hover:bg-hover disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <button
-            onClick={() => go(1)}
-            disabled={currentIndex < 0 || currentIndex >= chapters.length - 1}
-            aria-label="Next chapter"
-            className="w-6 h-6 flex items-center justify-center rounded text-subtle hover:text-text hover:bg-hover disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
           <button
             onClick={() => setMode((m) => (m === "list" ? "grid" : "list"))}
             aria-label={mode === "list" ? "Grid view" : "List view"}
@@ -254,7 +288,7 @@ function BookPanel({ view }: { view: ReadView }) {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-1.5">
             {chapters.map((c) => (
               <ChapterCell key={c.sharedChapterId} chapter={c} />
             ))}
@@ -279,16 +313,20 @@ function ChapterRow({ chapter }: { chapter: BookPanelChapter }) {
 }
 
 function ChapterCell({ chapter }: { chapter: BookPanelChapter }) {
+  // Mirrors the writer's grid cell (LeftColumn) so the two views read as one
+  // system (Stage 10.5): square-ish tile, centered tiny label, current chapter
+  // gets the elevated fill + accent border.
   return (
     <a
       href={`/shared/${chapter.sharedChapterId}`}
-      className={`aspect-[3/4] rounded-md border p-2 flex items-end text-xs transition-colors ${
+      title={chapter.title}
+      className={`w-full aspect-[3/4] rounded text-[9px] font-medium text-center flex items-center justify-center px-1 leading-tight truncate transition-colors ${
         chapter.current
-          ? "border-accent/60 bg-hover text-text"
-          : "border-border-subtle bg-panel text-muted hover:text-text"
+          ? "bg-elevated text-text border-[1.5px] border-accent"
+          : "bg-panel text-subtle hover:bg-hover hover:text-text"
       }`}
     >
-      <span className="line-clamp-2">{chapter.title}</span>
+      <span className="truncate w-full text-center leading-tight">{chapter.title}</span>
     </a>
   );
 }

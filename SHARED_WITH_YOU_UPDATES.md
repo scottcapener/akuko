@@ -28,7 +28,7 @@ Figma source of truth: **Hot Cocoa** (`e4DJxj1g7GTcfUpMaMOvVe`). Frame links inl
 | **7** | Comment card polish | ◐ in progress — ✅ + 📦 icons + 🎨↑ edit |
 | **8** | Chapter Menu redesign | ◐ 8.1–8.3 built; 8.4🎨 / 8.5🤔 |
 | **9** | Shared page — item redesign + author filter | ✅ **built** (+ folds in 4-C) |
-| **10** | Read view — interactions & performance | ✅ |
+| **10** | Read view — interactions & performance | ◐ 4/5 built; 10.4 no-repro |
 | **11** | Deferred spec features (email, recent partners) | ✅ |
 | **12** | Backlog — needs decision / needs design | 🤔 / 🎨 |
 
@@ -215,28 +215,39 @@ chapter in your list; filters client-side. Shown only with ≥2 authors.
 
 ---
 
-## Stage 10 — Read view: interactions & performance
+## Stage 10 — Read view: interactions & performance  ◐ 10.1–10.3, 10.5 built; 10.4 not reproduced
 
 Read-mode UX parity with the Write editor, plus perf. Independent PRs.
 
-### PR 10.1 — Background-fetch sibling chapters in the same book ✅
-Prefetch the reader's other accessible chapters of the current book (Book-Panel list) so navigation between
-them is instant.
+> **Built & verified** (`app/shared/[sharedChapterId]/page.tsx`): sibling prefetch + a module-level read-view
+> cache (instant chapter-to-chapter nav); ←/→ arrow-key chapter navigation with the on-screen arrows removed;
+> resizable left Book Panel via `useColumnResize` (persisted `hc.read.leftWidth`); chapter grid restyled to
+> the writer's tiles. **10.4 could not be reproduced** — see below.
 
-### PR 10.2 — Arrow-key chapter navigation; remove the arrow UI ✅
-Remove the on-screen chapter arrow navigation. Replace with **left/right arrow-key** navigation — keyboard
-only, no UI. *(Spec §3.3 currently describes on-screen arrows; update it.)*
+### PR 10.1 — Background-fetch sibling chapters in the same book ✅ built
+After a chapter loads, prefetch the reader's other accessible chapters of the book into a module-level cache;
+a revisit seeds from cache (instant) then revalidates. Verified: ←/→ navigation renders the sibling with no
+skeleton.
 
-### PR 10.3 — Resizable panels (match Write) ✅
-Add read-view panel resizing, using the same mechanism as the Write editor.
+### PR 10.2 — Arrow-key chapter navigation; remove the arrow UI ✅ built
+Removed the on-screen prev/next arrows; added a window ←/→ handler that moves between the reader's accessible
+chapters in book order (ignored while typing / with modifiers). Spec §3.3 updated (arrows → arrow keys).
 
-### PR 10.4 — Page scrolls far past chapter content ✅
-Bug: the read page can scroll much longer than the chapter content. Fix the container/overflow so the scroll
-extent matches content height.
+### PR 10.3 — Resizable panels (match Write) ✅ built
+Left Book Panel is drag-resizable via the same `useColumnResize` + divider the writer uses (min 200, max 440,
+persisted). **Scoped to the left panel:** the comments rail lives *inside* the shared prose scroll (so cards
+track the text), which makes an in-scroll resize divider a poor fit — it keeps its fixed width + collapse
+toggle from Stage 6. Flag if the rail should be resizable too.
 
-### PR 10.5 — Chapter grid view matches Write styling ✅
-The read-view chapter grid view doesn't match the Write editor's grid styling. Align it. *(Note the read view
-uses its own list/grid localStorage key per spec §3.3 — keep that.)*
+### PR 10.4 — Page scrolls far past chapter content ◐ not reproduced
+Measured on a long and a short chapter: the scroll extent equals the content (or the viewport, via
+`min-h-full`, for a short chapter) — no dead space. The only way to exceed the prose is bottom-anchored
+comment cards, which are themselves content. Left as-is rather than risk regressing correct behavior; **needs
+a specific repro** (likely many comments clustered at a chapter's end) to action.
+
+### PR 10.5 — Chapter grid view matches Write styling ✅ built
+Grid now mirrors the writer's cells — `grid-cols-3`, `aspect-[3/4]` tiles, `text-[9px]` centered truncated
+label, current chapter elevated + accent border. Keeps its own `hc.sharedBookView` list/grid key (§3.3).
 
 ---
 
