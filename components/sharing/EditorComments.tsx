@@ -36,12 +36,6 @@ interface Props {
   active?: boolean;
 }
 
-interface Group {
-  sceneId: string | null;
-  label: string;
-  comments: CommentDTO[];
-}
-
 // The tab unmounts every time the author switches back to the Library tab, and
 // re-mounting used to reset to a skeleton and re-fetch — a visible flash on each
 // switch. Cache the last-loaded conversation per chapter (module scope, survives
@@ -57,7 +51,6 @@ const commentsCache = new Map<string, CachedComments>();
 
 export function EditorComments({
   chapterId,
-  scenes,
   currentUserId,
   onSceneClick,
   active = true,
@@ -68,8 +61,6 @@ export function EditorComments({
   const [sharedChapterId, setSharedChapterId] = useState<string | null>(seeded?.sharedChapterId ?? null);
   const [shared, setShared] = useState<boolean | null>(seeded?.shared ?? null); // null = loading
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [showResolved, setShowResolved] = useState(false);
-  const [showStale, setShowStale] = useState(false);
 
   const isOwner = ownerId != null && currentUserId === ownerId;
 
@@ -238,42 +229,13 @@ export function EditorComments({
     if (c.sceneId) onSceneClick?.(chapterId, c.sceneId);
   }
 
-  // Stale comments (§7) can't be anchored to the current text, so they leave the
-  // per-scene grouping and collect under their own "previous version" section.
-  const staleComments = comments.filter((c) => c.stale);
-  const live = comments.filter((c) => !c.stale);
-
-  // ── Group by scene, in scene order (§3.7 tier 1) ──
-  const visible = live.filter((c) => showResolved || !c.resolvedAt);
-  const scenePos = new Map(scenes.map((s, i) => [s.id, i]));
-  const sceneLabel = new Map(scenes.map((s) => [s.id, s.label]));
-  const groups: Group[] = [];
-  const byScene = new Map<string, Group>();
-  for (const c of [...visible].sort(
+  // Stage 7: one flat list of ALL comments — resolved and formerly-"stale" ones
+  // included, no per-scene group headers, no "resolved"/"previous version"
+  // toggles. Ordered by scene then position. If a comment no longer applies, the
+  // author deletes it. Clicking a card still scrolls the editor to its scene.
+  const ordered = [...comments].sort(
     (a, b) => a.scenePosition - b.scenePosition || a.quoteStart - b.quoteStart
-  )) {
-    const key = c.sceneId ?? "__none__";
-    let g = byScene.get(key);
-    if (!g) {
-      g = {
-        sceneId: c.sceneId,
-        label:
-          (c.sceneId && sceneLabel.get(c.sceneId)) || "Untitled scene",
-        comments: [],
-      };
-      byScene.set(key, g);
-      groups.push(g);
-    }
-    g.comments.push(c);
-  }
-  // Order groups by the live scene position (falls back to snapshot order).
-  groups.sort((a, b) => {
-    const pa = a.sceneId != null ? scenePos.get(a.sceneId) ?? Infinity : Infinity;
-    const pb = b.sceneId != null ? scenePos.get(b.sceneId) ?? Infinity : Infinity;
-    return pa - pb;
-  });
-
-  const resolvedCount = live.filter((c) => c.resolvedAt).length;
+  );
 
   // ── Empty / loading states ──
   if (shared === null) {
@@ -290,7 +252,7 @@ export function EditorComments({
           {shared ? "No comments yet." : "Share this chapter to start a conversation."}
         </p>
         <p className="text-subtle/40 text-[11px]">
-          Comments your readers leave will appear here, grouped by scene.
+          Comments your readers leave will appear here.
         </p>
       </div>
     );
@@ -298,67 +260,21 @@ export function EditorComments({
 
   return (
     <div className="px-4 py-4">
-      {resolvedCount > 0 && (
-        <button
-          onClick={() => setShowResolved((v) => !v)}
-          className="mb-3 px-2.5 py-1 rounded-md bg-panel border border-border-subtle text-xs text-subtle hover:text-text transition-colors"
-        >
-          {showResolved ? "Hide" : "Show"} {resolvedCount} resolved
-        </button>
-      )}
-
-      <div className="flex flex-col gap-5">
-        {groups.map((g) => (
-          <div key={g.sceneId ?? "__none__"}>
-            <p className="text-label-m uppercase text-subtle mb-2 truncate">{g.label}</p>
-            <div className="flex flex-col gap-2">
-              {g.comments.map((c) => (
-                <EditorCommentCard
-                  key={c.id}
-                  comment={c}
-                  active={c.id === activeId}
-                  isMine={c.authorId === currentUserId}
-                  isOwner={isOwner}
-                  onSelect={() => selectCard(c)}
-                  onEdit={(body) => editComment(c.id, body)}
-                  onDelete={() => deleteComment(c.id)}
-                  onToggleResolved={() => toggleResolved(c)}
-                />
-              ))}
-            </div>
-          </div>
+      <div className="flex flex-col gap-2">
+        {ordered.map((c) => (
+          <EditorCommentCard
+            key={c.id}
+            comment={c}
+            active={c.id === activeId}
+            isMine={c.authorId === currentUserId}
+            isOwner={isOwner}
+            onSelect={() => selectCard(c)}
+            onEdit={(body) => editComment(c.id, body)}
+            onDelete={() => deleteComment(c.id)}
+            onToggleResolved={() => toggleResolved(c)}
+          />
         ))}
       </div>
-
-      {/* Comments made against text that has since changed (§7) — kept, still
-          attributed, but detached from the current draft. */}
-      {staleComments.length > 0 && (
-        <div className="mt-5 pt-4 border-t border-border-subtle">
-          <button
-            onClick={() => setShowStale((v) => !v)}
-            className="mb-3 px-2.5 py-1 rounded-md bg-panel border border-border-subtle text-xs text-subtle hover:text-text transition-colors"
-          >
-            {showStale ? "Hide" : "Show"} {staleComments.length} from a previous version
-          </button>
-          {showStale && (
-            <div className="flex flex-col gap-2">
-              {staleComments.map((c) => (
-                <EditorCommentCard
-                  key={c.id}
-                  comment={c}
-                  active={false}
-                  isMine={c.authorId === currentUserId}
-                  isOwner={isOwner}
-                  onSelect={() => c.sceneId && onSceneClick?.(chapterId, c.sceneId)}
-                  onEdit={(body) => editComment(c.id, body)}
-                  onDelete={() => deleteComment(c.id)}
-                  onToggleResolved={() => toggleResolved(c)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -387,7 +303,6 @@ function EditorCommentCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
   const resolved = !!comment.resolvedAt;
-  const stale = comment.stale;
 
   function saveEdit() {
     const body = draft.trim();
@@ -400,17 +315,10 @@ function EditorCommentCard({
       onClick={onSelect}
       className={`bg-panel rounded-xl p-3 border cursor-pointer transition-colors ${
         active ? "border-accent/60" : "border-border-subtle hover:border-hover"
-      } ${resolved || stale ? "opacity-60" : ""}`}
+      } ${resolved ? "opacity-60" : ""}`}
     >
-      {/* On stale comments the quote no longer matches the draft, so flag it. */}
-      {stale && (
-        <p className="text-[10px] uppercase tracking-wide text-subtle/70 mb-1.5">From a previous version</p>
-      )}
-      {/* Quoted snapshot text — the anchor, shown since there's no adjacent rail. */}
-      <p className="text-[11px] text-subtle border-l-2 border-hover pl-2 mb-2 line-clamp-2 italic">
-        {comment.quoteText}
-      </p>
-
+      {/* Author profile line — always shown (Stage 7); no quoted snippet, no
+          scene label. */}
       <div className="flex items-center gap-2">
         <Avatar name={comment.authorName} src={comment.authorAvatarUrl} size={20} />
         <span className="text-text text-xs font-medium flex-1 truncate">{comment.authorName}</span>

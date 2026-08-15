@@ -9,8 +9,15 @@ import {
   type RefObject,
 } from "react";
 import { Avatar } from "@/components/ui/Avatar";
+import { getProfile } from "@/lib/profile";
 import { buildTextMap, offsetsFromRange, rangeFromOffsets, type TextMap } from "@/lib/shared/anchor";
 import type { CommentDTO } from "@/lib/shared/comments";
+
+/** The current user's identity, for the composer's author line (§ Stage 7). */
+interface Me {
+  name: string;
+  avatarUrl: string | null;
+}
 
 // Read-view comments (SHARED_WITH_YOU.md §3.4). Lives in a rail to the right of
 // the prose, inside the SAME scroll container, so cards scroll with the text.
@@ -52,12 +59,21 @@ export function ReadComments({
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [composer, setComposer] = useState<Composer | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [showResolved, setShowResolved] = useState(false);
-  const [showStale, setShowStale] = useState(false);
   // The Comments toggle moved out of the Read Header into this rail's own header
   // (Stage 6). Collapsed → a thin strip showing just the icon, so the reader can
   // reopen it; the prose widens meanwhile.
   const [collapsed, setCollapsed] = useState(false);
+  // The current user's identity for the composer's author line (Stage 7 / 7.3).
+  const [me, setMe] = useState<Me | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getProfile(currentUserId)
+      .then((p) => {
+        if (!cancelled) setMe({ name: p.displayName || p.penName || "You", avatarUrl: p.avatarUrl });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [currentUserId]);
 
   const isOwner = ownerId != null && currentUserId === ownerId;
   const railRef = useRef<HTMLDivElement>(null);
@@ -182,13 +198,14 @@ export function ReadComments({
     };
   }, [comments, activeId, composer, proseReady]);
 
-  // Stale comments (§7) index into text that has since changed, so they leave the
-  // anchored stack and collect in a separate section — visible, attributed, but
-  // not tied to a spot in the prose.
+  // Stale comments (§7) index into text that has since changed, so they can't be
+  // anchored in the prose; they still show, listed at the top of the rail. Stage 7
+  // shows them (and resolved comments) unconditionally — no "show N" toggles.
   const staleComments = comments.filter((c) => c.stale);
 
   // ── Stacking layout — measure anchors + card heights, cascade downward ──
-  const visible = comments.filter((c) => !c.stale && (showResolved || !c.resolvedAt));
+  // Resolved comments stay in the cascade (anchored, dimmed) rather than hiding.
+  const visible = comments.filter((c) => !c.stale);
   // Sort by scene order then quote position (§3.4).
   const ordered = [...visible].sort(
     (a, b) => a.scenePosition - b.scenePosition || a.quoteStart - b.quoteStart
@@ -308,8 +325,6 @@ export function ReadComments({
     }
   }
 
-  const resolvedCount = comments.filter((c) => c.resolvedAt).length;
-
   return (
     <aside
       ref={railRef}
@@ -335,50 +350,31 @@ export function ReadComments({
         </button>
       </div>
 
-      {/* Sticky toggles — resolved (anchored, dimmed) and stale (detached; §7).
-          Stale cards can't anchor to the changed prose, so they list here in the
-          sticky panel rather than in the cascade. */}
-      {!collapsed && (resolvedCount > 0 || staleComments.length > 0) && (
-        <div className="sticky top-[4.5rem] z-20 mx-3 mt-2 flex flex-col gap-2 items-start">
-          {resolvedCount > 0 && (
-            <button
-              onClick={() => setShowResolved((v) => !v)}
-              className="px-2.5 py-1 rounded-md bg-panel border border-border-subtle text-xs text-subtle hover:text-text transition-colors"
-            >
-              {showResolved ? "Hide" : "Show"} {resolvedCount} resolved
-            </button>
-          )}
-          {staleComments.length > 0 && (
-            <button
-              onClick={() => setShowStale((v) => !v)}
-              className="px-2.5 py-1 rounded-md bg-panel border border-border-subtle text-xs text-subtle hover:text-text transition-colors"
-            >
-              {showStale ? "Hide" : "Show"} {staleComments.length} from a previous version
-            </button>
-          )}
-          {showStale && staleComments.length > 0 && (
-            <div className="w-full max-h-[60vh] overflow-y-auto flex flex-col gap-2">
-              {staleComments.map((c) => (
-                <CommentCard
-                  key={c.id}
-                  comment={c}
-                  active={false}
-                  isMine={c.authorId === currentUserId}
-                  isOwner={isOwner}
-                  onSelect={() => {}}
-                  onEdit={(body) => editComment(c.id, body)}
-                  onDelete={() => deleteComment(c.id)}
-                  onToggleResolved={() => toggleResolved(c)}
-                />
-              ))}
-            </div>
-          )}
+      {/* Stale comments (§7) can't anchor to the changed prose, so they list here
+          at the top of the rail rather than in the cascade. Stage 7: shown
+          unconditionally — no "show N from a previous version" toggle. */}
+      {!collapsed && staleComments.length > 0 && (
+        <div className="sticky top-[4.5rem] z-20 mx-3 mt-2 flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
+          {staleComments.map((c) => (
+            <CommentCard
+              key={c.id}
+              comment={c}
+              active={false}
+              isMine={c.authorId === currentUserId}
+              isOwner={isOwner}
+              onSelect={() => {}}
+              onEdit={(body) => editComment(c.id, body)}
+              onDelete={() => deleteComment(c.id)}
+              onToggleResolved={() => toggleResolved(c)}
+            />
+          ))}
         </div>
       )}
 
       {!collapsed && composer && (
         <div ref={composerRef} className="absolute right-3 left-3" style={{ top: 0 }}>
           <Composer
+            author={me}
             onCancel={() => setComposer(null)}
             onSubmit={createComment}
           />
@@ -419,7 +415,15 @@ export function ReadComments({
 
 // ── Composer ────────────────────────────────────────────────────────────────
 
-function Composer({ onSubmit, onCancel }: { onSubmit: (body: string) => void; onCancel: () => void }) {
+function Composer({
+  author,
+  onSubmit,
+  onCancel,
+}: {
+  author: Me | null;
+  onSubmit: (body: string) => void;
+  onCancel: () => void;
+}) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -433,26 +437,34 @@ function Composer({ onSubmit, onCancel }: { onSubmit: (body: string) => void; on
 
   return (
     <div className="bg-panel border border-accent/60 rounded-xl p-3 shadow-lg">
-      <div className="flex items-start gap-2">
-        <textarea
-          ref={ref}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
-            if (e.key === "Escape") onCancel();
-          }}
-          placeholder="Add comment…"
-          rows={2}
-          className="flex-1 min-w-0 bg-transparent text-text text-sm placeholder:text-subtle/50 resize-none focus:outline-none"
-        />
+      {/* Author profile line — the composer always shows who's commenting (7.3). */}
+      <div className="flex items-center gap-2 mb-2">
+        <Avatar name={author?.name ?? "You"} src={author?.avatarUrl ?? null} size={22} />
+        <span className="text-text text-xs font-medium truncate">{author?.name ?? "You"}</span>
+      </div>
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+          if (e.key === "Escape") onCancel();
+        }}
+        placeholder="Add comment…"
+        rows={2}
+        className="w-full bg-transparent text-text text-sm placeholder:text-subtle/50 resize-none focus:outline-none"
+      />
+      {/* Cancel / Save — the checkmark is reserved for resolve only (7.2). */}
+      <div className="flex justify-end gap-2 mt-1.5">
+        <button onClick={onCancel} className="text-xs text-subtle hover:text-text transition-colors">
+          Cancel
+        </button>
         <button
           onClick={submit}
           disabled={!value.trim()}
-          aria-label="Comment"
-          className="flex-shrink-0 text-accent hover:text-accent-hi disabled:opacity-30 transition-colors"
+          className="text-xs text-accent hover:text-accent-hi font-medium disabled:opacity-30 transition-colors"
         >
-          <CheckIcon />
+          Save
         </button>
       </div>
     </div>
@@ -483,7 +495,6 @@ function CommentCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
   const resolved = !!comment.resolvedAt;
-  const stale = comment.stale;
 
   function saveEdit() {
     const body = draft.trim();
@@ -496,17 +507,9 @@ function CommentCard({
       onClick={onSelect}
       className={`bg-panel rounded-xl p-3 border transition-colors ${
         active ? "border-accent/60" : "border-border-subtle hover:border-hover"
-      } ${resolved || stale ? "opacity-60" : ""}`}
+      } ${resolved ? "opacity-60" : ""}`}
     >
-      {/* Stale: no highlight in the prose, so label it and show the old quote. */}
-      {stale && (
-        <>
-          <p className="text-[10px] uppercase tracking-wide text-subtle/70 mb-1.5">From a previous version</p>
-          <p className="text-[11px] text-subtle border-l-2 border-hover pl-2 mb-2 line-clamp-2 italic">
-            {comment.quoteText}
-          </p>
-        </>
-      )}
+      {/* Author profile line — always shown (Stage 7); no quoted snippet. */}
       <div className="flex items-center gap-2">
         <Avatar name={comment.authorName} src={comment.authorAvatarUrl} size={22} />
         <span className="text-text text-xs font-medium flex-1 truncate">{comment.authorName}</span>

@@ -23,9 +23,9 @@ Figma source of truth: **Hot Cocoa** (`e4DJxj1g7GTcfUpMaMOvVe`). Frame links inl
 
 | Stage | Theme | Gate |
 | --- | --- | --- |
-| **5** | Quick wins & bug fixes | ✅ all ready |
-| **6** | Read view — match new design | mostly ✅, one 🎨 |
-| **7** | Comment card polish | ✅ + 📦 icons + 🎨↑ edit |
+| **5** | Quick wins & bug fixes | ✅ **shipped** (PR #75) |
+| **6** | Read view — match new design | ✅ **shipped** (PR #76); 6.4 still 🎨 |
+| **7** | Comment card polish | ◐ in progress — ✅ + 📦 icons + 🎨↑ edit |
 | **8** | Chapter Menu redesign | ✅ core + 🎨/🤔 tail |
 | **9** | Shared page — item redesign + author filter | ✅ |
 | **10** | Read view — interactions & performance | ✅ |
@@ -78,11 +78,15 @@ Panel. Change it to navigate in-place. *(Separate from Shared. See [[tips-featur
 
 ---
 
-## Stage 6 — Read view: match the new design
+## Stage 6 — Read view: match the new design  ✅ 6.1–6.3 shipped (PR #76)
 
 All anchored to the Read Header / Read layout frame:
 [297-26346](https://www.figma.com/design/e4DJxj1g7GTcfUpMaMOvVe/Hot-Cocoa?node-id=297-26346). These touch
 the same surface — sequence 6.1 → 6.4 to avoid churn.
+
+> **Deferred from this stage** (not in the three items, flagged during build): the left column's
+> **"hot cocoa" + ••• footer** (overlaps the two-••• question, #31 / Stage 8) and the **default grid**
+> chapter layout (that's Stage 10.5's grid-styling item). 6.3 also folded in the read-rail collapse toggle.
 
 ### PR 6.1 — Read Header style update ✅
 Restyle the Read view header to match the frame.
@@ -101,12 +105,19 @@ scene-break mark before we finalize styling.
 
 ---
 
-## Stage 7 — Comment card polish
+## Stage 7 — Comment card polish  ◐ 7.1–7.5 built; 7.6/7.7 blocked
 
 The comment card gets a behavioral + visual overhaul. **Note:** 7.1 intentionally reverses two behaviors
 shipped in Stages 2 & 4 — update spec §3.4 / §3.7 / §7 accordingly.
 
-### PR 7.1 — Show all comments; drop the "previous version" and "resolved" toggles ✅
+> **Built & verified** (both surfaces, editor `EditorComments` + read-view `ReadComments`): flat all-comments
+> list, no toggles; composer + cards carry the author line; no quote snippet; no scene labels; composer uses
+> Cancel/Save (checkmark reserved for resolve). Read-view **stale** comments (which can't anchor to changed
+> prose) still list in a small always-shown group at the top of the rail — the one place "show all" can't be
+> a pure inline cascade. **Not done:** 7.6 (icons — assets), 7.7 (edit-state redesign — Figma in progress);
+> the current inline edit keeps its existing Cancel/Save until 7.7's frame lands.
+
+### PR 7.1 — Show all comments; drop the "previous version" and "resolved" toggles ✅ built
 - Remove "**Show N from a previous version**" (stale) grouping — just show all comments. If a comment no
   longer applies, the author deletes it.
 - Remove the "**Show N resolved**" toggle — just show all comments.
@@ -114,19 +125,19 @@ shipped in Stages 2 & 4 — update spec §3.4 / §3.7 / §7 accordingly.
 - **Spec impact:** reverses the Stage 4-A stale-grouping and the Stage 2 resolved-toggle. Reconcile §3.4
   (resolved row), §3.7 (previous-version collapse), and §7 (stale rendering) in this PR.
 
-### PR 7.2 — Cancel/Save buttons on every comment state; checkmark = resolve only ✅
+### PR 7.2 — Cancel/Save buttons; checkmark = resolve only ✅ built
 Add small **Cancel / Save** buttons to all comment states. The checkmark in the top-right of the card is
 **only** for marking a comment resolved — it must not double as save/confirm for any other action.
 
-### PR 7.3 — Every comment shows the author profile line ✅
+### PR 7.3 — Every comment shows the author profile line ✅ built
 Adding a comment always needs the author profile line, per
 [297-26483](https://www.figma.com/design/e4DJxj1g7GTcfUpMaMOvVe/Hot-Cocoa?node-id=297-26483). Ensure the
 composer / new-comment state renders the avatar + name line, not just existing cards.
 
-### PR 7.4 — Remove the quoted text snippet from comments ✅
+### PR 7.4 — Remove the quoted text snippet from comments ✅ built
 Remove the text snippet (quoted range) from the comment card, matching the design.
 
-### PR 7.5 — Remove Scene Descriptions from the comment panel ✅
+### PR 7.5 — Remove Scene Descriptions from the comment panel ✅ built
 Remove the scene-description labels from the comments panel.
 
 ### PR 7.6 — New comment-tab / re-open icons 📦

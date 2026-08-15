@@ -211,7 +211,7 @@ comments** (read-only), not just their own:
 | Your comment | tap to edit, `×` to delete |
 | You own the chapter, someone else's comment | check to mark done (resolve) |
 | Not your chapter, another recipient's comment | read-only |
-| Resolved | collapsed / dimmed, behind a "Show N resolved" toggle |
+| Resolved | dimmed, shown inline (no toggle) — the author deletes what no longer applies. *(Stage 7 removed the "Show N resolved" collapse; see SHARED_WITH_YOU_UPDATES.md 7.1.)* |
 
 The chapter owner can resolve but **cannot delete or edit** others' comments. That boundary is what keeps
 sharing trustworthy. **No replies in v1** — design the card so a reply affordance can be added later without a redesign.
@@ -274,7 +274,9 @@ never stored, degrades silently.
 **Behavior:**
 - Opening the tab upserts `last_seen_at = now()` for the open chapter — same `shared_chapter_reads` write as the read view, clearing the notification from both surfaces.
 - **Resolve works from the editor.** Read → revise → check off is the whole loop. Permissions identical to §3.4.
-- After a re-share, comments whose quote no longer appears collapse under "Show N from previous version."
+- After a re-share, comments whose quote no longer appears show inline (dimmed), no longer collapsed under a
+  "Show N from previous version" toggle. *(Stage 7 / 7.1 removed the toggle; in the read view they list at the
+  top of the comments rail since they can't anchor to the changed prose.)*
 
 ---
 
@@ -356,7 +358,7 @@ refreshes every badge at once.
 
 | Case | Resolution |
 | --- | --- |
-| **Update shared copy** | Re-snapshots in place; bumps `shared_chapters.updated_at` (generation). **As shipped:** `snapshotChapter` reconciles `shared_scenes` by `scene_id` (update / insert / delete) so comments keep their `shared_scene_id` anchor and survive the re-share. A comment whose `quote_text` no longer appears then renders **stale** — attributed, unhighlighted, and collapsed behind a **"Show N from a previous version"** toggle in *both* the editor Comments tab and the read view (its offsets can't anchor to the changed prose). No versioning in v1. |
+| **Update shared copy** | Re-snapshots in place; bumps `shared_chapters.updated_at` (generation). **As shipped:** `snapshotChapter` reconciles `shared_scenes` by `scene_id` (update / insert / delete) so comments keep their `shared_scene_id` anchor and survive the re-share. A comment whose `quote_text` no longer appears then renders **stale** — attributed, unhighlighted, shown inline (no toggle) in the editor Comments tab and listed at the top of the read-view rail (its offsets can't anchor to the changed prose). No versioning in v1. *(Stage 7 / 7.1 dropped the "Show N from a previous version" collapse.)* |
 | **Adding a recipient after commenting has started** | New grant only. They immediately see the current snapshot **and the existing conversation** — one thread, not a fresh silo. |
 | **Author revokes one recipient** | Sets `chapter_shares.revoked_at`. That person loses access; their existing comments **persist**, still attributed, still visible to everyone else with access. |
 | **Author stops sharing entirely** | Revokes all grants and deletes the snapshot + its comments. Distinct from revoking one person. |
