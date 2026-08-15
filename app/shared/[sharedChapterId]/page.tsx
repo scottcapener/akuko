@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ensureDevSession } from "@/lib/ensureDevSession";
 import { useLocalStorageState } from "@/lib/useLocalStorageState";
-import { Avatar } from "@/components/ui/Avatar";
 import { ReadComments } from "@/components/sharing/ReadComments";
 import { refreshUnread } from "@/lib/useUnread";
 import type { ReadView, BookPanelChapter } from "@/lib/shared/read";
@@ -24,7 +23,6 @@ export default function SharedReadPage({
   const router = useRouter();
   const [view, setView] = useState<ReadView | null>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "notfound">("loading");
-  const [commentsOpen, setCommentsOpen] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Prose + comments rail share this scroll container so cards scroll with text.
@@ -84,12 +82,7 @@ export default function SharedReadPage({
 
   return (
     <div className="h-full flex flex-col bg-bg">
-      <ReadHeader
-        view={view}
-        commentsOpen={commentsOpen}
-        onToggleComments={() => setCommentsOpen((v) => !v)}
-        onExit={() => router.push("/shared")}
-      />
+      <ReadHeader view={view} onExit={() => router.push("/shared")} />
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
         {/* Left — read-only Book Panel (desktop). */}
@@ -114,8 +107,9 @@ export default function SharedReadPage({
               )}
             </div>
 
-            {/* Comments rail (desktop; toggled by the header icon). */}
-            {commentsOpen && view && currentUserId && (
+            {/* Comments rail (desktop). Its own header carries the Comments icon
+                and collapse toggle now (Stage 6), so it's always mounted here. */}
+            {view && currentUserId && (
               <div className="hidden md:block flex-shrink-0">
                 <ReadComments
                   sharedChapterId={sharedChapterId}
@@ -137,13 +131,9 @@ export default function SharedReadPage({
 
 function ReadHeader({
   view,
-  commentsOpen,
-  onToggleComments,
   onExit,
 }: {
   view: ReadView | null;
-  commentsOpen: boolean;
-  onToggleComments: () => void;
   onExit: () => void;
 }) {
   return (
@@ -167,20 +157,9 @@ function ReadHeader({
         )}
       </div>
 
+      {/* Just the exit control — the Comments toggle now lives at the top of the
+          comments column (§3.3 / Stage 6), not in this header. */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <button
-          onClick={onToggleComments}
-          aria-pressed={commentsOpen}
-          aria-label="Toggle comments"
-          title="Comments"
-          className={`hidden md:flex w-8 h-8 items-center justify-center rounded-lg transition-colors ${
-            commentsOpen ? "text-text bg-hover" : "text-subtle hover:text-text hover:bg-hover"
-          }`}
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M20 12a8 8 0 01-11.6 7.1L4 20l1-4.4A8 8 0 1120 12z" />
-          </svg>
-        </button>
         <button
           onClick={onExit}
           aria-label="Close"
@@ -213,25 +192,14 @@ function BookPanel({ view }: { view: ReadView }) {
 
   return (
     <div className="flex flex-col h-full w-full">
-      {/* Cover + book identity */}
-      <div className="px-4 pt-5 pb-4 flex flex-col items-center text-center gap-2 border-b border-border-subtle">
-        <span className="w-20 aspect-[2/3] rounded-md overflow-hidden bg-panel border border-border-subtle flex items-center justify-center">
-          {view.coverUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={view.coverUrl} alt="" className="w-full h-full object-cover" />
-          ) : (
-            <svg className="w-6 h-6 text-subtle opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
-            </svg>
-          )}
-        </span>
-        <div className="min-w-0">
-          <p className="text-text text-sm font-medium truncate">{view.bookTitle || "Untitled book"}</p>
-          <div className="flex items-center justify-center gap-1.5 mt-1">
-            <Avatar name={view.authorName} src={view.authorAvatarUrl} size={16} />
-            <span className="text-subtle text-xs truncate">{view.authorName}</span>
-          </div>
-        </div>
+      {/* Panel header — book-open icon, mirroring the writer's Book Panel and
+          aligning with the other column headers (Stage 6). Book identity (cover,
+          title, author) now lives only in the Read Header, so the Book Overview
+          block is dropped here to avoid the duplication. */}
+      <div className="h-16 flex-shrink-0 px-4 flex items-center">
+        <svg className="w-5 h-5 text-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
+        </svg>
       </div>
 
       {/* Chapters header — label, prev/next, list/grid toggle */}
