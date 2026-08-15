@@ -26,7 +26,7 @@ Figma source of truth: **Hot Cocoa** (`e4DJxj1g7GTcfUpMaMOvVe`). Frame links inl
 | **5** | Quick wins & bug fixes | ✅ **shipped** (PR #75) |
 | **6** | Read view — match new design | ✅ **shipped** (PR #76); 6.4 still 🎨 |
 | **7** | Comment card polish | ◐ in progress — ✅ + 📦 icons + 🎨↑ edit |
-| **8** | Chapter Menu redesign | ✅ core + 🎨/🤔 tail |
+| **8** | Chapter Menu redesign | ◐ 8.1–8.3 built; 8.4🎨 / 8.5🤔 |
 | **9** | Shared page — item redesign + author filter | ✅ |
 | **10** | Read view — interactions & performance | ✅ |
 | **11** | Deferred spec features (email, recent partners) | ✅ |
@@ -150,23 +150,34 @@ so the Cancel/Save affordance matches the final edit design.)*
 
 ---
 
-## Stage 8 — Chapter Menu redesign
+## Stage 8 — Chapter Menu redesign  ◐ 8.1–8.3 built; 8.4/8.5 deferred
 
 Rework the bottom-right `•••` sharing mini-menu (spec §3.6) into a full **Chapter Menu** matching
 [297-26768](https://www.figma.com/design/e4DJxj1g7GTcfUpMaMOvVe/Hot-Cocoa?node-id=297-26768).
 
-### PR 8.1 — Chapter Menu shell + states 1–2 ✅
+> **Built & verified** (`SharingMenu.tsx`, all 5 states confirmed in preview): State 1 (Share + Delete
+> chapter), State 2 (SHARED row + up to 3 avatars + Update + Stop sharing + Delete chapter), and the Update
+> lifecycle 3→4→5 (Updating spinner → Updated ✓ → back to State 2 after 1600ms; error line on failure). The
+> "Update" no longer shows a "previous version" warning — Stage 7 removed that concept. Stop sharing keeps a
+> two-tap confirm (destructive). Extracted a shared `ConfirmModal` + new styled `Checkbox` (ui/) used by both
+> the Chapter Menu's delete flow and the left-panel kebab's, so 8.3's checkbox is consistent in both.
+> **Menu width:** used `w-48` (the Account Menu is `w-40`, too narrow for the buttons + avatars + error line)
+> — same panel/border/divider *style* as the Account Menu, slightly wider. **Note:** the Chapter Menu now
+> carries **Delete chapter** as designed, which duplicates the left-panel "Section options" kebab's delete —
+> that duplication is exactly what **8.5** will reconcile (deferred per Scott).
+
+### PR 8.1 — Chapter Menu shell + states 1–2 ✅ built
 - Match the **width and style of the Account Menu**.
 - **State 1 (Not shared):** Share button + Delete Chapter; Share opens the Share modal.
 - **State 2 (Shared):** a Shared row with up to **3 partner profile-picture thumbnails**, an Update button,
   and a Stop Sharing button.
 
-### PR 8.2 — Chapter Menu update lifecycle: states 3–5 ✅
+### PR 8.2 — Chapter Menu update lifecycle: states 3–5 ✅ built
 - **State 3 (Updating):** Update button with a small animated loading spinner.
 - **State 4 (Updated):** success confirmation that returns to State 2 after **1600ms**.
 - **State 5 (Error):** general error-message template.
 
-### PR 8.3 — Style the "also stop sharing" checkbox (Delete Chapter) ✅
+### PR 8.3 — Style the "also stop sharing" checkbox (Delete Chapter) ✅ built
 Style the sharing checkbox in the Delete Chapter modal (shipped in Stage 4-B, currently unstyled).
 
 ### PR 8.4 — Chapter Menu as a floating button 🎨

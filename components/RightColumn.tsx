@@ -512,6 +512,8 @@ interface Props {
   currentUserId?: string | null;
   // Scrolls the editor to a live scene when a comment card is clicked (§3.7).
   onSceneClick?: (chapterId: string, sceneId: string) => void;
+  // Delete the chapter — the Chapter Menu (§3.6 / Stage 8) offers it too.
+  onDeleteChapter?: (chapterId: string) => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   // Pixel width of the expanded panel — the body below the header renders at
@@ -544,6 +546,7 @@ export default function RightColumn({
   shareable = false,
   currentUserId,
   onSceneClick,
+  onDeleteChapter,
   collapsed,
   onToggleCollapse,
   expandedWidth,
@@ -1196,7 +1199,12 @@ export default function RightColumn({
               : undefined
           }
         >
-          <SharingMenu key={chapter.id} chapterId={chapter.id} />
+          <SharingMenu
+            key={chapter.id}
+            chapterId={chapter.id}
+            chapterTitle={chapter.title}
+            onDeleteChapter={(id) => onDeleteChapter?.(id)}
+          />
         </div>
       )}
     </div>
