@@ -27,7 +27,7 @@ Figma source of truth: **Hot Cocoa** (`e4DJxj1g7GTcfUpMaMOvVe`). Frame links inl
 | **6** | Read view — match new design | ✅ **shipped** (PR #76); 6.4 still 🎨 |
 | **7** | Comment card polish | ◐ in progress — ✅ + 📦 icons + 🎨↑ edit |
 | **8** | Chapter Menu redesign | ◐ 8.1–8.3 built; 8.4🎨 / 8.5🤔 |
-| **9** | Shared page — item redesign + author filter | ✅ |
+| **9** | Shared page — item redesign + author filter | ✅ **built** (+ folds in 4-C) |
 | **10** | Read view — interactions & performance | ✅ |
 | **11** | Deferred spec features (email, recent partners) | ✅ |
 | **12** | Backlog — needs decision / needs design | 🤔 / 🎨 |
@@ -190,15 +190,28 @@ before building. Needs a product decision. *(Depends on 8.1/8.4 landing first.)*
 
 ---
 
-## Stage 9 — Shared page: item redesign + author filter
+## Stage 9 — Shared page: item redesign + author filter  ✅ built
 
-### PR 9.1 — Shared Chapter Item redesign ✅
+> **Built & verified** (`app/(workspace)/shared/page.tsx`, `lib/shared/feed.ts`): the feed item is now a card
+> — chapter + book on the left; author avatar + name (desktop only), unread pill, time, and a ••• on the
+> right — with the cover thumbnail dropped per the frame. The Author Filter row renders when there are ≥2
+> authors, with the three chip states (default / NEW-unread / selected-ring) and single-select behavior
+> (click again to clear, click another to switch), filtering the feed client-side. Added `authorId` to
+> `FeedItem` as the grouping key. **Folded in Stage 4-C** (remove-from-my-list): the item's ••• →
+> "Remove from Shared with you" hits a new `DELETE /api/shared/[id]` that revokes the reader's own grant
+> (RLS "recipient revokes own"); the item drops optimistically.
+
+### PR 9.1 — Shared Chapter Item redesign ✅ built
 Update the Shared Chapter Item (feed row, spec §3.2) to match
-[297-26576](https://www.figma.com/design/e4DJxj1g7GTcfUpMaMOvVe/Hot-Cocoa?node-id=297-26576).
+[297-26576](https://www.figma.com/design/e4DJxj1g7GTcfUpMaMOvVe/Hot-Cocoa?node-id=297-26576). Card layout, no
+cover, author on desktop only; mobile shows chapter/book + time + ••• only.
 
-### PR 9.2 — Author Filter row (new feature) ✅
-Add an Author Filter row to the `/shared` feed — filter the flat list by the author who shared. New feature;
-scope the filter UI + client-side (or query) filtering over the existing feed data.
+### PR 9.2 — Author Filter row (new feature) ✅ built
+Author Filter row on `/shared` — chip states from
+[297-26797](https://www.figma.com/design/e4DJxj1g7GTcfUpMaMOvVe/Hot-Cocoa?node-id=297-26797), row placement
+from [297-25617](https://www.figma.com/design/e4DJxj1g7GTcfUpMaMOvVe/Hot-Cocoa?node-id=297-25617). One author
+selected at a time (click same to deselect, different to switch); NEW badge when that author has an unread
+chapter in your list; filters client-side. Shown only with ≥2 authors.
 
 ---
 

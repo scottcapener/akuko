@@ -418,7 +418,8 @@ recent-share-partners quick-list in the Share modal (§3.5).
   shared; stops sharing before deleting so the snapshot (keyed by `chapter_id`) is removed in the right order.
 
 **Outstanding:**
-- **C — Remove-from-my-list** (recipient self-revoke of their own grant). The RLS policy exists; no UI yet.
+- **C — Remove-from-my-list** (recipient self-revoke of their own grant). **Shipped** in the Stage 9 fast-follow
+  (SHARED_WITH_YOU_UPDATES.md): the feed item's ••• → "Remove from Shared with you" → `DELETE /api/shared/[id]`.
 - **D — Mobile read view.** The Book Panel, comments rail, and comments toggle are all desktop-only
   (`hidden md:*`), so mobile currently shows prose only. Needs the inline comment markers + bottom sheet +
   collapsed Book-Panel drawer (§3.3/§7). Needs Figma.
