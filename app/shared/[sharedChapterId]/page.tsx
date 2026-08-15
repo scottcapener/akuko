@@ -197,7 +197,7 @@ function ReadHeader({
   onExit: () => void;
 }) {
   return (
-    <header className="h-16 flex-shrink-0 border-b border-border-subtle flex items-center justify-between px-4 gap-3">
+    <header className="h-16 flex-shrink-0 bg-panel border-b border-border-subtle flex items-center justify-between px-4 gap-3">
       <div className="flex items-center gap-3 min-w-0">
         <span className="h-9 aspect-[2/3] flex-shrink-0 rounded overflow-hidden bg-panel border border-border-subtle flex items-center justify-center">
           {view?.coverUrl ? (
