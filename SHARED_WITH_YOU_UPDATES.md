@@ -25,15 +25,25 @@ Figma source of truth: **Hot Cocoa** (`e4DJxj1g7GTcfUpMaMOvVe`). Frame links inl
 | --- | --- | --- |
 | **5** | Quick wins & bug fixes | ✅ **shipped** (PR #75) |
 | **6** | Read view — match new design | ✅ **shipped** (PR #76); 6.4 still 🎨 |
-| **7** | Comment card polish | ◐ in progress — ✅ + 📦 icons + 🎨↑ edit |
-| **8** | Chapter Menu redesign | ◐ 8.1–8.3 built; 8.4🎨 / 8.5🤔 |
-| **9** | Shared page — item redesign + author filter | ✅ **built** (+ folds in 4-C) |
-| **10** | Read view — interactions & performance | ◐ 4/5 built; 10.4 no-repro |
+| **7** | Comment card polish | ◐ **shipped** (PR #77); 7.6 📦 / 7.7 🎨↑ |
+| **8** | Chapter Menu redesign | ◐ **shipped** (PR #78); 8.4 🎨 / 8.5 🤔 |
+| **9** | Shared page — item redesign + author filter | ✅ **shipped** (PR #79) — folds in 4-C |
+| **10** | Read view — interactions & performance | ◐ **shipped** (PR #80); 10.4 no-repro |
 | **11** | Deferred spec features (email, recent partners) | ✅ |
 | **12** | Backlog — needs decision / needs design | 🤔 / 🎨 |
 
 Stages are ordered so the low-risk, no-dependency work lands first and the design/decision-blocked work
 sits at the tail. Within a stage, each **PR** is independently shippable and reviewable.
+
+### Remaining after Stages 5–10 (all merged)
+
+- **Blocked on design/assets:** 6.4 scene divider (🎨), 7.6 new icons (📦), 7.7 Edit Comment redesign (🎨↑),
+  8.4 Chapter Menu floating button (🎨).
+- **Needs a decision:** 8.5 reconcile the two ••• menus (🤔), Stage 12 backlog — self-share/preview and
+  live comments/presence (🤔).
+- **Needs a repro:** 10.4 read-view over-scroll (couldn't reproduce; scroll tracks content in testing).
+- **Ready to build next:** Stage 11 — 11.1 comment notification emails (confirm the trigger model first),
+  11.2 recent share partners in the Share modal.
 
 ---
 
@@ -105,7 +115,7 @@ scene-break mark before we finalize styling.
 
 ---
 
-## Stage 7 — Comment card polish  ◐ 7.1–7.5 built; 7.6/7.7 blocked
+## Stage 7 — Comment card polish  ◐ 7.1–7.5 shipped (PR #77); 7.6/7.7 blocked
 
 The comment card gets a behavioral + visual overhaul. **Note:** 7.1 intentionally reverses two behaviors
 shipped in Stages 2 & 4 — update spec §3.4 / §3.7 / §7 accordingly.
@@ -150,7 +160,7 @@ so the Cancel/Save affordance matches the final edit design.)*
 
 ---
 
-## Stage 8 — Chapter Menu redesign  ◐ 8.1–8.3 built; 8.4/8.5 deferred
+## Stage 8 — Chapter Menu redesign  ◐ 8.1–8.3 shipped (PR #78); 8.4/8.5 deferred
 
 Rework the bottom-right `•••` sharing mini-menu (spec §3.6) into a full **Chapter Menu** matching
 [297-26768](https://www.figma.com/design/e4DJxj1g7GTcfUpMaMOvVe/Hot-Cocoa?node-id=297-26768).
@@ -190,7 +200,7 @@ before building. Needs a product decision. *(Depends on 8.1/8.4 landing first.)*
 
 ---
 
-## Stage 9 — Shared page: item redesign + author filter  ✅ built
+## Stage 9 — Shared page: item redesign + author filter  ✅ shipped (PR #79)
 
 > **Built & verified** (`app/(workspace)/shared/page.tsx`, `lib/shared/feed.ts`): the feed item is now a card
 > — chapter + book on the left; author avatar + name (desktop only), unread pill, time, and a ••• on the
@@ -215,7 +225,7 @@ chapter in your list; filters client-side. Shown only with ≥2 authors.
 
 ---
 
-## Stage 10 — Read view: interactions & performance  ◐ 10.1–10.3, 10.5 built; 10.4 not reproduced
+## Stage 10 — Read view: interactions & performance  ◐ 10.1–10.3, 10.5 shipped (PR #80); 10.4 not reproduced
 
 Read-mode UX parity with the Write editor, plus perf. Independent PRs.
 
