@@ -10,6 +10,7 @@ export interface FeedItem {
   chapterTitle: string;
   bookTitle: string;
   coverUrl: string | null;
+  authorId: string; // owner_id — the stable key the author filter groups on (§3.2)
   authorName: string;
   authorAvatarUrl: string | null;
   sharedAt: string; // ISO — when it was shared with me (grant created_at)
@@ -84,6 +85,7 @@ export async function getSharedFeed(
       chapterTitle: c.chapter_title || "Untitled chapter",
       bookTitle: c.book_title || "",
       coverUrl: coverUrls[i],
+      authorId: c.owner_id,
       authorName: profile?.pen_name || profile?.display_name || "A writer",
       authorAvatarUrl: avatarUrls[i],
       sharedAt: sharedAtById.get(c.id) ?? "",
