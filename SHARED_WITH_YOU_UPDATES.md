@@ -29,7 +29,7 @@ Figma source of truth: **Hot Cocoa** (`e4DJxj1g7GTcfUpMaMOvVe`). Frame links inl
 | **8** | Chapter Menu redesign | ◐ **shipped** (PR #78); 8.4 🎨 / 8.5 🤔 |
 | **9** | Shared page — item redesign + author filter | ✅ **shipped** (PR #79) — folds in 4-C |
 | **10** | Read view — interactions & performance | ◐ **shipped** (PR #80); 10.4 no-repro |
-| **11** | Deferred spec features (email, recent partners) | ✅ |
+| **11** | Deferred spec features (email, recent partners) | ✅ **shipped** (PR #87, #88) |
 | **12** | Backlog — needs decision / needs design | 🤔 / 🎨 |
 
 Stages are ordered so the low-risk, no-dependency work lands first and the design/decision-blocked work
@@ -42,7 +42,7 @@ sits at the tail. Within a stage, each **PR** is independently shippable and rev
 - **Needs a decision:** 8.5 reconcile the two ••• menus (🤔), Stage 12 backlog — self-share/preview and
   live comments/presence (🤔).
 - **Needs a repro:** 10.4 read-view over-scroll (couldn't reproduce; scroll tracks content in testing).
-- **Stage 11 shipped:** 11.1 comment notification emails (leading-edge, this PR), 11.2 recent share partners.
+- **Stage 11 shipped:** 11.1 comment notification emails (leading-edge, PR #87), 11.2 recent share partners (PR #88).
 
 ---
 
@@ -264,7 +264,7 @@ label, current chapter elevated + accent border. Keeps its own `hc.sharedBookVie
 
 Carried over from [SHARED_WITH_YOU.md](SHARED_WITH_YOU.md) Stage 4 fast-follow.
 
-### PR 11.1 — Comment notification emails ✅ built
+### PR 11.1 — Comment notification emails ✅ shipped (PR #87)
 Email a chapter's **author** when a reader comments (spec §5). **Trigger model (confirmed with Scott):**
 *leading-edge* debounce — the email fires on the **first** comment of a commenter's session and links straight
 to the chapter, then stays silent for a **2-hour cooldown** per `(chapter, commenter)`. No comment content or
@@ -279,7 +279,7 @@ groups comment — async, on their own schedules — without a per-comment blast
 > `/unsubscribe?pref=comment` splits the unsubscribe so muting comments doesn't mute shares. Peer-recipient
 > notifications (readers hearing about each other's comments) deferred to the live-comments backlog.
 
-### PR 11.2 — Recent share partners in the Share modal ✅ built
+### PR 11.2 — Recent share partners in the Share modal ✅ shipped (PR #88)
 A **Recent** list in the Share modal (between the email input and Shared with) — the distinct people the
 author has shared any chapter with, newest first, each with a one-tap **Share** button. Matches the attached
 frames' three states (grows Shared with / shrinks Recent as you share).
