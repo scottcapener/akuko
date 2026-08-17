@@ -23,6 +23,7 @@ export async function PATCH(request: Request) {
     bio?: unknown;
     avatarPath?: unknown;
     notifyOnShare?: unknown;
+    notifyOnComment?: unknown;
   };
   try {
     body = await request.json();
@@ -66,6 +67,10 @@ export async function PATCH(request: Request) {
 
   if (body.notifyOnShare !== undefined) {
     patch.notify_on_share = body.notifyOnShare === true;
+  }
+
+  if (body.notifyOnComment !== undefined) {
+    patch.notify_on_comment = body.notifyOnComment === true;
   }
 
   if (Object.keys(patch).length === 0) {

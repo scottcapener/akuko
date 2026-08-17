@@ -70,6 +70,7 @@ export default function SettingsPage() {
   // so unlike the display toggles above they persist to the profile row, not
   // localStorage. null = still loading.
   const [notifyOnShare, setNotifyOnShare] = useState<boolean | null>(null);
+  const [notifyOnComment, setNotifyOnComment] = useState<boolean | null>(null);
   useEffect(() => {
     const supabase = createClient();
     (async () => {
@@ -77,6 +78,7 @@ export default function SettingsPage() {
       if (!user) return;
       const profile = await getProfile(user.id);
       setNotifyOnShare(profile.notifyOnShare);
+      setNotifyOnComment(profile.notifyOnComment);
     })();
   }, []);
 
@@ -90,6 +92,18 @@ export default function SettingsPage() {
       body: JSON.stringify({ notifyOnShare: next }),
     });
     if (!res.ok) setNotifyOnShare(!next); // revert on failure
+  }
+
+  async function toggleNotifyOnComment() {
+    if (notifyOnComment === null) return;
+    const next = !notifyOnComment;
+    setNotifyOnComment(next); // optimistic
+    const res = await fetch("/api/account/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notifyOnComment: next }),
+    });
+    if (!res.ok) setNotifyOnComment(!next); // revert on failure
   }
 
   return (
@@ -152,13 +166,20 @@ export default function SettingsPage() {
             title="Notifications"
             note="How Hot Cocoa emails you. These apply to your account, everywhere."
           />
-          <div className="border border-border-subtle rounded-xl px-5">
+          <div className="border border-border-subtle rounded-xl px-5 divide-y divide-border-subtle">
             <ToggleRow
               label="Shared with you"
               description="Email me when someone shares a chapter with me."
               checked={notifyOnShare ?? true}
               disabled={notifyOnShare === null}
               onChange={toggleNotifyOnShare}
+            />
+            <ToggleRow
+              label="Comments"
+              description="Email me when someone comments on a chapter I shared."
+              checked={notifyOnComment ?? true}
+              disabled={notifyOnComment === null}
+              onChange={toggleNotifyOnComment}
             />
           </div>
         </div>
