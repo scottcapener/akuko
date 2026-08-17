@@ -133,6 +133,10 @@ export default function SignupPage() {
     });
     if (profileErr) { setError(profileErr.message); setLoading(false); return; }
 
+    // Notify us of the new signup. Fire-and-forget — best-effort, must never
+    // block or fail the signup (server route handles a missing email key).
+    void fetch("/api/notify-signup", { method: "POST" }).catch(() => {});
+
     // Redeem any chapters shared to this email before the account existed (§4).
     await redeemShares(supabase);
 

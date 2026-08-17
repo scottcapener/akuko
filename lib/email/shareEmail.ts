@@ -5,9 +5,9 @@ import { Resend } from "resend";
 // only carries Auth's own templates — so app-authored mail goes through the
 // Resend API directly with its own key.
 //
-// Gated on RESEND_API_KEY: until Scott mints the key, sends are skipped (logged)
-// so the rest of sharing works without it. From noreply@hotcocoa.app (matches
-// signup). Server-only.
+// Gated on RESEND_API_KEY (set in production): when the key is absent — e.g. a
+// local/preview env — sends are skipped (logged) so the rest of sharing still
+// works. From noreply@hotcocoa.app (matches signup). Server-only.
 
 const FROM = "Hot Cocoa <noreply@hotcocoa.app>";
 
