@@ -271,9 +271,16 @@ Per-comment email notifications (spec §5 notes comment activity stays in-app in
 preference like `notify_on_share`. **Confirm the trigger model with Scott before building** (avoid a noisy
 per-comment blast).
 
-### PR 11.2 — Recent share partners in the Share modal ✅
-The "recent share partners" quick-list (tappable chips) above the Share-modal email input (spec §3.5 — a
-natural spot was already left for it). Source recent recipients from `chapter_shares`.
+### PR 11.2 — Recent share partners in the Share modal ✅ built
+A **Recent** list in the Share modal (between the email input and Shared with) — the distinct people the
+author has shared any chapter with, newest first, each with a one-tap **Share** button. Matches the attached
+frames' three states (grows Shared with / shrinks Recent as you share).
+
+> **Built:** `lib/shared/recent.ts` (`getRecentPartners` — distinct recipients across the author's snapshots
+> from `chapter_shares`, avatars signed service-side); `GET /api/share/recent`; `RecentPartner` type; the modal
+> fetches on mount, filters out anyone already on the chapter (incl. this-session adds), hides when empty, and
+> Share reuses the proven `POST /api/share` path. Verified State 1 live in the writer (real partners rendered);
+> did not fire a real share on Scott's live book (would email a real person + snapshot the chapter).
 
 ---
 

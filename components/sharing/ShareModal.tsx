@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Portal } from "@/components/ui/Portal";
-import type { ShareState, ShareRecipient } from "@/lib/shared/types";
+import type { ShareState, ShareRecipient, RecentPartner } from "@/lib/shared/types";
 
 // Recipient management for one chapter (SHARED_WITH_YOU.md §3.5). Type an email
 // and Send (or Enter/comma) to invite; each invite snapshots the chapter on the
@@ -22,8 +22,10 @@ interface Props {
 
 export function ShareModal({ chapterId, initialState, onClose, onStateChange }: Props) {
   const [recipients, setRecipients] = useState<ShareRecipient[]>(initialState.recipients);
+  const [recent, setRecent] = useState<RecentPartner[]>([]);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -36,37 +38,62 @@ export function ShareModal({ chapterId, initialState, onClose, onStateChange }: 
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Recent partners for the quick-list. Best-effort — a failure just hides the
+  // Recent section, never the modal.
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/share/recent")
+      .then((r) => (r.ok ? r.json() : { partners: [] }))
+      .then((d) => alive && setRecent((d.partners as RecentPartner[]) ?? []))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const valid = EMAIL_RE.test(email.trim());
+
+  // Drop anyone already on this chapter — including people just added this
+  // session — so Recent only ever offers new invites.
+  const recentToShow = recent.filter(
+    (p) => !recipients.some((r) => r.email.toLowerCase() === p.email.toLowerCase())
+  );
 
   function apply(state: ShareState) {
     setRecipients(state.recipients);
     onStateChange(state);
   }
 
-  async function addRecipient() {
-    const value = email.trim().toLowerCase();
-    if (!EMAIL_RE.test(value) || busy) return;
-    if (recipients.some((r) => r.email.toLowerCase() === value)) {
-      setEmail("");
-      return;
-    }
+  /** Invite one email — shared by the input's Send and the Recent list's Share.
+   *  Resolves true on success so the input can clear itself. */
+  async function share(value: string): Promise<boolean> {
+    const v = value.trim().toLowerCase();
+    if (!EMAIL_RE.test(v) || busy) return false;
+    if (recipients.some((r) => r.email.toLowerCase() === v)) return true;
     setBusy(true);
+    setPendingEmail(v);
     setError("");
     try {
       const res = await fetch("/api/share", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chapterId, emails: [value] }),
+        body: JSON.stringify({ chapterId, emails: [v] }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Couldn't add that person.");
       apply(data as ShareState);
-      setEmail("");
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
+      return false;
     } finally {
       setBusy(false);
+      setPendingEmail(null);
     }
+  }
+
+  async function addRecipient() {
+    if (await share(email)) setEmail("");
   }
 
   async function removeRecipient(target: string) {
@@ -151,6 +178,28 @@ export function ShareModal({ chapterId, initialState, onClose, onStateChange }: 
             </div>
             {error && <p className="text-[11px] text-error mt-2">{error}</p>}
           </div>
+
+          {/* Recent — one-tap re-share of people you've shared with before. */}
+          {recentToShow.length > 0 && (
+            <div className="px-5 pt-5">
+              <p className="text-label-m uppercase text-subtle mb-2">Recent</p>
+              <div className="flex flex-col max-h-40 overflow-y-auto -mx-1">
+                {recentToShow.map((p) => (
+                  <div key={p.email} className="flex items-center gap-3 px-1 py-1.5 rounded-lg">
+                    <Avatar name={p.name} src={p.avatarUrl} size={32} />
+                    <p className="text-text text-sm truncate flex-1 min-w-0">{p.name}</p>
+                    <button
+                      onClick={() => share(p.email)}
+                      disabled={busy}
+                      className="px-4 py-2 rounded-lg bg-accent text-on-accent text-sm font-semibold hover:bg-accent-hi disabled:opacity-40 transition-colors flex-shrink-0"
+                    >
+                      {pendingEmail === p.email ? "Sharing…" : "Share"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Shared with */}
           <div className="px-5 pt-5 pb-2">

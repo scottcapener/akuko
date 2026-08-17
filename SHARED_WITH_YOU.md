@@ -229,9 +229,12 @@ Opened from the sharing mini-menu (§3.6). Purely recipient management:
 
 There is deliberately no reshare from the recipient side — recipients read and comment; they don't forward.
 
-> **Deferred to a fast-follow, not v1:** the "recent share partners" quick-list (tappable chips of people you
-> shared with recently). v1's modal is just the email input + current-recipients list. Leave a natural spot
-> for the quick-list above the input so adding it later is not a redesign.
+> **As shipped (Stage 11 / 11.2):** a **Recent** list sits between the email input and Shared with — the
+> distinct people the author has shared any chapter with, newest first, each an `Avatar` + name with a
+> **Share** button for one-tap re-share (reusing the same `POST /api/share` path as the input). Sourced from
+> `chapter_shares` via `getRecentPartners` (`GET /api/share/recent`); avatars signed service-side (covers.ts).
+> The list filters out anyone already on this chapter — including people just added this session — and the
+> whole section hides when empty. See `lib/shared/recent.ts` + `components/sharing/ShareModal.tsx`.
 
 ### 3.6 Sharing mini-menu — the entry point (editor right column)
 
