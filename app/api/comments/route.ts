@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { getComments, createComment } from "@/lib/shared/comments";
+import { notifyCommentActivity } from "@/lib/shared/commentNotify";
 
 export const runtime = "nodejs";
 
@@ -60,6 +61,10 @@ export async function POST(request: Request) {
       quoteStart: Number.isFinite(body.quoteStart) ? Number(body.quoteStart) : 0,
       quoteEnd: Number.isFinite(body.quoteEnd) ? Number(body.quoteEnd) : 0,
     });
+    // Notify the chapter's author off the response path (leading-edge, cooldown
+    // gated). Best-effort — never blocks or fails the comment.
+    after(() => notifyCommentActivity({ sharedChapterId, commenterId: user.id }));
+
     return NextResponse.json({ ok: true, comment });
   } catch (err) {
     // An RLS failure (no access) surfaces as an insert error.

@@ -69,6 +69,8 @@ been granted.
 > - `013_share_redemption.sql` — the email-match redemption RPC (§4).
 > - `014_comments.sql` — the `comments` table + RLS + the owner-only resolve function.
 > - `015_notification_prefs.sql` — `profiles.notify_on_share boolean not null default true` (§6).
+> - `017_comment_notifications.sql` — `profiles.notify_on_comment` + the `comment_notifications` cooldown
+>   ledger (service-role only) backing the comment-notification email (§5).
 
 ```
 shared_chapters                                     -- the snapshot; one per live chapter
@@ -319,7 +321,23 @@ preference.
 Open item for Scott: confirm the From address for share mail (`noreply@hotcocoa.app` matches signup; a
 repliable address may read better for a personal "someone shared with you" note).
 
-Comment activity stays in-app (dots/badges, §6) in v1 — no per-comment email.
+**Transactional email: "{Reader} commented on your chapter."** Sent to the chapter's **author** when a
+reader leaves a comment, deep-linking to `/shared/[sharedChapterId]` (the author has `has_shared_access` as
+owner, so the read view's comment rail is where the link lands). It carries **no comment content or count** —
+just the nudge and the link.
+
+> **As shipped (Stage 11 / 11.1):** "leading-edge" debounce, not per-comment. The email fires on the **first**
+> comment of a commenter's session and then stays silent for a **2-hour cooldown** per `(shared_chapter_id,
+> commenter_id)` — matching how writing-group members comment (async, on their own schedules) instead of
+> blasting one email per comment. The cooldown is tracked in `comment_notifications` (migration 017,
+> service-role only). Gated on `profiles.notify_on_comment` (default on), read + sent through the service-role
+> client so the commenter's session never sees the author's email or preference. Skips the author commenting on
+> their own chapter. Runs via `after()` so it never blocks the comment POST. Footer links to
+> `/unsubscribe?pref=comment`, a separate toggle from share mail. See `lib/email/commentEmail.ts` +
+> `lib/shared/commentNotify.ts`.
+
+Broader fan-out — notifying *peer recipients* of each other's comments — is deferred (it edges into the live
+comments/presence backlog). v1 notifies the author only.
 
 ---
 

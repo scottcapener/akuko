@@ -42,8 +42,7 @@ sits at the tail. Within a stage, each **PR** is independently shippable and rev
 - **Needs a decision:** 8.5 reconcile the two ••• menus (🤔), Stage 12 backlog — self-share/preview and
   live comments/presence (🤔).
 - **Needs a repro:** 10.4 read-view over-scroll (couldn't reproduce; scroll tracks content in testing).
-- **Ready to build next:** Stage 11 — 11.1 comment notification emails (confirm the trigger model first),
-  11.2 recent share partners in the Share modal.
+- **Stage 11 shipped:** 11.1 comment notification emails (leading-edge, this PR), 11.2 recent share partners.
 
 ---
 
@@ -265,11 +264,20 @@ label, current chapter elevated + accent border. Keeps its own `hc.sharedBookVie
 
 Carried over from [SHARED_WITH_YOU.md](SHARED_WITH_YOU.md) Stage 4 fast-follow.
 
-### PR 11.1 — Comment notification emails ✅
-Per-comment email notifications (spec §5 notes comment activity stays in-app in v1). Design the notification
-(digest vs. per-comment), reuse the `lib/email/` module and `resend` client, and gate on a per-user
-preference like `notify_on_share`. **Confirm the trigger model with Scott before building** (avoid a noisy
-per-comment blast).
+### PR 11.1 — Comment notification emails ✅ built
+Email a chapter's **author** when a reader comments (spec §5). **Trigger model (confirmed with Scott):**
+*leading-edge* debounce — the email fires on the **first** comment of a commenter's session and links straight
+to the chapter, then stays silent for a **2-hour cooldown** per `(chapter, commenter)`. No comment content or
+count; the link (`/shared/[id]`, which the owner can open) already shows everything. This matches how writing
+groups comment — async, on their own schedules — without a per-comment blast, and needs no sub-daily cron
+(which Vercel Hobby lacks): the cooldown is a timestamp check, not a scheduled send.
+
+> **Built:** migration 017 (`profiles.notify_on_comment` + a service-role-only `comment_notifications` cooldown
+> ledger); `lib/email/commentEmail.ts` (clone of `shareEmail.ts`); `lib/shared/commentNotify.ts` orchestrates
+> gate + cooldown + send through the service-role client; wired into `POST /api/comments` via `after()` so it's
+> off the response path and never fails a comment. New **Settings → Notifications › Comments** toggle;
+> `/unsubscribe?pref=comment` splits the unsubscribe so muting comments doesn't mute shares. Peer-recipient
+> notifications (readers hearing about each other's comments) deferred to the live-comments backlog.
 
 ### PR 11.2 — Recent share partners in the Share modal ✅
 The "recent share partners" quick-list (tappable chips) above the Share-modal email input (spec §3.5 — a
