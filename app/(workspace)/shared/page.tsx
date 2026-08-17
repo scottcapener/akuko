@@ -121,37 +121,60 @@ export default function SharedFeedPage() {
 
       {/* Author filter row (9.2) */}
       {showFilter && (
-        <div className="flex gap-4 overflow-x-auto hc-scroll-hoverbar pb-2 mb-6 -mx-1 px-1">
+        <div className="flex gap-4 overflow-x-auto hc-scroll-hoverbar pt-2 pb-2 mb-6 -mx-1 px-1">
           {authors.map((a) => {
             const selected = selectedAuthor === a.authorId;
+            // Once an author is selected, dim the others to foreground the choice.
+            const dimmed = selectedAuthor !== null && !selected;
             return (
-              <button
+              <div
                 key={a.authorId}
-                onClick={() => setSelectedAuthor((cur) => (cur === a.authorId ? null : a.authorId))}
-                aria-pressed={selected}
-                className="flex flex-col items-center gap-1.5 flex-shrink-0 w-16 group"
-                title={a.authorName}
+                className={`relative flex-shrink-0 w-16 transition-opacity ${
+                  dimmed ? "opacity-40 hover:opacity-100" : ""
+                }`}
               >
-                <span
-                  className={`relative rounded-full transition-shadow ${
-                    selected ? "ring-2 ring-accent ring-offset-2 ring-offset-bg" : ""
-                  }`}
+                <button
+                  onClick={() => setSelectedAuthor((cur) => (cur === a.authorId ? null : a.authorId))}
+                  aria-pressed={selected}
+                  className="flex flex-col items-center gap-1.5 w-full group"
+                  title={a.authorName}
                 >
-                  <Avatar name={a.authorName} src={a.authorAvatarUrl} size={52} />
-                  {a.hasUnread && (
-                    <span className="absolute -top-1 -right-2">
-                      <NewPill />
-                    </span>
-                  )}
-                </span>
-                <span
-                  className={`text-[11px] truncate w-full text-center transition-colors ${
-                    selected ? "text-text" : "text-subtle group-hover:text-text"
-                  }`}
-                >
-                  {a.authorName}
-                </span>
-              </button>
+                  <span
+                    className={`relative rounded-full transition-shadow ${
+                      selected ? "ring-2 ring-accent ring-offset-2 ring-offset-bg" : ""
+                    }`}
+                  >
+                    <Avatar name={a.authorName} src={a.authorAvatarUrl} size={52} />
+                    {/* Unread pill and the clear-× share the top-right corner, so
+                        the pill yields to the × while this author is selected. */}
+                    {a.hasUnread && !selected && (
+                      <span className="absolute -top-1 -right-2">
+                        <NewPill />
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    className={`text-[11px] truncate w-full text-center transition-colors ${
+                      selected ? "text-text" : "text-subtle group-hover:text-text"
+                    }`}
+                  >
+                    {a.authorName}
+                  </span>
+                </button>
+                {/* Clear the filter — mirrors the chapter grid's hover-×. */}
+                {selected && (
+                  <button
+                    onClick={() => setSelectedAuthor(null)}
+                    className="absolute -top-1 right-1 w-4 h-4 rounded-full bg-bg border border-hover flex items-center justify-center text-subtle hover:text-error hover:border-error/40 transition-colors z-10"
+                    title="Clear filter"
+                    aria-label="Clear author filter"
+                  >
+                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>

@@ -1119,7 +1119,7 @@ export default function LeftColumn({
       {/* ── Logo + user menu ── */}
       <div ref={menuRef} className="px-5 py-4 flex-shrink-0 border-t border-border-subtle relative flex items-center justify-between">
         {menuOpen && (
-          <div className="absolute bottom-full right-4 mb-2 w-40 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden">
+          <div className="absolute bottom-full right-4 mb-2 w-40 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden z-20">
             <Link
               href="/books"
               onClick={() => setMenuOpen(false)}
