@@ -70,12 +70,15 @@ export async function notifyCommentActivity({
     // Author's email (auth schema) + the commenter's display name.
     const [{ data: authUser }, { data: commenter }] = await Promise.all([
       admin.auth.admin.getUserById(ownerId),
-      admin.from("profiles").select("display_name").eq("id", commenterId).maybeSingle(),
+      admin.from("profiles").select("display_name, pen_name").eq("id", commenterId).maybeSingle(),
     ]);
     const to = authUser?.user?.email;
     if (!to) return;
 
-    const commenterName = (commenter?.display_name as string | null) || "Someone";
+    const commenterName =
+      (commenter?.display_name as string | null) ||
+      (commenter?.pen_name as string | null) ||
+      "Someone";
 
     const { sent } = await sendCommentEmail({
       to,

@@ -95,14 +95,21 @@ export async function getComments(
 
   // Author display names + avatars.
   const authorIds = [...new Set(comments.map((c) => c.author_id))];
-  const profileById = new Map<string, { display_name: string | null; avatar_path: string | null }>();
+  const profileById = new Map<
+    string,
+    { display_name: string | null; pen_name: string | null; avatar_path: string | null }
+  >();
   if (authorIds.length) {
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, display_name, avatar_path")
+      .select("id, display_name, pen_name, avatar_path")
       .in("id", authorIds);
     (profiles ?? []).forEach((p) =>
-      profileById.set(p.id, { display_name: p.display_name, avatar_path: p.avatar_path })
+      profileById.set(p.id, {
+        display_name: p.display_name,
+        pen_name: p.pen_name,
+        avatar_path: p.avatar_path,
+      })
     );
   }
   const avatarUrls = await signSharedPaths(
@@ -122,7 +129,10 @@ export async function getComments(
       sceneId: meta?.sceneId ?? null,
       scenePosition: meta?.position ?? 0,
       authorId: c.author_id,
-      authorName: profileById.get(c.author_id)?.display_name || "Someone",
+      authorName:
+        profileById.get(c.author_id)?.display_name ||
+        profileById.get(c.author_id)?.pen_name ||
+        "Someone",
       authorAvatarUrl: avatarUrls[i],
       body: c.body,
       quoteText: c.quote_text,
@@ -181,7 +191,7 @@ export async function createComment(
 
   // Enrich: the author is the caller; fetch their profile + the scene meta.
   const [{ data: profile }, { data: scene }] = await Promise.all([
-    supabase.from("profiles").select("display_name, avatar_path").eq("id", userId).maybeSingle(),
+    supabase.from("profiles").select("display_name, pen_name, avatar_path").eq("id", userId).maybeSingle(),
     supabase.from("shared_scenes").select("scene_id, position").eq("id", input.sharedSceneId).maybeSingle(),
   ]);
   const authorAvatarUrl = await signSharedPath(profile?.avatar_path ?? null);
@@ -192,7 +202,10 @@ export async function createComment(
     sceneId: (scene?.scene_id as string | null) ?? null,
     scenePosition: (scene?.position as number | null) ?? 0,
     authorId: userId,
-    authorName: (profile?.display_name as string | null) || "Someone",
+    authorName:
+      (profile?.display_name as string | null) ||
+      (profile?.pen_name as string | null) ||
+      "Someone",
     authorAvatarUrl,
     body: row.body,
     quoteText: row.quote_text,
