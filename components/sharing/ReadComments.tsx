@@ -706,8 +706,9 @@ function CloseIcon() {
 }
 function UndoIcon() {
   return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v6h6M3 13a9 9 0 103-6.7L3 9" />
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5.99999 9.33317L3.37376 6.70694C2.98324 6.31642 2.98324 5.68325 3.37376 5.29273L5.99999 2.6665" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.66666 6H9.66666C10.1482 6 10.625 6.09484 11.0698 6.27911C11.5147 6.46338 11.9189 6.73346 12.2594 7.07394C12.5999 7.41442 12.8699 7.81863 13.0542 8.26349C13.2385 8.70835 13.3333 9.18515 13.3333 9.66667C13.3333 10.1482 13.2385 10.625 13.0542 11.0698C12.8699 11.5147 12.5999 11.9189 12.2594 12.2594C11.9189 12.5999 11.5147 12.87 11.0698 13.0542C10.625 13.2385 10.1482 13.3333 9.66666 13.3333H7.33332" />
     </svg>
   );
 }

@@ -74,6 +74,11 @@
   /* Border */
   --hc-border-subtle: #e4e1dd;
 
+  /* Comment highlights — the dark #393942 swatch is far too dark on a light
+     page (dark text on it reads as nearly invisible). Use a warm translucent
+     tint so a commented range shows as a soft highlight, not a dark block. */
+  --hc-inactive-highlight: rgb(117 92 75 / 0.18);
+
   /* Scrim — kept a translucent warm dark so modals still dim the light page. */
   --hc-scrim: rgb(20 18 16 / 0.45);
 }
