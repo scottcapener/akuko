@@ -141,7 +141,13 @@ export function EditorComments({
     return () => window.removeEventListener("hc:shared-updated", onUpdated);
   }, [load]);
 
-  // ── Tier-2 highlight — paint the active card's quote in the live scene ──
+  // ── Tier-2 highlight — paint EVERY comment's quote in the live scenes ──
+  // The author expects to see what's been commented on the moment the tab opens,
+  // not only after selecting a card. So while the tab is visible we search each
+  // live scene for every comment's stored quote (tier-2 substring match) and tint
+  // it: the selected card gets the accent highlight, resolved ones a muted tint,
+  // the rest the subtle inactive tint. A quote that no longer matches uniquely
+  // (the author revised it) simply isn't painted — the card still lists it.
   useEffect(() => {
     type HL = { add(r: Range): void };
     const win = window as unknown as {
@@ -152,28 +158,51 @@ export function EditorComments({
     const HighlightCtor = win.Highlight;
     if (!highlights || !HighlightCtor) return; // unsupported → cards still work
 
-    const active = comments.find((c) => c.id === activeId);
-    if (active?.sceneId) {
-      const body = document.querySelector<HTMLElement>(
-        `[data-scene-id="${CSS.escape(active.sceneId)}"] [contenteditable]`
-      );
-      const range = body && findUniqueTextRange(body, active.quoteText);
-      if (range) {
-        const hl = new HighlightCtor(range);
-        highlights.set("hc-comment-active", hl);
-        return () => highlights.delete("hc-comment-active");
-      }
-    }
-    highlights.delete("hc-comment-active");
-  }, [activeId, comments]);
+    const clear = () => {
+      highlights.delete("hc-comment-inactive");
+      highlights.delete("hc-comment-active");
+      highlights.delete("hc-comment-resolved");
+    };
 
-  // Clear any lingering highlight when the tab unmounts (chapter switch, etc.).
+    // Only tint the prose while the Comments tab is actually on screen; behind
+    // the Library the author is writing and shouldn't see comment highlights.
+    if (!active) {
+      clear();
+      return;
+    }
+
+    const inactive = new HighlightCtor();
+    const activeHl = new HighlightCtor();
+    const resolved = new HighlightCtor();
+
+    for (const c of comments) {
+      if (!c.sceneId) continue;
+      const body = document.querySelector<HTMLElement>(
+        `[data-scene-id="${CSS.escape(c.sceneId)}"] [contenteditable]`
+      );
+      const range = body && findUniqueTextRange(body, c.quoteText);
+      if (!range) continue;
+      if (c.id === activeId) activeHl.add(range);
+      else if (c.resolvedAt) resolved.add(range);
+      else inactive.add(range);
+    }
+
+    highlights.set("hc-comment-inactive", inactive);
+    highlights.set("hc-comment-active", activeHl);
+    highlights.set("hc-comment-resolved", resolved);
+    return clear;
+  }, [active, activeId, comments]);
+
+  // Clear any lingering highlights when the tab unmounts (chapter switch, etc.).
   useEffect(() => {
     return () => {
       const win = window as unknown as {
         CSS?: { highlights?: { delete(k: string): void } };
       };
-      win.CSS?.highlights?.delete("hc-comment-active");
+      const h = win.CSS?.highlights;
+      h?.delete("hc-comment-inactive");
+      h?.delete("hc-comment-active");
+      h?.delete("hc-comment-resolved");
     };
   }, []);
 
