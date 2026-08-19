@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { findUniqueTextRange } from "@/lib/shared/anchor";
 import { refreshUnread } from "@/lib/useUnread";
 import type { CommentDTO } from "@/lib/shared/comments";
@@ -302,7 +303,14 @@ function EditorCommentCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const resolved = !!comment.resolvedAt;
+  // The author can always delete their own comment; the chapter owner gains a
+  // delete once they've resolved it (§3.4 workflow: resolve → re-open + delete).
+  const canDelete = isMine || (isOwner && resolved);
+  // Deleting someone else's words (owner clearing a reader's comment) is
+  // confirmed; deleting your own is immediate.
+  const deleteNeedsConfirm = !isMine;
   const taRef = useRef<HTMLTextAreaElement>(null);
   // Character offset to drop the caret at when edit mode opens (where the click
   // landed); null → fall back to the end of the text.
@@ -353,11 +361,12 @@ function EditorCommentCard({
               {resolved ? <UndoIcon /> : <CheckIcon />}
             </button>
           )}
-          {isMine && (
+          {canDelete && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onDelete();
+                if (deleteNeedsConfirm) setConfirmingDelete(true);
+                else onDelete();
               }}
               aria-label="Delete"
               title="Delete"
@@ -368,6 +377,24 @@ function EditorCommentCard({
           )}
         </div>
       </div>
+
+      {confirmingDelete && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <ConfirmModal
+            message={
+              <>
+                Delete {comment.authorName}&rsquo;s comment? This can&rsquo;t be undone.
+              </>
+            }
+            confirmLabel="Delete"
+            onConfirm={() => {
+              setConfirmingDelete(false);
+              onDelete();
+            }}
+            onCancel={() => setConfirmingDelete(false)}
+          />
+        </div>
+      )}
 
       {editing ? (
         <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>

@@ -3,12 +3,14 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-// Edit or delete one comment (SHARED_WITH_YOU.md §3.4). RLS confines both to the
-// comment's author — the owner can resolve (separate route) but never edit or
-// delete someone else's words.
+// Edit or delete one comment (SHARED_WITH_YOU.md §3.4). Editing is confined to
+// the comment's author by RLS. Deleting goes through the delete_comment
+// SECURITY DEFINER function (migration 018), which allows the author OR the
+// chapter owner — so an author can clear an unwanted comment on their chapter,
+// not just resolve it. The owner still can't edit others' words.
 //
 //   PATCH  { body }   — edit your own comment
-//   DELETE            — delete your own comment
+//   DELETE            — delete your own comment, or (chapter owner) anyone's
 
 export async function PATCH(
   request: Request,
@@ -54,8 +56,11 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
   const { commentId } = await params;
-  const { error } = await supabase.from("comments").delete().eq("id", commentId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const { error } = await supabase.rpc("delete_comment", { target: commentId });
+  if (error) {
+    // The function raises when the caller is neither the author nor the owner.
+    return NextResponse.json({ error: error.message }, { status: 403 });
+  }
 
   return NextResponse.json({ ok: true, id: commentId });
 }
