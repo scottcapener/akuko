@@ -19,7 +19,10 @@ export interface SceneConflict {
   sceneId: string;
   chapterId: string | null;
   chapterTitle: string | null;
-  mine: { label: string; body: string }; // this device's local version
+  // `basedOn` is the server version this device's edit was derived from — its last
+  // sync point. Older than `theirs.updatedAt` means the other side has changes this
+  // version never saw, so "mine" is the stale one. Null for a brand-new local scene.
+  mine: { label: string; body: string; basedOn: string | null }; // this device's local version
   theirs: { label: string; body: string; updatedAt: string }; // current server version
 }
 
@@ -445,6 +448,7 @@ export function useHotCocoaDb() {
             mine: {
               label: patch.label ?? local?.scene.label ?? outcome.server.label,
               body: patch.body ?? local?.scene.body ?? outcome.server.body,
+              basedOn: local?.scene.updatedAt ?? null,
             },
             theirs: outcome.server,
           });
