@@ -80,6 +80,9 @@ export function useHotCocoaDb() {
   const [bookStats, setBookStats] = useState<db.BookStats | null>(null);
 
   const [conflicts, setConflicts] = useState<SceneConflict[]>([]);
+  // Non-blocking notice shown after a conflict is resolved: the losing version was
+  // kept as a copy scene, so a wrong choice in the modal is recoverable.
+  const [conflictCopyNotice, setConflictCopyNotice] = useState<{ label: string } | null>(null);
 
   const pendingSaves = useRef<Map<string, Partial<Scene>>>(new Map());
   // Optimistic-concurrency base per dirty scene — the `updatedAt` the pending
@@ -112,6 +115,13 @@ export function useHotCocoaDb() {
   sectionsRef.current = sections;
   const conflictsRef = useRef(conflicts);
   conflictsRef.current = conflicts;
+  // Guards for non-destructive conflict resolution. `resolvingScenes` drops a
+  // concurrent (double-click) resolve of the same scene; `copiedLoserBody` records
+  // the losing body last preserved per scene, so a retry with the *same* loser
+  // (e.g. an offline save that keeps failing) doesn't stack duplicate copies,
+  // while a genuine re-race (the server version changed) still gets preserved.
+  const resolvingScenes = useRef<Set<string>>(new Set());
+  const copiedLoserBody = useRef<Map<string, string>>(new Map());
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
   const bookRef = useRef(book);
@@ -644,53 +654,115 @@ export function useHotCocoaDb() {
   }, [recoverAndFlush]);
 
   // ── Conflict resolution ─────────────────────────────────────────────────
-  // "theirs" adopts the server version; "mine" force-writes the local version
-  // over it (conditioned on the server version we're overwriting, so a further
-  // concurrent change re-opens the conflict rather than clobbering).
+  // Non-destructive: the version the author *doesn't* pick isn't discarded — it's
+  // kept as a "… (conflicting copy · date)" scene in the same chapter, so a wrong
+  // choice in the modal is recoverable rather than a silent data loss. "theirs"
+  // adopts the server version; "mine" force-writes the local version over it
+  // (conditioned on the server version we're overwriting, so a further concurrent
+  // change re-opens the conflict rather than clobbering).
   const resolveConflict = useCallback(async (sceneId: string, choice: "mine" | "theirs") => {
     const conflict = conflictsRef.current.find((c) => c.sceneId === sceneId);
     if (!conflict) return;
+    // Drop a concurrent resolve of the same scene (double-click) — otherwise two
+    // in-flight passes could each create a copy before either records it.
+    if (resolvingScenes.current.has(sceneId)) return;
+    resolvingScenes.current.add(sceneId);
 
-    const setScene = (patch: Partial<Scene>) =>
-      setSections((prev) =>
-        prev.map((sec) => ({
-          ...sec,
-          chapters: sec.chapters.map((ch) => {
-            if (!ch.scenes.some((s) => s.id === sceneId)) return ch;
-            return {
-              ...ch,
-              scenes: ch.scenes.map((s) => (s.id === sceneId ? { ...s, ...patch } : s)),
-            };
-          }),
-        }))
-      );
-
-    if (choice === "theirs") {
-      setScene({ label: conflict.theirs.label, body: conflict.theirs.body, updatedAt: conflict.theirs.updatedAt });
-    } else {
-      try {
-        const res = await db.saveScene(
-          sceneId,
-          { label: conflict.mine.label, body: conflict.mine.body },
-          conflict.theirs.updatedAt
+    try {
+      const setScene = (patch: Partial<Scene>) =>
+        setSections((prev) =>
+          prev.map((sec) => ({
+            ...sec,
+            chapters: sec.chapters.map((ch) => {
+              if (!ch.scenes.some((s) => s.id === sceneId)) return ch;
+              return {
+                ...ch,
+                scenes: ch.scenes.map((s) => (s.id === sceneId ? { ...s, ...patch } : s)),
+              };
+            }),
+          }))
         );
-        if (res.status === "conflict") {
-          // Raced again — refresh "theirs" and leave the conflict open.
-          setConflicts((prev) => prev.map((c) => (c.sceneId === sceneId ? { ...c, theirs: res.server } : c)));
-          return;
-        }
-        if (res.status === "saved") setScene({ updatedAt: res.updatedAt });
-        // "deleted" → the scene is gone; just clear the conflict below.
-      } catch {
-        return; // network error — leave the conflict for another try
-      }
-    }
 
-    offlineQueue.removeSceneWrites([sceneId]).catch(() => {});
-    pendingSaves.current.delete(sceneId);
-    pendingBases.current.delete(sceneId);
-    setConflicts((prev) => prev.filter((c) => c.sceneId !== sceneId));
+      // Preserve the losing version as a copy scene before anything destructive
+      // happens. Returns false only if it *should* have copied but couldn't persist
+      // — the caller then leaves the conflict open so nothing is lost. Skips
+      // silently when there's nothing worth keeping (empty / identical to the
+      // winner / already copied this exact body), or the chapter isn't a real one
+      // (the hidden Book-Info chapter).
+      const winnerBody = choice === "mine" ? conflict.mine.body : conflict.theirs.body;
+      const loser = choice === "mine" ? conflict.theirs : conflict.mine;
+      const preserveLoser = async (): Promise<boolean> => {
+        if (!loser.body.trim() || loser.body === winnerBody) return true;
+        if (copiedLoserBody.current.get(sceneId) === loser.body) return true;
+        if (!conflict.chapterId) return true;
+
+        // chapterId not among the loaded real chapters (e.g. Book-Info) → skip copy.
+        const chapter = sectionsRef.current
+          .flatMap((s) => s.chapters)
+          .find((c) => c.id === conflict.chapterId);
+        if (!chapter) return true;
+
+        const date = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        const base = (loser.label || conflict.chapterTitle || "Scene").trim();
+        const label = `${base} (conflicting copy · ${date})`;
+        // Append at the end of the chapter. We deliberately do NOT renumber the
+        // existing scenes: a reorder would bump the conflicted scene's updated_at,
+        // invalidating the base for the overwrite below (a spurious re-conflict)
+        // and leaving a stale base behind on the "theirs" path too.
+        const pos = chapter.scenes.length;
+        try {
+          const copy = await db.createScene(conflict.chapterId, pos, label, loser.body);
+          copiedLoserBody.current.set(sceneId, loser.body);
+          setSections((prev) =>
+            mapChapter(prev, conflict.chapterId!, (c) => ({ ...c, scenes: [...c.scenes, copy] }))
+          );
+          setConflictCopyNotice({ label });
+          return true;
+        } catch {
+          return false; // couldn't persist the copy — don't proceed and lose it
+        }
+      };
+
+      if (choice === "theirs") {
+        // Loser ("mine") lives only in memory / the durable queue, so persist the
+        // copy before adopting theirs and clearing the queue below.
+        if (!(await preserveLoser())) return;
+        setScene({ label: conflict.theirs.label, body: conflict.theirs.body, updatedAt: conflict.theirs.updatedAt });
+      } else {
+        // Loser ("theirs") is the current server row; copy it first so its content
+        // survives the overwrite that follows.
+        if (!(await preserveLoser())) return;
+        try {
+          const res = await db.saveScene(
+            sceneId,
+            { label: conflict.mine.label, body: conflict.mine.body },
+            conflict.theirs.updatedAt
+          );
+          if (res.status === "conflict") {
+            // Raced again — refresh "theirs" and leave the conflict open. A retry
+            // preserves the newer server version too (its body differs), while an
+            // unchanged retry is deduped by body.
+            setConflicts((prev) => prev.map((c) => (c.sceneId === sceneId ? { ...c, theirs: res.server } : c)));
+            return;
+          }
+          if (res.status === "saved") setScene({ updatedAt: res.updatedAt });
+          // "deleted" → the scene is gone; just clear the conflict below.
+        } catch {
+          return; // network error — leave the conflict for another try
+        }
+      }
+
+      offlineQueue.removeSceneWrites([sceneId]).catch(() => {});
+      pendingSaves.current.delete(sceneId);
+      pendingBases.current.delete(sceneId);
+      copiedLoserBody.current.delete(sceneId);
+      setConflicts((prev) => prev.filter((c) => c.sceneId !== sceneId));
+    } finally {
+      resolvingScenes.current.delete(sceneId);
+    }
   }, []);
+
+  const dismissConflictCopyNotice = useCallback(() => setConflictCopyNotice(null), []);
 
   // Persist any pending scene/note edits immediately when the writer unmounts
   // (e.g. navigating to /backups or /books) or the tab is hidden. Autosaves are
@@ -1474,6 +1546,8 @@ export function useHotCocoaDb() {
     saveStatus,
     conflicts,
     resolveConflict,
+    conflictCopyNotice,
+    dismissConflictCopyNotice,
     activeChapter,
     activeChapterLoaded,
     isChapterLoaded,
