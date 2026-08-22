@@ -1,7 +1,6 @@
 "use client";
 
 import { Modal } from "./ui/Modal";
-import { Button } from "./ui/Button";
 import { countWords } from "@/lib/words";
 import type { SceneConflict } from "@/lib/useHotCocoaDb";
 
@@ -33,10 +32,10 @@ interface ConflictModalProps {
 }
 
 // Surfaces offline edit conflicts one at a time: a scene was changed on another
-// device after this device's queued edit was made. The author picks which
-// version wins rather than one silently overwriting the other. Each side shows
-// its word count and a timestamp so a stale copy (usually fewer words, derived
-// from an earlier sync point) is easy to spot before choosing.
+// device after this device's queued edit was made. Each version is a clickable
+// card — the author picks one by choosing it directly, rather than matching a
+// separate button back to a block. Word count and a timestamp on each side make
+// a stale copy (usually fewer words, from an earlier sync point) easy to spot.
 export function ConflictModal({ conflicts, onResolve }: ConflictModalProps) {
   const conflict = conflicts[0];
   if (!conflict) return null;
@@ -47,6 +46,12 @@ export function ConflictModal({ conflicts, onResolve }: ConflictModalProps) {
   const mineWhen = when(conflict.mine.basedOn);
   const theirsWhen = when(conflict.theirs.updatedAt);
 
+  // Shared card styling — the whole block is the action, so it carries the
+  // hover/focus affordances rather than a separate button.
+  const cardClass =
+    "rounded-xl border border-border-subtle p-4 text-left transition-colors cursor-pointer " +
+    "hover:border-accent/40 hover:bg-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+
   return (
     // No onClose dismissal — a conflict must be resolved, not clicked away.
     <Modal onClose={() => {}} maxWidth="max-w-2xl">
@@ -56,15 +61,20 @@ export function ConflictModal({ conflicts, onResolve }: ConflictModalProps) {
           {conflict.chapterTitle ? (
             <>
               An edit you made offline in <span className="text-text">{conflict.chapterTitle}</span> couldn&apos;t
-              sync because the scene was also changed elsewhere. Choose which version to keep.
+              sync because the scene was also changed elsewhere. Which version would you like to keep?
             </>
           ) : (
-            <>An edit you made offline couldn&apos;t sync because the scene was also changed elsewhere. Choose which version to keep.</>
+            <>An edit you made offline couldn&apos;t sync because the scene was also changed elsewhere. Which version would you like to keep?</>
           )}
         </p>
 
         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <section className="rounded-xl border border-border-subtle p-4">
+          <button
+            type="button"
+            onClick={() => onResolve(conflict.sceneId, "mine")}
+            aria-label="Keep this device&apos;s version"
+            className={cardClass}
+          >
             <h3 className="text-xs font-semibold uppercase tracking-widest text-subtle">This device</h3>
             <p className="mt-1 text-xs text-subtle">
               <span className="text-text">{mineWords.toLocaleString()} {mineWords === 1 ? "word" : "words"}</span>
@@ -73,8 +83,13 @@ export function ConflictModal({ conflicts, onResolve }: ConflictModalProps) {
             <p className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap text-sm text-text">
               {preview(conflict.mine.body) || <span className="text-subtle">(empty)</span>}
             </p>
-          </section>
-          <section className="rounded-xl border border-border-subtle p-4">
+          </button>
+          <button
+            type="button"
+            onClick={() => onResolve(conflict.sceneId, "theirs")}
+            aria-label="Keep the other device&apos;s version"
+            className={cardClass}
+          >
             <h3 className="text-xs font-semibold uppercase tracking-widest text-subtle">Other device</h3>
             <p className="mt-1 text-xs text-subtle">
               <span className="text-text">{theirsWords.toLocaleString()} {theirsWords === 1 ? "word" : "words"}</span>
@@ -83,22 +98,14 @@ export function ConflictModal({ conflicts, onResolve }: ConflictModalProps) {
             <p className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap text-sm text-text">
               {preview(conflict.theirs.body) || <span className="text-subtle">(empty)</span>}
             </p>
-          </section>
+          </button>
         </div>
 
-        <div className="mt-6 flex items-center justify-between gap-3">
-          <span className="text-xs text-subtle">
-            {remaining > 0 ? `${remaining} more conflict${remaining === 1 ? "" : "s"} after this` : " "}
-          </span>
-          <div className="flex gap-3">
-            <Button variant="secondary" onClick={() => onResolve(conflict.sceneId, "theirs")}>
-              Keep other device
-            </Button>
-            <Button variant="secondary" onClick={() => onResolve(conflict.sceneId, "mine")}>
-              Keep this device
-            </Button>
-          </div>
-        </div>
+        {remaining > 0 && (
+          <p className="mt-5 text-center text-xs text-subtle">
+            {remaining} more conflict{remaining === 1 ? "" : "s"} after this
+          </p>
+        )}
       </div>
     </Modal>
   );
