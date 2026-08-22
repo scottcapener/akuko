@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { useHotCocoaDb } from "@/lib/useHotCocoaDb";
+import { useEditorOwnership } from "@/lib/useEditorOwnership";
 import LeftColumn from "@/components/LeftColumn";
 import TipsCard from "@/components/TipsCard";
 import CenterColumn from "@/components/CenterColumn";
 import BookInfoColumn from "@/components/BookInfoColumn";
 import RightColumn from "@/components/RightColumn";
 import { ConflictModal } from "@/components/ConflictModal";
+import { EditorLockedOverlay } from "@/components/EditorLockedOverlay";
 import { InstallHint } from "@/components/InstallHint";
 import WhatsNewModal from "@/components/WhatsNewModal";
 import { SceneDragProvider } from "@/lib/useSceneDrag";
@@ -113,6 +115,9 @@ const SBS_TOTAL_MS = SBS_FADE_MS * 2 + SBS_MOVE_MS;
 export default function WritePage() {
   const router = useRouter();
   const store = useHotCocoaDb();
+  // One editing tab per book. A non-owner tab is parked read-only (see the
+  // overlay below) so two tabs can't diverge into save conflicts.
+  const ownership = useEditorOwnership(store.book?.id);
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
   // Book Info is an in-page view mode (not a route), so the store stays mounted.
   // When on, the center pane renders BookInfoColumn and the Library binds to the
@@ -717,6 +722,9 @@ export default function WritePage() {
       </div>
       {store.conflicts.length > 0 && (
         <ConflictModal conflicts={store.conflicts} onResolve={store.resolveConflict} />
+      )}
+      {ownership.status === "readonly" && (
+        <EditorLockedOverlay bookTitle={store.book.title} onEditHere={ownership.takeOver} />
       )}
       <InstallHint />
       <WhatsNewModal />
