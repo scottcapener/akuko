@@ -124,6 +124,9 @@ export default function WritePage() {
 
   const [scenesVisible, setScenesVisible] = useLocalStorageState("hc.scenesVisible", true);
   const [linksVisible, setLinksVisible] = useLocalStorageState("hc.linksVisible", true);
+  // "Show stats" — account-wide (not per-chapter): one key drives the chapter
+  // word-count card for every chapter and the Chapter Menu's switch.
+  const [chapterStatsVisible, setChapterStatsVisible] = useLocalStorageState("hc.chapterStatsVisible", false);
   const [leftCollapsed, setLeftCollapsed] = useLocalStorageState("hc.leftCollapsed", false);
   const [rightCollapsed, setRightCollapsed] = useLocalStorageState("hc.rightCollapsed", false);
   const [sectionViews, setSectionViews] = useLocalStorageState<Record<string, "grid" | "list">>("hc.sectionViews", {});
@@ -526,6 +529,8 @@ export default function WritePage() {
     currentUserId: store.userId,
     onSceneClick: handleSceneClick,
     onDeleteChapter: store.deleteChapter,
+    showChapterStats: chapterStatsVisible,
+    onToggleChapterStats: () => setChapterStatsVisible((v) => !v),
   };
 
   const bookInfoProps = {

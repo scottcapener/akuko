@@ -27,10 +27,17 @@ export function SharingMenu({
   chapterId,
   chapterTitle,
   onDeleteChapter,
+  showStats,
+  onToggleStats,
 }: {
   chapterId: string;
   chapterTitle: string;
   onDeleteChapter: (chapterId: string) => void;
+  // "Show stats" — an account-wide toggle (not per-chapter) for the chapter
+  // word-count card above this menu row. Lifted to the writer page so the card
+  // and this switch share one source of truth.
+  showStats: boolean;
+  onToggleStats: () => void;
 }) {
   const [state, setState] = useState<ShareState>({ ...EMPTY, chapterId });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -224,6 +231,24 @@ export function SharingMenu({
               </button>
             )}
           </div>
+
+          {/* Show stats — account-wide toggle for the chapter word-count card. */}
+          <div className="border-t border-hover" />
+          <button
+            onClick={onToggleStats}
+            role="switch"
+            aria-checked={showStats}
+            className="flex w-full items-center justify-between px-4 py-2.5 hover:bg-hover transition-colors"
+          >
+            <span className="text-xs text-text">Show stats</span>
+            <span
+              className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${showStats ? "bg-accent" : "bg-hover"}`}
+            >
+              <span
+                className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${showStats ? "left-4" : "left-0.5"}`}
+              />
+            </span>
+          </button>
 
           {/* Delete chapter — separated, in the Account Menu's divided style. */}
           <div className="border-t border-hover" />
