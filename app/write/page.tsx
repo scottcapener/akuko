@@ -12,6 +12,7 @@ import CenterColumn from "@/components/CenterColumn";
 import BookInfoColumn from "@/components/BookInfoColumn";
 import RightColumn from "@/components/RightColumn";
 import { ConflictModal } from "@/components/ConflictModal";
+import { ConflictCopyToast } from "@/components/ConflictCopyToast";
 import { EditorLockedOverlay } from "@/components/EditorLockedOverlay";
 import { InstallHint } from "@/components/InstallHint";
 import WhatsNewModal from "@/components/WhatsNewModal";
@@ -722,6 +723,12 @@ export default function WritePage() {
       </div>
       {store.conflicts.length > 0 && (
         <ConflictModal conflicts={store.conflicts} onResolve={store.resolveConflict} />
+      )}
+      {store.conflictCopyNotice && (
+        <ConflictCopyToast
+          label={store.conflictCopyNotice.label}
+          onDismiss={store.dismissConflictCopyNotice}
+        />
       )}
       {ownership.status === "readonly" && (
         <EditorLockedOverlay bookTitle={store.book.title} onEditHere={ownership.takeOver} />

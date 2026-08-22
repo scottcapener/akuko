@@ -540,14 +540,19 @@ export async function getScenesForChapter(chapterId: string): Promise<Scene[]> {
   }));
 }
 
-export async function createScene(chapterId: string, position: number): Promise<Scene> {
+export async function createScene(
+  chapterId: string,
+  position: number,
+  label = "",
+  body = ""
+): Promise<Scene> {
   const { data, error } = await supabase()
     .from("scenes")
-    .insert({ chapter_id: chapterId, label: "", body: "", position })
+    .insert({ chapter_id: chapterId, label, body, position })
     .select()
     .single();
   if (error) throw error;
-  return { id: data.id, label: "", body: "", updatedAt: data.updated_at };
+  return { id: data.id, label, body, updatedAt: data.updated_at };
 }
 
 export type SaveSceneResult =
