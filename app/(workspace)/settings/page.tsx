@@ -63,6 +63,7 @@ function SectionHeading({ title, note }: { title: string; note: string }) {
 export default function SettingsPage() {
   const [scenesVisible, setScenesVisible] = useLocalStorageState("hc.scenesVisible", true);
   const [linksVisible, setLinksVisible] = useLocalStorageState("hc.linksVisible", true);
+  const [chapterStatsVisible, setChapterStatsVisible] = useLocalStorageState("hc.chapterStatsVisible", false);
   const [tipsEnabled, setTipsEnabled] = useLocalStorageState("hc.tipsEnabled", true);
   const { theme, toggleTheme } = useTheme();
 
@@ -134,6 +135,12 @@ export default function SettingsPage() {
               description="Show the Links section in the library panel."
               checked={linksVisible}
               onChange={() => setLinksVisible((v) => !v)}
+            />
+            <ToggleRow
+              label="Chapter stats"
+              description="Show the open chapter's word count at the bottom of the library panel."
+              checked={chapterStatsVisible}
+              onChange={() => setChapterStatsVisible((v) => !v)}
             />
             <ToggleRow
               label="Tips"

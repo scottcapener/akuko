@@ -8,6 +8,7 @@ import * as offlineQueue from "./offlineQueue";
 import * as offlineCache from "./offlineCache";
 import * as offlineDb from "./offlineDb";
 import { Book, Section, Chapter, Scene, LibraryImage, LibraryNote, LibraryMusicLink, LibraryLink } from "./types";
+import { wordCountAll } from "./words";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "offline";
 
@@ -29,33 +30,6 @@ export interface SceneConflict {
 const AUTOSAVE_DELAY = 2_000;
 const AUTOSAVE_MAX_WAIT = 10_000;
 
-// Whitespace-token count of a scene body. (Bodies are contentEditable HTML, so
-// this is the same crude tokenizer the app has always used — unchanged here.)
-function countWords(body: string): number {
-  const trimmed = body.trim();
-  return trimmed ? trimmed.split(/\s+/).length : 0;
-}
-
-// Per-chapter word-count cache keyed on the chapter's `scenes` array reference.
-// Editing a scene yields a new scenes array for only that chapter (mapChapter
-// keeps the others referentially stable), so a keystroke recomputes one
-// chapter instead of re-splitting every scene of every chapter each render.
-const chapterWordCounts = new WeakMap<Scene[], number>();
-
-function chapterWordCount(scenes: Scene[]): number {
-  const cached = chapterWordCounts.get(scenes);
-  if (cached !== undefined) return cached;
-  const total = scenes.reduce((st, sc) => st + countWords(sc.body), 0);
-  chapterWordCounts.set(scenes, total);
-  return total;
-}
-
-function wordCountAll(sections: Section[]): number {
-  return sections.reduce(
-    (total, s) => total + s.chapters.reduce((ct, ch) => ct + chapterWordCount(ch.scenes), 0),
-    0
-  );
-}
 
 // Build a non-colliding "… Copy" title for a duplicated chapter: "X Copy", then
 // "X Copy 2", "X Copy 3", … skipping any that already exist among `existing`.

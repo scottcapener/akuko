@@ -9,6 +9,7 @@ import { useReorderList } from "@/lib/useReorderList";
 import { useReorderGrid } from "@/lib/useReorderGrid";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
 import { SharingMenu } from "@/components/sharing/SharingMenu";
+import { chapterWordCount } from "@/lib/words";
 import { EditorComments } from "@/components/sharing/EditorComments";
 import { Badge } from "@/components/ui/Badge";
 import { useUnread } from "@/lib/useUnread";
@@ -514,6 +515,11 @@ interface Props {
   onSceneClick?: (chapterId: string, sceneId: string) => void;
   // Delete the chapter — the Chapter Menu (§3.6 / Stage 8) offers it too.
   onDeleteChapter?: (chapterId: string) => void;
+  // "Show stats" — an account-wide toggle (not per-chapter). When on, a chapter
+  // word-count card sits above the Chapter Menu row. Lived in the writer page so
+  // it stays on as you move between chapters.
+  showChapterStats?: boolean;
+  onToggleChapterStats?: () => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   // Pixel width of the expanded panel — the body below the header renders at
@@ -547,6 +553,8 @@ export default function RightColumn({
   currentUserId,
   onSceneClick,
   onDeleteChapter,
+  showChapterStats = false,
+  onToggleChapterStats,
   collapsed,
   onToggleCollapse,
   expandedWidth,
@@ -1184,10 +1192,10 @@ export default function RightColumn({
       )}
       </div>
 
-      {/* ── Sharing mini-menu (bottom-right, §3.6) ── */}
+      {/* ── Footer: chapter stats + Sharing mini-menu (bottom-right, §3.6) ── */}
       {shareable && chapter?.id && (
         <div
-          className="flex-shrink-0 flex items-center justify-end px-3 py-2 border-t border-border-subtle"
+          className="flex-shrink-0 bg-bg"
           style={
             expandedWidth != null
               ? {
@@ -1199,12 +1207,28 @@ export default function RightColumn({
               : undefined
           }
         >
-          <SharingMenu
-            key={chapter.id}
-            chapterId={chapter.id}
-            chapterTitle={chapter.title}
-            onDeleteChapter={(id) => onDeleteChapter?.(id)}
-          />
+          {/* Chapter word count — shown while "Show stats" is on (any chapter).
+              Styled like the Book Info stat cards. */}
+          {showChapterStats && (
+            <div className="px-3 pt-3">
+              <div className="rounded bg-panel px-5 py-4 flex items-center justify-between">
+                <span className="text-body-m text-subtle">Words</span>
+                <span className="font-serif text-[18px] leading-none text-text tabular-nums">
+                  {chapterWordCount(chapter.scenes).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-end px-3 py-2">
+            <SharingMenu
+              key={chapter.id}
+              chapterId={chapter.id}
+              chapterTitle={chapter.title}
+              onDeleteChapter={(id) => onDeleteChapter?.(id)}
+              showStats={showChapterStats}
+              onToggleStats={() => onToggleChapterStats?.()}
+            />
+          </div>
         </div>
       )}
     </div>
