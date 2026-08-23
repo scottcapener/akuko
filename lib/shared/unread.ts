@@ -14,6 +14,8 @@ export interface ChapterUnread {
   sharedChapterId: string;
   /** Comments by other people since your last visit (drives the tab count). */
   unreadComments: number;
+  /** Every comment on the chapter, mine included (drives the dim total badge). */
+  totalComments: number;
   /** Whether this chapter needs your attention at all (drives dots + the total). */
   unread: boolean;
 }
@@ -48,20 +50,24 @@ export async function getUnreadState(
     (reads ?? []).map((r) => [r.shared_chapter_id as string, new Date(r.last_seen_at as string).getTime()])
   );
 
-  // Comments by other people (my own are never unread to me). RLS already
-  // confines this to chapters I can access; the .in() keeps it to the live set.
+  // Every comment on my accessible chapters. RLS already confines this to
+  // chapters I can access; the .in() keeps it to the live set. We tally two
+  // things: the total (all authors, drives the dim badge) and the unread count
+  // (others only, postdating my cursor — my own are never unread to me).
   const { data: comments } = await supabase
     .from("comments")
-    .select("shared_chapter_id, created_at")
-    .neq("author_id", userId)
+    .select("shared_chapter_id, author_id, created_at")
     .in("shared_chapter_id", ids);
 
   const newCommentCounts = new Map<string, number>();
+  const totalCommentCounts = new Map<string, number>();
   for (const c of comments ?? []) {
-    const seen = seenAt.get(c.shared_chapter_id as string);
+    const key = c.shared_chapter_id as string;
+    totalCommentCounts.set(key, (totalCommentCounts.get(key) ?? 0) + 1);
+    if (c.author_id === userId) continue;
+    const seen = seenAt.get(key);
     // Unread when there's no cursor yet, or the comment postdates it.
     if (seen == null || new Date(c.created_at as string).getTime() > seen) {
-      const key = c.shared_chapter_id as string;
       newCommentCounts.set(key, (newCommentCounts.get(key) ?? 0) + 1);
     }
   }
@@ -78,6 +84,7 @@ export async function getUnreadState(
       chapterId: (c.chapter_id as string | null) ?? null,
       sharedChapterId: c.id as string,
       unreadComments,
+      totalComments: totalCommentCounts.get(c.id) ?? 0,
       unread,
     };
   });
