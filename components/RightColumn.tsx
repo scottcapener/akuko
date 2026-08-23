@@ -13,6 +13,7 @@ import { chapterWordCount } from "@/lib/words";
 import { EditorComments } from "@/components/sharing/EditorComments";
 import { Badge } from "@/components/ui/Badge";
 import { useUnread } from "@/lib/useUnread";
+import { useShareState } from "@/lib/useShareState";
 
 // Renders children into document.body so fixed overlays escape transformed parents
 function Portal({ children }: { children: React.ReactNode }) {
@@ -25,6 +26,39 @@ function Portal({ children }: { children: React.ReactNode }) {
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
+
+// Comment cards sit in a px-4 (16px) container inside the Comments layer, the
+// same inset as the header icons' left-4 — so at rest the Comments icon and the
+// cards' left edges line up. The header slide tracks this card edge, not the
+// layer's outer padding edge (§5.3).
+const CARD_INSET = 16;
+
+// Evaluate a CSS cubic-bezier timing function (y for a given progress x). Used
+// to sample the *content's* ease-out curve so the header Comments icon can be
+// keyframed to ride the cards' left edge exactly — the icon and the content
+// layer must share this identical curve. Matches ease-[cubic-bezier(0,0,0.2,1)]
+// on the content layers below.
+function makeCubicBezier(x1: number, y1: number, x2: number, y2: number) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const sampleX = (u: number) => ((ax * u + bx) * u + cx) * u;
+  const sampleY = (u: number) => ((ay * u + by) * u + cy) * u;
+  const sampleDX = (u: number) => (3 * ax * u + 2 * bx) * u + cx;
+  return (t: number) => {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    let u = t;
+    for (let i = 0; i < 8; i++) {
+      const x = sampleX(u) - t;
+      if (Math.abs(x) < 1e-6) break;
+      const d = sampleDX(u);
+      if (Math.abs(d) < 1e-6) break;
+      u -= x / d;
+    }
+    return sampleY(u);
+  };
+}
+const easeOut = makeCubicBezier(0, 0, 0.2, 1);
 
 // ── Image lightbox ────────────────────────────────────────────────────────────
 
@@ -560,26 +594,85 @@ export default function RightColumn({
   expandedWidth,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Library ↔ Comments tab (§3.7). Comments only exists on shareable chapters;
-  // Book Info forces Library.
+  // Comments (and its header icon) only exist once the chapter has actually been
+  // shared — `shareable` merely means it *can* be shared (Book Info can't, and
+  // forces Library). An unshared-but-shareable chapter shows no Comments icon.
+  const { shared } = useShareState(chapter.id);
+  const commentsAvailable = shareable && shared;
+  // Library ↔ Comments tab (§3.7).
   const [activeTab, setActiveTab] = useState<"library" | "comments">("library");
   useEffect(() => {
-    if (!shareable) setActiveTab("library");
-  }, [shareable]);
-  const showComments = shareable && activeTab === "comments";
+    if (!commentsAvailable) setActiveTab("library");
+  }, [commentsAvailable]);
+  const showComments = commentsAvailable && activeTab === "comments";
+  // Horizontal travel (px) of the header's Comments icon as it slides between
+  // the right slot (Library view) and the left slot (Comments view). The left
+  // and right icon boxes are 28px (p-1 + 20px glyph) inset by px-4 (16px), so
+  // the gap between their left edges is width − 16 − 28 − 16 = width − 60.
+  const commentTravel = Math.max(0, (expandedWidth ?? 0) - 60);
+
+  const SLIDE_MS = 400;
+  const commentIconRef = useRef<HTMLDivElement>(null);
 
   // Two layouts share this component: the desktop side panel (collapsible, tabs
   // cross-slide, §3.7 / 5.3) and the mobile full-screen panel (an X returns to
   // Write). The collapse capability is the desktop tell.
   const isMobilePanel = !onToggleCollapse;
 
+  // Ride the incoming content's leading edge with the header Comments icon on
+  // each tab switch (§5.3). A plain transition can't both hold the icon in a
+  // slot and then follow an *eased* edge, so we keyframe the icon: sample the
+  // same ease-out curve the content uses, turn each sample into the edge the
+  // icon should chase, clamp it to the icon's travel band, and let the Web
+  // Animations API play those positions. The icon waits, meets the content
+  // exactly, then decelerates into its target slot in lockstep with it.
+  //   • Open  — the Comments cards enter from the right; their LEFT edge leads,
+  //             and the icon's LEFT edge follows it into the left slot.
+  //   • Close — the Library content enters from the left; its RIGHT edge leads,
+  //             and the icon's RIGHT edge follows it back into the right slot.
+  // Both content and icon are inset 16px (CARD_INSET) from the same side, so at
+  // rest the tracked edges coincide, making the two directions mirror images.
+  const prevShowComments = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (isMobilePanel || !commentsAvailable) { prevShowComments.current = showComments; return; }
+    const el = commentIconRef.current;
+    const W = expandedWidth ?? 0;
+    const prev = prevShowComments.current;
+    prevShowComments.current = showComments;
+    // Only animate a real Library↔Comments flip — not the initial mount or an
+    // unrelated re-render (e.g. a resize while the tab is already settled).
+    if (prev === null || prev === showComments || !el || !W) return;
+    const N = 30;
+    const frames: Keyframe[] = [];
+    for (let i = 0; i <= N; i++) {
+      const e = easeOut(i / N);
+      let tx: number;
+      if (showComments) {
+        // Comments layer left edge sweeps W → 0; track the cards' left edge.
+        const cardLeft = W * (1 - e) + CARD_INSET;
+        tx = Math.min(Math.max(cardLeft, 16), W - 44) - 16;
+      } else {
+        // Library layer right edge sweeps 0 → W; track the content's right edge.
+        const contentRight = W * e - CARD_INSET;
+        tx = Math.min(Math.max(contentRight, 44), W - 16) - 44;
+      }
+      frames.push({ transform: `translateX(${tx}px)` });
+    }
+    const anim = el.animate(frames, { duration: SLIDE_MS, easing: "linear", fill: "none" });
+    return () => anim.cancel();
+  }, [showComments, commentsAvailable, isMobilePanel, expandedWidth]);
+
   // Unread comments on THIS chapter drive the Comments-tab count + the collapsed
   // library-icon dot (§6). Cleared when the tab opens (EditorComments marks seen
   // → refreshUnread). Book Info isn't shareable, so it never shows a badge.
   const { chapters: unreadChapters } = useUnread();
-  const unreadComments = shareable
-    ? unreadChapters.find((c) => c.chapterId === chapter.id)?.unreadComments ?? 0
-    : 0;
+  const chapterCounts = shareable
+    ? unreadChapters.find((c) => c.chapterId === chapter.id)
+    : undefined;
+  const unreadComments = chapterCounts?.unreadComments ?? 0;
+  // Total comments on the chapter — drives the dim resting badge when nothing is
+  // new (§6). New comments take over with the bright unread badge instead.
+  const totalComments = chapterCounts?.totalComments ?? 0;
 
   // Clicking the active tab collapses/expands the panel (preserving the old
   // click-the-library-icon-to-collapse gesture); clicking the other switches to
@@ -775,7 +868,7 @@ export default function RightColumn({
           h-16 so the Gallery top lines up with the Book Cover and the first
           Scene. This header is a sibling before the scrollable body, not part of
           that scroll, so it never needs to be sticky and never fades with it. */}
-      <div className="bg-bg h-16 px-4 flex-shrink-0 flex items-center justify-between">
+      <div className="relative bg-bg h-16 px-4 flex-shrink-0 flex items-center justify-between">
         {isMobilePanel ? (
           <>
             {/* Mobile — both tab icons on the left, X on the right returns to the
@@ -790,7 +883,7 @@ export default function RightColumn({
               >
                 <Image src="/library.svg" alt="Library" width={20} height={20} />
               </button>
-              {shareable && (
+              {commentsAvailable && (
                 <button
                   onClick={() => selectTab("comments")}
                   className={`relative p-1 rounded-md transition-opacity ${
@@ -801,8 +894,16 @@ export default function RightColumn({
                   aria-label="Comments"
                 >
                   <CommentsGlyph />
-                  {unreadComments > 0 && (
-                    <Badge count={unreadComments} className="absolute -top-1.5 -right-2" />
+                  {/* Count badge fades out once Comments is open (kept mounted,
+                      toggled by opacity); new → bright unread, else dim total. */}
+                  {(unreadComments > 0 || totalComments > 0) && (
+                    <Badge
+                      count={unreadComments > 0 ? unreadComments : totalComments}
+                      variant={unreadComments > 0 ? "accent" : "muted"}
+                      className={`absolute -top-1.5 -right-2 transition-opacity duration-[400ms] ease-in-out ${
+                        showComments ? "opacity-0" : "opacity-100"
+                      }`}
+                    />
                   )}
                 </button>
               )}
@@ -819,30 +920,88 @@ export default function RightColumn({
           </>
         ) : (
           <>
-            {/* Desktop (5.3) — the active tab's icon sits on the left and doubles
-                as the collapse toggle. The switch affordance sits on the right:
-                the Comments icon while Library is up, an X (back to Library)
-                while Comments is up. The body below cross-slides to match. */}
-            <button
-              onClick={() => selectTab(activeTab)}
-              className="relative p-1 rounded-md text-text hover:opacity-80 transition-opacity"
-              title={collapsed ? "Expand panel" : "Collapse panel"}
-              aria-label={showComments ? "Comments" : "Library"}
-            >
-              {showComments ? (
-                <CommentsGlyph />
-              ) : (
-                <Image src="/library.svg" alt="Library" width={20} height={20} />
-              )}
-              {/* Collapsed hides the right affordance — surface unread here (§6). */}
-              {collapsed && !showComments && unreadComments > 0 && (
-                <Badge dot className="absolute top-0 right-0" />
-              )}
-            </button>
+            {/* Desktop (5.3) — an animated three-glyph header. The Library icon
+                sits at the left slot, the X at the right slot, and the Comments
+                icon travels between them: it rests in the right slot while
+                Library is up and slides across to the left slot when Comments
+                opens, moving in step with the body's cross-slide. As it slides,
+                the Library icon fades out beneath it and the X fades in at the
+                right. Whichever icon holds the left slot doubles as the collapse
+                toggle. The Comments icon exists only once the chapter is shared. */}
 
-            {!collapsed &&
-              shareable &&
-              (showComments ? (
+            {/* Library icon — left slot; collapse toggle while Library is up.
+                Fades out as Comments opens. */}
+            <div
+              className="absolute inset-y-0 left-4 flex items-center transition-opacity duration-[400ms] ease-in-out"
+              style={{ opacity: showComments ? 0 : 1, pointerEvents: showComments ? "none" : undefined }}
+            >
+              <button
+                onClick={() => selectTab("library")}
+                className="relative p-1 rounded-md text-text hover:opacity-80 transition-opacity"
+                title={collapsed ? "Expand panel" : "Collapse panel"}
+                aria-label="Library"
+              >
+                <Image src="/library.svg" alt="Library" width={20} height={20} />
+                {/* Collapsed hides the right affordance — surface unread here (§6). */}
+                {collapsed && !showComments && unreadComments > 0 && (
+                  <Badge dot className="absolute top-0 right-0" />
+                )}
+              </button>
+            </div>
+
+            {/* Comments icon — slides between the right slot (Library view) and
+                the left slot (Comments view). Hidden when the panel is collapsed
+                on the Library view, where the rail shows just the single toggle. */}
+            {commentsAvailable && (
+              <div
+                ref={commentIconRef}
+                className="absolute inset-y-0 left-4 flex items-center"
+                style={{
+                  transform: `translateX(${showComments ? 0 : commentTravel}px)`,
+                  opacity: !collapsed || showComments ? 1 : 0,
+                  pointerEvents: !collapsed || showComments ? undefined : "none",
+                  // Base transition: the close move + fallback. The open move is
+                  // driven by the keyframe effect above, which overrides this.
+                  transition: `transform ${SLIDE_MS}ms ease-out, opacity ${SLIDE_MS}ms ease-in-out`,
+                }}
+              >
+                <button
+                  onClick={() => selectTab("comments")}
+                  className="relative p-1 rounded-md text-subtle hover:opacity-80 transition-opacity"
+                  title={showComments ? (collapsed ? "Expand panel" : "Collapse panel") : "Comments"}
+                  aria-label="Comments"
+                >
+                  <CommentsGlyph />
+                  {/* Count badge — a wayfinding cue toward the tab. It fades out
+                      once Comments is open (the cards are right there) and back
+                      in on Library, so it's kept mounted and toggled by opacity.
+                      New comments → bright unread count; otherwise a dim total. */}
+                  {!collapsed && (unreadComments > 0 || totalComments > 0) && (
+                    <Badge
+                      count={unreadComments > 0 ? unreadComments : totalComments}
+                      variant={unreadComments > 0 ? "accent" : "muted"}
+                      className={`absolute -top-1.5 -right-2 transition-opacity duration-[400ms] ease-in-out ${
+                        showComments ? "opacity-0" : "opacity-100"
+                      }`}
+                    />
+                  )}
+                  {collapsed && showComments && unreadComments > 0 && (
+                    <Badge dot className="absolute top-0 right-0" />
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Close (X) — right slot; fades in over the Comments icon's vacated
+                slot and returns to Library. */}
+            {commentsAvailable && (
+              <div
+                className="absolute inset-y-0 right-4 flex items-center transition-opacity duration-[400ms] ease-in-out"
+                style={{
+                  opacity: showComments && !collapsed ? 1 : 0,
+                  pointerEvents: showComments && !collapsed ? undefined : "none",
+                }}
+              >
                 <button
                   onClick={() => selectTab("library")}
                   className="p-1 rounded-md text-subtle/60 hover:text-subtle transition-colors"
@@ -851,19 +1010,8 @@ export default function RightColumn({
                 >
                   <CloseGlyph />
                 </button>
-              ) : (
-                <button
-                  onClick={() => selectTab("comments")}
-                  className="relative p-1 rounded-md opacity-40 hover:opacity-100 text-subtle transition-opacity"
-                  title="Comments"
-                  aria-label="Comments"
-                >
-                  <CommentsGlyph />
-                  {unreadComments > 0 && (
-                    <Badge count={unreadComments} className="absolute -top-1.5 -right-2" />
-                  )}
-                </button>
-              ))}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -892,7 +1040,7 @@ export default function RightColumn({
           the Comments layer when the Comments tab is up (5.3). */}
       <div
         ref={scrollRef}
-        className={`absolute inset-0 overflow-y-auto transition-[transform,opacity] duration-200 ease-in-out ${
+        className={`absolute inset-0 overflow-y-auto transition-[translate,opacity] duration-[400ms] ease-[cubic-bezier(0,0,0.2,1)] ${
           showComments ? "-translate-x-full opacity-0 pointer-events-none" : "translate-x-0 opacity-100"
         }`}
         aria-hidden={showComments}
@@ -1174,9 +1322,9 @@ export default function RightColumn({
           (§3.7 / 5.3). Kept mounted on shareable chapters so it can slide both
           ways without a remount; `active` gates the read cursor so unread badges
           only clear once it's actually on screen (§6). */}
-      {shareable && (
+      {commentsAvailable && (
         <div
-          className={`absolute inset-0 overflow-y-auto transition-[transform,opacity] duration-200 ease-in-out ${
+          className={`absolute inset-0 overflow-y-auto transition-[translate,opacity] duration-[400ms] ease-[cubic-bezier(0,0,0.2,1)] ${
             showComments ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 pointer-events-none"
           }`}
           aria-hidden={!showComments}

@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ShareModal } from "./ShareModal";
 import { useUnread } from "@/lib/useUnread";
-import type { ShareState } from "@/lib/shared/types";
+import { useShareState, publishShareState } from "@/lib/useShareState";
 
 // The Chapter Menu (SHARED_WITH_YOU.md §3.6; redesigned in Stage 8 to match
 // Figma 297-26768 and the Account Menu's style). The ••• at the bottom-right of
@@ -18,8 +18,6 @@ import type { ShareState } from "@/lib/shared/types";
 //   5 Error      — a general error line under Update.
 // The Share / manage-recipients modal is opened from here; the snapshot actions
 // (Update / Stop sharing) live in the menu itself.
-
-const EMPTY: ShareState = { chapterId: "", sharedChapterId: null, shared: false, recipients: [] };
 
 type UpdatePhase = "idle" | "updating" | "updated" | "error";
 
@@ -39,7 +37,9 @@ export function SharingMenu({
   showStats: boolean;
   onToggleStats: () => void;
 }) {
-  const [state, setState] = useState<ShareState>({ ...EMPTY, chapterId });
+  // Share state comes from the shared store so the panel header's Comments icon
+  // (RightColumn) and this menu never disagree; publishing here updates both.
+  const state = useShareState(chapterId);
   const [menuOpen, setMenuOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
@@ -50,26 +50,18 @@ export function SharingMenu({
   const rootRef = useRef<HTMLDivElement>(null);
   const updateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/share?chapterId=${encodeURIComponent(chapterId)}`);
-      if (!res.ok) return;
-      setState(await res.json());
-    } catch {
-      // Leave prior state; the menu just shows "not shared".
-    }
-  }, [chapterId]);
+  const refresh = state.refresh;
 
-  // Refresh + fully reset transient UI whenever the open chapter changes.
+  // Fully reset transient UI whenever the open chapter changes; the shared store
+  // loads/serves the actual share state for the new chapter.
   useEffect(() => {
-    setState({ ...EMPTY, chapterId });
     setMenuOpen(false);
     setConfirmStop(false);
     setConfirmDelete(false);
     setUpdatePhase("idle");
     if (updateTimer.current) clearTimeout(updateTimer.current);
-    load();
-  }, [chapterId, load]);
+    refresh();
+  }, [chapterId, refresh]);
 
   // Clear a pending "updated → idle" revert on unmount.
   useEffect(() => () => { if (updateTimer.current) clearTimeout(updateTimer.current); }, []);
@@ -95,7 +87,7 @@ export function SharingMenu({
     setConfirmStop(false);
     if (updatePhase === "error") setUpdatePhase("idle");
     setMenuOpen((v) => !v);
-    load(); // refresh recipients/state on open
+    refresh(); // refresh recipients/state on open
   }
 
   function openModal() {
@@ -115,7 +107,7 @@ export function SharingMenu({
         body: JSON.stringify({ chapterId }),
       });
       if (!res.ok) throw new Error("update failed");
-      setState(await res.json());
+      publishShareState(await res.json());
       // Re-share can restale some comments (§7); nudge an open Comments tab.
       window.dispatchEvent(new CustomEvent("hc:shared-updated"));
       setUpdatePhase("updated");
@@ -131,7 +123,7 @@ export function SharingMenu({
       const res = await fetch(`/api/share?chapterId=${encodeURIComponent(chapterId)}`, {
         method: "DELETE",
       });
-      if (res.ok) setState(await res.json());
+      if (res.ok) publishShareState(await res.json());
     } finally {
       setBusy(false);
       setMenuOpen(false);
@@ -282,7 +274,7 @@ export function SharingMenu({
           chapterId={chapterId}
           initialState={state}
           onClose={() => setModalOpen(false)}
-          onStateChange={setState}
+          onStateChange={publishShareState}
         />
       )}
 
