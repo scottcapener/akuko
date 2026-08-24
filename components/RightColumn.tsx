@@ -611,7 +611,7 @@ export default function RightColumn({
   // the gap between their left edges is width − 16 − 28 − 16 = width − 60.
   const commentTravel = Math.max(0, (expandedWidth ?? 0) - 60);
 
-  const SLIDE_MS = 400;
+  const SLIDE_MS = 200;
   const commentIconRef = useRef<HTMLDivElement>(null);
 
   // Two layouts share this component: the desktop side panel (collapsible, tabs
@@ -900,7 +900,7 @@ export default function RightColumn({
                     <Badge
                       count={unreadComments > 0 ? unreadComments : totalComments}
                       variant={unreadComments > 0 ? "accent" : "muted"}
-                      className={`absolute -top-1.5 -right-2 transition-opacity duration-[400ms] ease-in-out ${
+                      className={`absolute -top-1.5 -right-2 transition-opacity duration-[200ms] ease-in-out ${
                         showComments ? "opacity-0" : "opacity-100"
                       }`}
                     />
@@ -932,7 +932,7 @@ export default function RightColumn({
             {/* Library icon — left slot; collapse toggle while Library is up.
                 Fades out as Comments opens. */}
             <div
-              className="absolute inset-y-0 left-4 flex items-center transition-opacity duration-[400ms] ease-in-out"
+              className="absolute inset-y-0 left-4 flex items-center transition-opacity duration-[200ms] ease-in-out"
               style={{ opacity: showComments ? 0 : 1, pointerEvents: showComments ? "none" : undefined }}
             >
               <button
@@ -980,7 +980,7 @@ export default function RightColumn({
                     <Badge
                       count={unreadComments > 0 ? unreadComments : totalComments}
                       variant={unreadComments > 0 ? "accent" : "muted"}
-                      className={`absolute -top-1.5 -right-2 transition-opacity duration-[400ms] ease-in-out ${
+                      className={`absolute -top-1.5 -right-2 transition-opacity duration-[200ms] ease-in-out ${
                         showComments ? "opacity-0" : "opacity-100"
                       }`}
                     />
@@ -996,7 +996,7 @@ export default function RightColumn({
                 slot and returns to Library. */}
             {commentsAvailable && (
               <div
-                className="absolute inset-y-0 right-4 flex items-center transition-opacity duration-[400ms] ease-in-out"
+                className="absolute inset-y-0 right-4 flex items-center transition-opacity duration-[200ms] ease-in-out"
                 style={{
                   opacity: showComments && !collapsed ? 1 : 0,
                   pointerEvents: showComments && !collapsed ? undefined : "none",
@@ -1040,7 +1040,7 @@ export default function RightColumn({
           the Comments layer when the Comments tab is up (5.3). */}
       <div
         ref={scrollRef}
-        className={`absolute inset-0 overflow-y-auto transition-[translate,opacity] duration-[400ms] ease-[cubic-bezier(0,0,0.2,1)] ${
+        className={`absolute inset-0 overflow-y-auto transition-[translate,opacity] duration-[200ms] ease-[cubic-bezier(0,0,0.2,1)] ${
           showComments ? "-translate-x-full opacity-0 pointer-events-none" : "translate-x-0 opacity-100"
         }`}
         aria-hidden={showComments}
@@ -1324,7 +1324,7 @@ export default function RightColumn({
           only clear once it's actually on screen (§6). */}
       {commentsAvailable && (
         <div
-          className={`absolute inset-0 overflow-y-auto transition-[translate,opacity] duration-[400ms] ease-[cubic-bezier(0,0,0.2,1)] ${
+          className={`absolute inset-0 overflow-y-auto transition-[translate,opacity] duration-[200ms] ease-[cubic-bezier(0,0,0.2,1)] ${
             showComments ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 pointer-events-none"
           }`}
           aria-hidden={!showComments}

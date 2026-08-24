@@ -94,15 +94,32 @@ body {
 /* Comment highlights (Shared With You §3.4) — painted via the CSS Custom
    Highlight API so commented ranges tint the immutable snapshot HTML without
    mutating it. Registered in components/sharing/ReadComments. */
+
+/* --hc-hl-opacity fades the tier-2 editor highlights in/out with the
+   Library↔Comments panel transition. ::highlight() can't be transitioned
+   directly, but it resolves var()s from the underlying prose, and a registered
+   custom property animates — so EditorComments drives this 0↔1 and each
+   background cross-fades via color-mix. Defaults to 1 so ReadComments (which
+   never toggles it) shows highlights outright; EditorComments mounts behind the
+   Library, drives it to 0, then to 1 on open for the fade-in. Duration mirrors
+   HL_FADE_MS in EditorComments. */
+@property --hc-hl-opacity {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+:root {
+  transition: --hc-hl-opacity 200ms ease-in-out;
+}
 ::highlight(hc-comment-inactive) {
-  background-color: var(--hc-inactive-highlight);
+  background-color: color-mix(in srgb, var(--hc-inactive-highlight) calc(var(--hc-hl-opacity) * 100%), transparent);
 }
 ::highlight(hc-comment-active) {
-  background-color: var(--hc-accent);
-  color: var(--hc-on-accent);
+  background-color: color-mix(in srgb, var(--hc-accent) calc(var(--hc-hl-opacity) * 100%), transparent);
+  color: color-mix(in srgb, var(--hc-on-accent) calc(var(--hc-hl-opacity) * 100%), transparent);
 }
 ::highlight(hc-comment-resolved) {
-  background-color: var(--hc-hover);
+  background-color: color-mix(in srgb, var(--hc-hover) calc(var(--hc-hl-opacity) * 100%), transparent);
 }
 
 /* Inline wordmark logo (logo-S.svg is authored near-black). Render it light on
