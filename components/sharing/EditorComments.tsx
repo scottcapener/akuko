@@ -50,6 +50,12 @@ type CachedComments = {
 };
 const commentsCache = new Map<string, CachedComments>();
 
+// Fade the tier-2 prose highlights in/out with the Library↔Comments panel
+// transition (RightColumn's SLIDE_MS) rather than popping. Drives --hc-hl-opacity
+// so ::highlight() backgrounds cross-fade; keep in sync with the CSS transition
+// on that property in globals.css.
+const HL_FADE_MS = 200;
+
 export function EditorComments({
   chapterId,
   currentUserId,
@@ -158,17 +164,21 @@ export function EditorComments({
     const HighlightCtor = win.Highlight;
     if (!highlights || !HighlightCtor) return; // unsupported → cards still work
 
+    const root = document.documentElement;
     const clear = () => {
       highlights.delete("hc-comment-inactive");
       highlights.delete("hc-comment-active");
       highlights.delete("hc-comment-resolved");
     };
 
-    // Only tint the prose while the Comments tab is actually on screen; behind
-    // the Library the author is writing and shouldn't see comment highlights.
+    // Behind the Library the author is writing and shouldn't see comment
+    // highlights. Fade them out with the panel (--hc-hl-opacity → 0) but keep the
+    // ranges painted until the fade finishes, then drop them. Re-activating
+    // mid-fade re-runs this effect, cancelling the pending clear via cleanup.
     if (!active) {
-      clear();
-      return;
+      root.style.setProperty("--hc-hl-opacity", "0");
+      const t = window.setTimeout(clear, HL_FADE_MS);
+      return () => window.clearTimeout(t);
     }
 
     const inactive = new HighlightCtor();
@@ -190,7 +200,9 @@ export function EditorComments({
     highlights.set("hc-comment-inactive", inactive);
     highlights.set("hc-comment-active", activeHl);
     highlights.set("hc-comment-resolved", resolved);
-    return clear;
+    // Fade in on open; a no-op once visible, so selecting a card (activeId
+    // change while the tab is already open) still re-tints instantly.
+    root.style.setProperty("--hc-hl-opacity", "1");
   }, [active, activeId, comments]);
 
   // Clear any lingering highlights when the tab unmounts (chapter switch, etc.).
