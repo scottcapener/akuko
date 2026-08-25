@@ -69,6 +69,19 @@ export function EditorComments({
   const [shared, setShared] = useState<boolean | null>(seeded?.shared ?? null); // null = loading
   const [activeId, setActiveId] = useState<string | null>(null);
 
+  // Clicking anywhere outside a comment card deselects the current one. Clicks
+  // inside a card are handled by the card itself (select / edit). Mirrors the
+  // same pattern in ReadComments — keep the two in sync.
+  useEffect(() => {
+    if (!activeId) return;
+    function onDown(e: MouseEvent) {
+      if ((e.target as Element | null)?.closest("[data-comment-card]")) return;
+      setActiveId(null);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [activeId]);
+
   const isOwner = ownerId != null && currentUserId === ownerId;
 
   // ── Load: live chapter → its snapshot → the shared conversation ──
@@ -377,6 +390,7 @@ function EditorCommentCard({
 
   return (
     <div
+      data-comment-card
       onClick={onSelect}
       className={`bg-panel rounded-xl p-3 border-2 cursor-pointer transition-colors ${
         active ? "border-accent" : "border-border-subtle hover:bg-elevated"
