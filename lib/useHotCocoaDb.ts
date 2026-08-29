@@ -89,6 +89,15 @@ export function useHotCocoaDb() {
   // edit was derived from. Captured when a scene first goes dirty and advanced
   // on each successful save; used to detect conflicts on flush.
   const pendingBases = useRef<Map<string, string | null>>(new Map());
+  // Synchronous mirror of the server `updatedAt` this client last wrote per scene.
+  // `pendingBases` is captured from React scene state, which advances only after a
+  // save's `setSections` *commits* — so an edit landing in the window between a
+  // save clearing the base and that commit would re-capture a stale base and
+  // self-conflict against our own just-saved version. This ref is advanced
+  // synchronously on every clean save, so the next edit always bases on the true
+  // latest version regardless of render timing. Falls back to scene state for a
+  // scene not yet saved this session. See the conflict-race fix.
+  const sceneVersions = useRef<Map<string, string>>(new Map());
   const pendingNoteSaves = useRef<Map<string, { title?: string; body?: string }>>(new Map());
   const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -437,6 +446,9 @@ export function useHotCocoaDb() {
         if (outcome.status === "saved") {
           savedUpdates.set(sceneId, outcome.updatedAt);
           doneIds.push(sceneId);
+          // Record the new base synchronously so an edit arriving before the
+          // `setSections` advance below commits still bases on this version.
+          sceneVersions.current.set(sceneId, outcome.updatedAt);
           pendingBases.current.delete(sceneId);
         } else if (outcome.status === "deleted") {
           // Scene removed elsewhere — drop the orphaned edit.
@@ -583,7 +595,13 @@ export function useHotCocoaDb() {
         // recovered edit is visible, not just re-synced. Carry the durable base
         // so the flush conditions on the version the edit was derived from.
         pendingSaves.current.set(id, patch);
-        if (!pendingBases.current.has(id)) pendingBases.current.set(id, baseUpdatedAt);
+        if (!pendingBases.current.has(id)) {
+          // A durable row can be re-created with a now-stale base if its
+          // fire-and-forget enqueue lands after the save that removed it. Trust
+          // our synchronous last-written version over the persisted base when we
+          // have one, so recovery can't replay a scene against an outdated base.
+          pendingBases.current.set(id, sceneVersions.current.get(id) ?? baseUpdatedAt);
+        }
         showScenes.set(id, patch);
       }
     }
@@ -727,6 +745,7 @@ export function useHotCocoaDb() {
         // Loser ("mine") lives only in memory / the durable queue, so persist the
         // copy before adopting theirs and clearing the queue below.
         if (!(await preserveLoser())) return;
+        sceneVersions.current.set(sceneId, conflict.theirs.updatedAt);
         setScene({ label: conflict.theirs.label, body: conflict.theirs.body, updatedAt: conflict.theirs.updatedAt });
       } else {
         // Loser ("theirs") is the current server row; copy it first so its content
@@ -745,7 +764,10 @@ export function useHotCocoaDb() {
             setConflicts((prev) => prev.map((c) => (c.sceneId === sceneId ? { ...c, theirs: res.server } : c)));
             return;
           }
-          if (res.status === "saved") setScene({ updatedAt: res.updatedAt });
+          if (res.status === "saved") {
+            sceneVersions.current.set(sceneId, res.updatedAt);
+            setScene({ updatedAt: res.updatedAt });
+          }
           // "deleted" → the scene is gone; just clear the conflict below.
         } catch {
           return; // network error — leave the conflict for another try
@@ -755,6 +777,9 @@ export function useHotCocoaDb() {
       offlineQueue.removeSceneWrites([sceneId]).catch(() => {});
       pendingSaves.current.delete(sceneId);
       pendingBases.current.delete(sceneId);
+      // sceneVersions is left set to the resolved version (theirs, or the row we
+      // just wrote) by both branches above, so the next edit bases on it directly
+      // without waiting for the scene-state advance to commit.
       copiedLoserBody.current.delete(sceneId);
       setConflicts((prev) => prev.filter((c) => c.sceneId !== sceneId));
     } finally {
@@ -783,6 +808,7 @@ export function useHotCocoaDb() {
         db
           .saveScene(sceneId, patch, pendingBases.current.get(sceneId) ?? null)
           .then((res) => {
+            if (res.status === "saved") sceneVersions.current.set(sceneId, res.updatedAt);
             if (res.status === "saved" || res.status === "deleted") {
               offlineQueue.removeSceneWrites([sceneId]).catch(() => {});
             }
@@ -1069,12 +1095,21 @@ export function useHotCocoaDb() {
       // server version it's being edited from. Held (not re-captured per
       // keystroke) until a save advances it, so the whole edit conditions on it.
       if (!pendingBases.current.has(sceneId)) {
-        const chapters = [
-          ...sectionsRef.current.flatMap((s) => s.chapters),
-          ...(infoChapterRef.current ? [infoChapterRef.current] : []),
-        ];
-        const scene = chapters.flatMap((c) => c.scenes).find((s) => s.id === sceneId);
-        pendingBases.current.set(sceneId, scene?.updatedAt ?? null);
+        // Prefer the synchronous last-written version over scene state: after a
+        // mid-typing flush the state advance may not have committed yet, so
+        // reading `updatedAt` from state here would recapture a stale base and
+        // self-conflict. Fall back to state for a scene not saved this session.
+        const known = sceneVersions.current.get(sceneId);
+        if (known !== undefined) {
+          pendingBases.current.set(sceneId, known);
+        } else {
+          const chapters = [
+            ...sectionsRef.current.flatMap((s) => s.chapters),
+            ...(infoChapterRef.current ? [infoChapterRef.current] : []),
+          ];
+          const scene = chapters.flatMap((c) => c.scenes).find((s) => s.id === sceneId);
+          pendingBases.current.set(sceneId, scene?.updatedAt ?? null);
+        }
       }
       updateChapterState(chapterId, (c) => ({
         ...c,
@@ -1184,6 +1219,7 @@ export function useHotCocoaDb() {
           scenes: c.scenes.filter((s) => s.id !== sceneId),
         }))
       );
+      sceneVersions.current.delete(sceneId);
       db.deleteScene(sceneId);
     },
     []
