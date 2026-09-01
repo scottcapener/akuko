@@ -14,13 +14,26 @@ export async function getShareState(
 ): Promise<ShareState> {
   const { data: snapshot } = await supabase
     .from("shared_chapters")
-    .select("id")
+    .select("id, updated_at")
     .eq("chapter_id", chapterId)
     .maybeSingle();
 
   if (!snapshot) {
-    return { chapterId, sharedChapterId: null, shared: false, recipients: [] };
+    return { chapterId, sharedChapterId: null, shared: false, recipients: [], stale: false };
   }
+
+  // Freshness: the live chapter has edits since the snapshot was last taken.
+  // chapters.updated_at is maintained by migration 019 (direct edits + a scene
+  // trigger), so this is one cheap read, not a scan of scene bodies.
+  const { data: chapter } = await supabase
+    .from("chapters")
+    .select("updated_at")
+    .eq("id", chapterId)
+    .maybeSingle();
+  const stale =
+    !!chapter?.updated_at &&
+    !!snapshot.updated_at &&
+    new Date(chapter.updated_at).getTime() > new Date(snapshot.updated_at).getTime();
 
   const { data: grants } = await supabase
     .from("chapter_shares")
@@ -63,5 +76,5 @@ export async function getShareState(
     });
   }
 
-  return { chapterId, sharedChapterId: snapshot.id, shared: true, recipients };
+  return { chapterId, sharedChapterId: snapshot.id, shared: true, recipients, stale };
 }

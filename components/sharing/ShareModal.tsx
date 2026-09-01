@@ -69,7 +69,8 @@ export function ShareModal({ chapterId, initialState, onClose, onStateChange }: 
   async function share(value: string): Promise<boolean> {
     const v = value.trim().toLowerCase();
     if (!EMAIL_RE.test(v) || busy) return false;
-    if (recipients.some((r) => r.email.toLowerCase() === v)) return true;
+    // Re-submitting an existing recipient is allowed: it re-fires the share
+    // notification email (the grant itself is left unchanged, server-side).
     setBusy(true);
     setPendingEmail(v);
     setError("");

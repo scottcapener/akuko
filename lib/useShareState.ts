@@ -68,6 +68,7 @@ export function useShareState(chapterId: string): ShareState & { refresh: () => 
     sharedChapterId: state?.sharedChapterId ?? null,
     shared: state?.shared ?? false,
     recipients: state?.recipients ?? [],
+    stale: state?.stale ?? false,
     refresh,
   };
 }

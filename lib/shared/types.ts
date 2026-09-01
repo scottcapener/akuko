@@ -14,6 +14,10 @@ export interface ShareState {
   sharedChapterId: string | null;
   shared: boolean;
   recipients: ShareRecipient[];
+  /** The live chapter has edits since the shared copy was last snapshotted, so
+   *  the shared copy is behind the author's current draft. Drives the "Update
+   *  shared chapter?" prompt on "View as reader". Always false when not shared. */
+  stale: boolean;
 }
 
 /** Someone the author has shared any chapter with before — the Share modal's

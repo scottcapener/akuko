@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { Modal } from "@/components/ui/Modal";
 import { ShareModal } from "./ShareModal";
 import { useUnread } from "@/lib/useUnread";
 import { useShareState, publishShareState } from "@/lib/useShareState";
@@ -40,6 +43,7 @@ export function SharingMenu({
   // Share state comes from the shared store so the panel header's Comments icon
   // (RightColumn) and this menu never disagree; publishing here updates both.
   const state = useShareState(chapterId);
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
@@ -47,6 +51,10 @@ export function SharingMenu({
   const [alsoStopSharing, setAlsoStopSharing] = useState(false);
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>("idle");
   const [busy, setBusy] = useState(false);
+  // "View as reader" freshness prompt (§ View as reader): shown only when the
+  // live chapter has edits the shared copy is missing.
+  const [freshnessOpen, setFreshnessOpen] = useState(false);
+  const [updatingForView, setUpdatingForView] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const updateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -58,6 +66,7 @@ export function SharingMenu({
     setMenuOpen(false);
     setConfirmStop(false);
     setConfirmDelete(false);
+    setFreshnessOpen(false);
     setUpdatePhase("idle");
     if (updateTimer.current) clearTimeout(updateTimer.current);
     refresh();
@@ -128,6 +137,44 @@ export function SharingMenu({
       setBusy(false);
       setMenuOpen(false);
       setConfirmStop(false);
+    }
+  }
+
+  // "View as reader" — open the Read view of this chapter's shared copy. If the
+  // live chapter has edits the shared copy is missing (state.stale), offer to
+  // update first; otherwise go straight in. Only rendered when shared, so a
+  // snapshot (sharedChapterId) always exists here.
+  function goToRead() {
+    if (!state.sharedChapterId) return;
+    router.push(`/shared/${state.sharedChapterId}`);
+  }
+
+  function viewAsReader() {
+    if (!state.sharedChapterId) return;
+    if (state.stale) { setFreshnessOpen(true); return; }
+    goToRead();
+  }
+
+  // "Yes, update" in the freshness prompt: re-snapshot, then enter Read so the
+  // reader text matches the current draft. Same update as the menu's Update
+  // button (and it re-stales some comments, §7).
+  async function updateThenView() {
+    if (updatingForView) return;
+    setUpdatingForView(true);
+    try {
+      const res = await fetch("/api/share/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chapterId }),
+      });
+      if (res.ok) {
+        publishShareState(await res.json());
+        window.dispatchEvent(new CustomEvent("hc:shared-updated"));
+      }
+    } finally {
+      setUpdatingForView(false);
+      setFreshnessOpen(false);
+      goToRead();
     }
   }
 
@@ -215,6 +262,15 @@ export function SharingMenu({
                     Stop sharing
                   </button>
                 )}
+
+                {/* View as reader — see the Read view of the shared copy, as a
+                    recipient does. Text-only, centered, under the actions. */}
+                <button
+                  onClick={viewAsReader}
+                  className="w-full text-center text-xs text-text py-1.5 hover:text-accent transition-colors"
+                >
+                  View as reader
+                </button>
               </>
             ) : (
               /* State 1 — not shared. */
@@ -276,6 +332,28 @@ export function SharingMenu({
           onClose={() => setModalOpen(false)}
           onStateChange={publishShareState}
         />
+      )}
+
+      {freshnessOpen && (
+        <Modal onClose={() => setFreshnessOpen(false)} maxWidth="max-w-sm" backdrop="dark">
+          <div className="p-5 flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <h2 className="text-text text-base font-bold">Update shared chapter?</h2>
+              <p className="text-sm text-subtle leading-relaxed">
+                There have been edits to this chapter since it was last shared. Do you want to update
+                the shared copy before viewing?
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button variant="primary" loading={updatingForView} onClick={updateThenView}>
+                Yes, update
+              </Button>
+              <Button variant="secondary" className="w-full text-center" disabled={updatingForView} onClick={() => { setFreshnessOpen(false); goToRead(); }}>
+                Not now
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {confirmDelete && (
