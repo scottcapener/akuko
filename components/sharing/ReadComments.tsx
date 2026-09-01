@@ -70,6 +70,16 @@ export function ReadComments({
   const [collapsed, setCollapsed] = useState(false);
   // The current user's identity for the composer's author line (Stage 7 / 7.3).
   const [me, setMe] = useState<Me | null>(null);
+
+  // The reader view never fades its highlights, so it owns --hc-hl-opacity at
+  // full strength. This is a global on <html> that the editor's Comments tab
+  // drives 0↔1 and that survives client-side navigation — without asserting it
+  // here, arriving from the workspace with the Library showing (opacity 0) would
+  // paint the active-comment highlight as fully transparent, invisible text.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--hc-hl-opacity", "1");
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     getProfile(currentUserId)

@@ -219,6 +219,12 @@ export function EditorComments({
   }, [active, activeId, comments]);
 
   // Clear any lingering highlights when the tab unmounts (chapter switch, etc.).
+  // Also reset --hc-hl-opacity, which we set on <html> to fade the editor
+  // highlights. It's a global that survives client-side navigation, so if the
+  // Library tab (active=false → opacity 0) was showing when the author leaves the
+  // workspace — e.g. "View as reader" — the reader view would inherit opacity 0
+  // and paint its active-comment highlight as fully transparent (invisible) text.
+  // Removing the inline value restores the @property initial (1) for everyone.
   useEffect(() => {
     return () => {
       const win = window as unknown as {
@@ -228,6 +234,7 @@ export function EditorComments({
       h?.delete("hc-comment-inactive");
       h?.delete("hc-comment-active");
       h?.delete("hc-comment-resolved");
+      document.documentElement.style.removeProperty("--hc-hl-opacity");
     };
   }, []);
 
