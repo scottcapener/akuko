@@ -29,14 +29,21 @@ export function normalizeEmails(raw: string[]): string[] {
 export interface ShareResult {
   sharedChapterId: string;
   created: boolean;
-  /** Emails that gained an active grant on this call (new or un-revoked). */
+  /** Emails that gained an active grant on this call (new or un-revoked). Only
+   *  these need redemption — re-added active recipients are already resolved. */
   addedEmails: string[];
+  /** Emails to (re)send the share notification to: every address submitted on
+   *  this call, since re-adding an existing recipient re-fires the email by
+   *  design. The Share modal submits one address per action, so this notifies
+   *  exactly the just-submitted recipient(s), not the whole recipient list. */
+  notifyEmails: string[];
 }
 
 /**
  * Share `chapterId` with `emails`. Snapshots on first share, then ensures an
- * active grant per email. Idempotent: re-adding an existing recipient is a
- * no-op; re-adding a revoked one re-activates their grant.
+ * active grant per email. Idempotent for the *grant*: re-adding an existing
+ * recipient leaves it unchanged and re-adding a revoked one re-activates it —
+ * but every submitted email is re-notified (see notifyEmails).
  */
 export async function shareChapter(
   supabase: SupabaseClient,
@@ -49,7 +56,9 @@ export async function shareChapter(
   const { sharedChapterId, created } = await snapshotChapter(supabase, chapterId, ownerId);
 
   const addedEmails = await grantRecipients(supabase, ownerId, sharedChapterId, clean);
-  return { sharedChapterId, created, addedEmails };
+  // Every submitted email ends with an active grant (new, reactivated, or
+  // already-active), so the full clean list is the notify set.
+  return { sharedChapterId, created, addedEmails, notifyEmails: clean };
 }
 
 /**

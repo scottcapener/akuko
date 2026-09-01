@@ -68,18 +68,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status });
   }
 
-  // Redeem existing accounts immediately, then email the newly-added recipients.
-  // Both are best-effort — the share itself is already committed.
-  if (result.addedEmails.length) {
-    const admin = createAdminClient();
-    if (admin) {
-      await admin
-        .rpc("resolve_share_recipients", { target: result.sharedChapterId })
-        .then(({ error }) => {
-          if (error) console.error("[share] resolve_share_recipients:", error.message);
-        });
-    }
-    await notifyNewRecipients(supabase, admin, user.id, user.email ?? "", result.sharedChapterId, result.addedEmails);
+  // Redeem newly-granted accounts, then email everyone submitted on this call
+  // (re-adds re-fire the notification by design). Both best-effort — the share
+  // itself is already committed. Redemption only matters for genuinely new/
+  // reactivated grants; re-added active recipients are already resolved.
+  const admin = createAdminClient();
+  if (result.addedEmails.length && admin) {
+    await admin
+      .rpc("resolve_share_recipients", { target: result.sharedChapterId })
+      .then(({ error }) => {
+        if (error) console.error("[share] resolve_share_recipients:", error.message);
+      });
+  }
+  if (result.notifyEmails.length) {
+    await notifyNewRecipients(supabase, admin, user.id, user.email ?? "", result.sharedChapterId, result.notifyEmails);
   }
 
   const state = await getShareState(supabase, chapterId);
@@ -107,7 +109,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, chapterId, sharedChapterId: null, shared: false, recipients: [] });
+  return NextResponse.json({ ok: true, chapterId, sharedChapterId: null, shared: false, recipients: [], stale: false });
 }
 
 /** Email each newly-added recipient the "shared a chapter with you" note,

@@ -133,9 +133,14 @@ export default function SharedReadPage({
     );
   }
 
+  // Owners reach Read via "View as reader" from the writer; exit returns them to
+  // Write (their editing chapter is unchanged by viewing). Recipients go back to
+  // their /shared feed.
+  const exitTo = view?.isOwner ? "/write" : "/shared";
+
   return (
     <div className="h-full flex flex-col bg-bg">
-      <ReadHeader view={view} onExit={() => router.push("/shared")} />
+      <ReadHeader view={view} onExit={() => router.push(exitTo)} />
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
         {/* Left — read-only Book Panel (desktop), resizable via the divider. */}
@@ -196,6 +201,7 @@ function ReadHeader({
   view: ReadView | null;
   onExit: () => void;
 }) {
+  const exitLabel = view?.isOwner ? "Back to editing" : "Back to Shared with you";
   return (
     <header className="h-16 flex-shrink-0 bg-panel border-b border-border-subtle flex items-center justify-between px-4 gap-3">
       <div className="flex items-center gap-3 min-w-0">
@@ -222,8 +228,8 @@ function ReadHeader({
       <div className="flex items-center gap-1 flex-shrink-0">
         <button
           onClick={onExit}
-          aria-label="Close"
-          title="Back to Shared with you"
+          aria-label={exitLabel}
+          title={exitLabel}
           className="w-8 h-8 flex items-center justify-center rounded-lg text-subtle hover:text-text hover:bg-hover transition-colors"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

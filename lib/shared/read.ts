@@ -28,6 +28,9 @@ export interface ReadView {
   scenes: ReadScene[];
   /** The book's chapters this reader can access, in book order (Book Panel). */
   chapters: BookPanelChapter[];
+  /** The viewer owns this book — they reached Read via "View as reader", not a
+   *  share. Changes the exit target (back to Write, not the /shared feed). */
+  isOwner: boolean;
 }
 
 export async function getSharedChapterView(
@@ -88,5 +91,6 @@ export async function getSharedChapterView(
     authorAvatarUrl,
     scenes: (scenes ?? []).map((s) => ({ id: s.id, bodyHtml: s.body_html ?? "" })),
     chapters,
+    isOwner: snapshot.owner_id === userId,
   };
 }

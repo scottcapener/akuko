@@ -38,6 +38,10 @@ export async function getRecentPartners(
   const distinct: { email: string; recipientId: string | null }[] = [];
   for (const g of grants ?? []) {
     const email = String(g.recipient_email).toLowerCase();
+    // Never suggest the author themselves — self-sharing is allowed (a writing-
+    // group host may want their own chapters in /shared), but the quick-list is
+    // for inviting other people. A resolved self-grant has recipient_id == me.
+    if (g.recipient_id === userId) continue;
     if (seen.has(email)) continue;
     seen.add(email);
     distinct.push({ email, recipientId: (g.recipient_id as string | null) ?? null });
