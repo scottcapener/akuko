@@ -1142,6 +1142,42 @@ export function useHotCocoaDb() {
     [sections]
   );
 
+  // Refresh the optimistic-concurrency base for scenes whose server row was
+  // touched by a *structural* write (reorder / move / split). Migration 020 keeps
+  // updated_at from bumping on those, but selecting it back and syncing here makes
+  // the client trust the server value no matter what — so a drag-then-edit can't
+  // condition on a stale base and pop a false conflict. Skips any scene with a
+  // pending content edit (its own save reconciles the base) and only ever advances
+  // a version forward, so a slow structural response can't regress a base past a
+  // content save that already landed.
+  const applySceneVersions = useCallback((versions: db.SceneVersion[]) => {
+    const advanced = new Map<string, string>();
+    for (const { id, updatedAt } of versions) {
+      if (pendingBases.current.has(id) || pendingSaves.current.has(id)) continue;
+      const cur = sceneVersions.current.get(id);
+      if (!cur || Date.parse(updatedAt) >= Date.parse(cur)) {
+        sceneVersions.current.set(id, updatedAt);
+        advanced.set(id, updatedAt);
+      }
+    }
+    if (advanced.size === 0) return;
+    setSections((prev) =>
+      prev.map((sec) => ({
+        ...sec,
+        chapters: sec.chapters.map((ch) => {
+          let touched = false;
+          const scenes = ch.scenes.map((s) => {
+            const u = advanced.get(s.id);
+            if (!u) return s;
+            touched = true;
+            return { ...s, updatedAt: u };
+          });
+          return touched ? { ...ch, scenes } : ch;
+        }),
+      }))
+    );
+  }, []);
+
   const reorderScenes = useCallback(
     (chapterId: string, fromIndex: number, toIndex: number) => {
       setSections((prev) =>
@@ -1149,12 +1185,14 @@ export function useHotCocoaDb() {
           const next = [...c.scenes];
           const [moved] = next.splice(fromIndex, 1);
           next.splice(toIndex, 0, moved);
-          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })));
+          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })))
+            .then(applySceneVersions)
+            .catch(() => {});
           return { ...c, scenes: next };
         })
       );
     },
-    []
+    [applySceneVersions]
   );
 
   // Move a scene to a (possibly different) chapter, inserting at gap `toIndex`
@@ -1182,7 +1220,9 @@ export function useHotCocoaDb() {
           const insertAt = Math.max(0, Math.min(toIndex > fromIndex ? toIndex - 1 : toIndex, next.length));
           if (insertAt === fromIndex) return prev; // no-op drop onto itself
           next.splice(insertAt, 0, scene);
-          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })));
+          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })))
+            .then(applySceneVersions)
+            .catch(() => {});
           return mapChapter(prev, fromChapterId, (c) => ({ ...c, scenes: next }));
         }
 
@@ -1197,7 +1237,9 @@ export function useHotCocoaDb() {
           toChapterId,
           fromScenes.map((s, i) => ({ id: s.id, position: i })),
           toScenes.map((s, i) => ({ id: s.id, position: i }))
-        );
+        )
+          .then(applySceneVersions)
+          .catch(() => {});
         return prev.map((sec) => ({
           ...sec,
           chapters: sec.chapters.map((c) => {
@@ -1208,7 +1250,7 @@ export function useHotCocoaDb() {
         }));
       });
     },
-    [loadChapter]
+    [loadChapter, applySceneVersions]
   );
 
   const deleteScene = useCallback(
@@ -1235,12 +1277,14 @@ export function useHotCocoaDb() {
           const next = [...c.scenes];
           const at = Math.max(0, Math.min(index, next.length));
           next.splice(at, 0, newScene);
-          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })));
+          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })))
+            .then(applySceneVersions)
+            .catch(() => {});
           return { ...c, scenes: next };
         })
       );
     },
-    []
+    [applySceneVersions]
   );
 
   // Split a chapter at gap `index`: scenes[index..] move into a brand-new chapter
@@ -1269,7 +1313,9 @@ export function useHotCocoaDb() {
         movedScenes.map((s) => s.id),
         keptScenes.map((s, i) => ({ id: s.id, position: i })),
         movedScenes.map((s, i) => ({ id: s.id, position: i }))
-      );
+      )
+        .then(applySceneVersions)
+        .catch(() => {});
 
       setSections((prev) =>
         prev.map((sec) => {
@@ -1282,7 +1328,7 @@ export function useHotCocoaDb() {
         })
       );
     },
-    [book, sections]
+    [book, sections, applySceneVersions]
   );
 
   // Duplicate a chapter (title + scenes only; library starts empty). The copy is

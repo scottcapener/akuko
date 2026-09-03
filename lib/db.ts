@@ -610,11 +610,31 @@ export async function saveScene(
   };
 }
 
-export async function reorderScenes(scenes: { id: string; position: number }[]) {
+// The server `updated_at` for a scene after a structural write, so the client can
+// refresh its optimistic-concurrency base (see useHotCocoaDb `applySceneVersions`).
+export type SceneVersion = { id: string; updatedAt: string };
+
+function collectSceneVersions(
+  results: { data: { id: string; updated_at: string }[] | null }[]
+): SceneVersion[] {
+  return results.flatMap((r) => (r.data ?? []).map((row) => ({ id: row.id, updatedAt: row.updated_at })));
+}
+
+// Reorder scenes within a chapter. Returns each touched scene's server
+// `updated_at` so the caller can keep its concurrency base in sync — a
+// position-only write no longer bumps updated_at (migration 020), but selecting
+// it back lets the client trust the server value regardless of trigger behavior,
+// which is what stops a drag-then-edit from throwing a false conflict.
+export async function reorderScenes(
+  scenes: { id: string; position: number }[]
+): Promise<SceneVersion[]> {
   const db = supabase();
-  await Promise.all(
-    scenes.map((s) => db.from("scenes").update({ position: s.position }).eq("id", s.id))
+  const results = await Promise.all(
+    scenes.map((s) =>
+      db.from("scenes").update({ position: s.position }).eq("id", s.id).select("id, updated_at")
+    )
   );
+  return collectSceneVersions(results);
 }
 
 export async function deleteScene(sceneId: string) {
@@ -631,13 +651,18 @@ export async function moveScene(
   toChapterId: string,
   fromPositions: { id: string; position: number }[],
   toPositions: { id: string; position: number }[]
-) {
+): Promise<SceneVersion[]> {
   const db = supabase();
-  await Promise.all([
-    db.from("scenes").update({ chapter_id: toChapterId }).eq("id", sceneId),
-    ...fromPositions.map((s) => db.from("scenes").update({ position: s.position }).eq("id", s.id)),
-    ...toPositions.map((s) => db.from("scenes").update({ position: s.position }).eq("id", s.id)),
+  const results = await Promise.all([
+    db.from("scenes").update({ chapter_id: toChapterId }).eq("id", sceneId).select("id, updated_at"),
+    ...fromPositions.map((s) =>
+      db.from("scenes").update({ position: s.position }).eq("id", s.id).select("id, updated_at")
+    ),
+    ...toPositions.map((s) =>
+      db.from("scenes").update({ position: s.position }).eq("id", s.id).select("id, updated_at")
+    ),
   ]);
+  return collectSceneVersions(results);
 }
 
 // Insert a chapter row WITHOUT the auto blank scene that `createChapter` adds —
@@ -689,13 +714,20 @@ export async function splitChapter(
   movedSceneIds: string[],
   sourcePositions: { id: string; position: number }[],
   movedPositions: { id: string; position: number }[]
-) {
+): Promise<SceneVersion[]> {
   const db = supabase();
-  await Promise.all([
-    ...movedSceneIds.map((id) => db.from("scenes").update({ chapter_id: newChapterId }).eq("id", id)),
-    ...sourcePositions.map((s) => db.from("scenes").update({ position: s.position }).eq("id", s.id)),
-    ...movedPositions.map((s) => db.from("scenes").update({ position: s.position }).eq("id", s.id)),
+  const results = await Promise.all([
+    ...movedSceneIds.map((id) =>
+      db.from("scenes").update({ chapter_id: newChapterId }).eq("id", id).select("id, updated_at")
+    ),
+    ...sourcePositions.map((s) =>
+      db.from("scenes").update({ position: s.position }).eq("id", s.id).select("id, updated_at")
+    ),
+    ...movedPositions.map((s) =>
+      db.from("scenes").update({ position: s.position }).eq("id", s.id).select("id, updated_at")
+    ),
   ]);
+  return collectSceneVersions(results);
 }
 
 // Move a chapter into a different section and renumber both sections. Mirrors
