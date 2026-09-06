@@ -6,8 +6,10 @@
 // them on reopen / reconnect. The in-memory Maps in useHotCocoaDb stay the
 // primary debounce accumulators; this is the durable shadow beneath them.
 //
-// Deliberately conflict-free: last-write-wins, no base-version guard yet.
-// Per-scene conflict detection is Phase 2.
+// Conflict-free by design: last-write-wins. Each scene edit carries the client's
+// edit-time `authoredAt`; the save applies only if it beats the row's token
+// (lib/db.ts saveScene, migration 021), so a replay after reload/reconnect can't
+// clobber a newer edit made elsewhere.
 
 import { Scene } from "./types";
 import { openDb, objectStore, promisify, SCENE_STORE, NOTE_STORE, SCENE_KEY, NOTE_KEY } from "./offlineDb";
@@ -19,11 +21,11 @@ interface PendingWrite<P> {
   userId: string; // so queued work survives re-login and never crosses accounts
   patch: P;
   queuedAt: number;
-  // Optimistic-concurrency base captured when the edit was first queued (scenes
-  // only). Carried through so a replay after a page reload conditions its save
-  // on the version the edit was actually derived from — not whatever the reload
-  // fetched. Null for notes / brand-new scenes.
-  baseUpdatedAt?: string | null;
+  // Last-write-wins token: the client's edit-time timestamp (scenes only). Carried
+  // through so a replay after a reload still wins/loses on when the edit was
+  // actually made, not whatever the reload fetched. Null for notes; a pre-021
+  // durable row lacks it and replays as now() (treated as newest).
+  authoredAt?: string | null;
 }
 
 // Merge a patch into a store, coalescing with any patch already queued for that
@@ -36,7 +38,7 @@ function enqueue<P extends object>(
   userId: string,
   id: string,
   patch: P,
-  baseUpdatedAt?: string | null
+  authoredAt?: string | null
 ): Promise<void> {
   return openDb()
     .then(
@@ -47,14 +49,16 @@ function enqueue<P extends object>(
           const getReq = os.get(id);
           getReq.onsuccess = () => {
             const existing = getReq.result as (PendingWrite<P> & Record<string, unknown>) | undefined;
+            // Keep the LATEST authoredAt across coalesced keystrokes, so the batch
+            // is stamped with when the author last actually edited it.
+            const prior = (existing?.authoredAt as string | null | undefined) ?? null;
             const merged = {
               [keyField]: id,
               userId,
               patch: { ...(existing?.patch ?? {}), ...patch },
               queuedAt: existing?.queuedAt ?? Date.now(),
-              // Keep the base from the first queued edit — later keystrokes share
-              // the same base until a save advances it.
-              baseUpdatedAt: existing?.baseUpdatedAt ?? baseUpdatedAt ?? null,
+              authoredAt:
+                authoredAt && (!prior || authoredAt > prior) ? authoredAt : prior ?? authoredAt ?? null,
             };
             const putReq = os.put(merged);
             putReq.onsuccess = () => resolve();
@@ -78,14 +82,14 @@ async function read<P>(
   storeName: string,
   keyField: string,
   userId: string
-): Promise<{ id: string; patch: P; baseUpdatedAt: string | null }[]> {
+): Promise<{ id: string; patch: P; authoredAt: string | null }[]> {
   const db = await openDb();
   if (!db) return [];
   const os = objectStore(db, storeName, "readonly");
   const all = (await promisify(os.getAll())) as (PendingWrite<P> & Record<string, string>)[];
   return all
     .filter((w) => w.userId === userId)
-    .map((w) => ({ id: w[keyField], patch: w.patch, baseUpdatedAt: w.baseUpdatedAt ?? null }));
+    .map((w) => ({ id: w[keyField], patch: w.patch, authoredAt: w.authoredAt ?? null }));
 }
 
 // ── Public API: scenes ──────────────────────────────────────────────────────
@@ -94,13 +98,13 @@ export function enqueueSceneWrite(
   userId: string,
   sceneId: string,
   patch: Partial<Scene>,
-  baseUpdatedAt?: string | null
+  authoredAt?: string | null
 ): Promise<void> {
   const durable: ScenePatch = {};
   if (patch.label !== undefined) durable.label = patch.label;
   if (patch.body !== undefined) durable.body = patch.body;
   if (durable.label === undefined && durable.body === undefined) return Promise.resolve();
-  return enqueue(SCENE_STORE, SCENE_KEY, userId, sceneId, durable, baseUpdatedAt);
+  return enqueue(SCENE_STORE, SCENE_KEY, userId, sceneId, durable, authoredAt);
 }
 
 export function removeSceneWrites(sceneIds: string[]): Promise<void> {
@@ -109,7 +113,7 @@ export function removeSceneWrites(sceneIds: string[]): Promise<void> {
 
 export function readSceneWrites(
   userId: string
-): Promise<{ id: string; patch: ScenePatch; baseUpdatedAt: string | null }[]> {
+): Promise<{ id: string; patch: ScenePatch; authoredAt: string | null }[]> {
   return read<ScenePatch>(SCENE_STORE, SCENE_KEY, userId);
 }
 
