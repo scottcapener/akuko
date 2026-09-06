@@ -428,6 +428,7 @@ export function useHotCocoaDb() {
       // Per-scene state patches to apply after the pass: a clean save advances the
       // version fields; a stale save silently adopts the newer server row's content.
       const patches = new Map<string, Partial<Scene>>();
+      let anySaved = false; // did any of our writes actually land? (drives "Saved")
 
       saves.forEach(([sceneId, patch], i) => {
         const result = results[i];
@@ -441,6 +442,7 @@ export function useHotCocoaDb() {
         const hasNewer = pendingSaves.current.has(sceneId);
         const outcome = result.value;
         if (outcome.status === "saved") {
+          anySaved = true;
           doneIds.push(sceneId);
           patches.set(sceneId, { updatedAt: outcome.updatedAt, contentEditedAt: outcome.contentEditedAt });
         } else if (outcome.status === "deleted") {
@@ -522,14 +524,14 @@ export function useHotCocoaDb() {
         return;
       }
 
-      if (savedUpdates.size > 0 && savingShown.current) {
+      if (anySaved && savingShown.current) {
         // The write was slow enough to show "Saving…" — close it out with a brief
         // "Saved", then hide. A fast save never showed the indicator, so skip
         // straight to idle rather than blinking "Saved" on every pause.
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2000);
       } else {
-        // Fast save, or only conflicts / deletions this round — stay silent.
+        // Fast save, or only adoptions / deletions this round — stay silent.
         setSaveStatus("idle");
       }
     } finally {
