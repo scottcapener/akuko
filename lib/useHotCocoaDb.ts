@@ -29,9 +29,18 @@ export interface SceneConflict {
 // Autosave is debounced: a burst of typing collapses into one write DELAY ms
 // after the last keystroke. MAX_WAIT caps how long unsaved edits can sit while
 // someone types continuously (pure debounce would never fire mid-stream), so
-// the unsaved window stays small even without a pause.
-const AUTOSAVE_DELAY = 2_000;
-const AUTOSAVE_MAX_WAIT = 10_000;
+// the unsaved window stays small even without a pause. DELAY rides through
+// normal in-sentence hesitation and fires on a genuine "moved on" pause; every
+// keystroke is still mirrored to IndexedDB, so the wider window risks no work.
+const AUTOSAVE_DELAY = 5_000;
+const AUTOSAVE_MAX_WAIT = 30_000;
+
+// Don't flash "Saving…" for a write that finishes quickly — a fast save on a
+// good connection would otherwise blink the status on every typing pause. Only
+// surface the indicator once a write has been in flight this long, so it shows
+// only when a save is genuinely slow (a laggy connection) and stays out of the
+// way otherwise.
+const SAVE_INDICATOR_DELAY = 450;
 
 
 // Build a non-colliding "… Copy" title for a duplicated chapter: "X Copy", then
@@ -101,6 +110,11 @@ export function useHotCocoaDb() {
   const pendingNoteSaves = useRef<Map<string, { title?: string; body?: string }>>(new Map());
   const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Deferred "Saving…" indicator (see SAVE_INDICATOR_DELAY): the timer fires only
+  // if a write is still in flight after the delay, and `savingShown` records
+  // whether it did so the flush can decide whether to bother showing "Saved".
+  const saveIndicatorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savingShown = useRef(false);
   // Timestamp of the oldest unsaved edit in the current pending batch, so the
   // debounce can be capped at AUTOSAVE_MAX_WAIT from the first edit.
   const firstPendingAt = useRef<number | null>(null);
@@ -414,7 +428,14 @@ export function useHotCocoaDb() {
     isFlushing.current = true;
     try {
       firstPendingAt.current = null;
-      setSaveStatus("saving");
+      // Defer the "Saving…" indicator: only show it if the write is still going
+      // after SAVE_INDICATOR_DELAY, so a fast save leaves the status untouched.
+      savingShown.current = false;
+      if (saveIndicatorTimer.current) clearTimeout(saveIndicatorTimer.current);
+      saveIndicatorTimer.current = setTimeout(() => {
+        savingShown.current = true;
+        setSaveStatus("saving");
+      }, SAVE_INDICATOR_DELAY);
       const saves = Array.from(pendingSaves.current.entries());
       pendingSaves.current.clear();
 
@@ -429,6 +450,13 @@ export function useHotCocoaDb() {
           )
         )
       );
+
+      // Write resolved — stop the pending "Saving…" timer. If it already fired
+      // (a slow save), `savingShown` stays true and the indicator is up.
+      if (saveIndicatorTimer.current) {
+        clearTimeout(saveIndicatorTimer.current);
+        saveIndicatorTimer.current = null;
+      }
 
       const requeue: [string, Partial<Scene>][] = [];
       const doneIds: string[] = []; // durable copies to drop (saved or gone)
@@ -545,11 +573,14 @@ export function useHotCocoaDb() {
         return;
       }
 
-      if (savedUpdates.size > 0) {
+      if (savedUpdates.size > 0 && savingShown.current) {
+        // The write was slow enough to show "Saving…" — close it out with a brief
+        // "Saved", then hide. A fast save never showed the indicator, so skip
+        // straight to idle rather than blinking "Saved" on every pause.
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2000);
       } else {
-        // Only conflicts / deletions this round — nothing successfully written.
+        // Fast save, or only conflicts / deletions this round — stay silent.
         setSaveStatus("idle");
       }
     } finally {
