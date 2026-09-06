@@ -12,20 +12,6 @@ import { wordCountAll } from "./words";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "offline";
 
-// A scene whose queued edit couldn't save because the scene changed elsewhere
-// (another device / tab) since the edit was made. Surfaced to the user to
-// resolve rather than silently overwriting either side.
-export interface SceneConflict {
-  sceneId: string;
-  chapterId: string | null;
-  chapterTitle: string | null;
-  // `basedOn` is the server version this device's edit was derived from — its last
-  // sync point. Older than `theirs.updatedAt` means the other side has changes this
-  // version never saw, so "mine" is the stale one. Null for a brand-new local scene.
-  mine: { label: string; body: string; basedOn: string | null }; // this device's local version
-  theirs: { label: string; body: string; updatedAt: string }; // current server version
-}
-
 // Autosave is debounced: a burst of typing collapses into one write DELAY ms
 // after the last keystroke. MAX_WAIT caps how long unsaved edits can sit while
 // someone types continuously (pure debounce would never fire mid-stream), so
@@ -88,25 +74,14 @@ export function useHotCocoaDb() {
   const [infoChapter, setInfoChapter] = useState<Chapter | null>(null);
   const [bookStats, setBookStats] = useState<db.BookStats | null>(null);
 
-  const [conflicts, setConflicts] = useState<SceneConflict[]>([]);
-  // Non-blocking notice shown after a conflict is resolved: the losing version was
-  // kept as a copy scene, so a wrong choice in the modal is recoverable.
-  const [conflictCopyNotice, setConflictCopyNotice] = useState<{ label: string } | null>(null);
-
   const pendingSaves = useRef<Map<string, Partial<Scene>>>(new Map());
-  // Optimistic-concurrency base per dirty scene — the `updatedAt` the pending
-  // edit was derived from. Captured when a scene first goes dirty and advanced
-  // on each successful save; used to detect conflicts on flush.
-  const pendingBases = useRef<Map<string, string | null>>(new Map());
-  // Synchronous mirror of the server `updatedAt` this client last wrote per scene.
-  // `pendingBases` is captured from React scene state, which advances only after a
-  // save's `setSections` *commits* — so an edit landing in the window between a
-  // save clearing the base and that commit would re-capture a stale base and
-  // self-conflict against our own just-saved version. This ref is advanced
-  // synchronously on every clean save, so the next edit always bases on the true
-  // latest version regardless of render timing. Falls back to scene state for a
-  // scene not yet saved this session. See the conflict-race fix.
-  const sceneVersions = useRef<Map<string, string>>(new Map());
+  // Last-write-wins token per dirty scene — the client's edit-time timestamp, sent
+  // with the save (migration 021 / db.saveScene). Overwritten on every keystroke
+  // so the flush stamps the batch with when the author *last* edited it; a rejected
+  // save keeps its stamp so the retry re-sends the same value (idempotent). This
+  // replaced the optimistic-concurrency base that used to drift stale and pop false
+  // conflict modals — see CONFLICT_SUNSET.md.
+  const pendingAuthoredAt = useRef<Map<string, string>>(new Map());
   const pendingNoteSaves = useRef<Map<string, { title?: string; body?: string }>>(new Map());
   const noteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -131,20 +106,10 @@ export function useHotCocoaDb() {
   const [loadedChapters, setLoadedChapters] = useState<Set<string>>(new Set());
   const prefetchStarted = useRef(false);
 
-  // Refs mirror the latest state so async callbacks (flush, recovery, conflict
-  // resolution) can read current scenes/conflicts without re-subscribing on
-  // every keystroke.
+  // Refs mirror the latest state so async callbacks (flush, recovery) can read the
+  // current scenes without re-subscribing on every keystroke.
   const sectionsRef = useRef(sections);
   sectionsRef.current = sections;
-  const conflictsRef = useRef(conflicts);
-  conflictsRef.current = conflicts;
-  // Guards for non-destructive conflict resolution. `resolvingScenes` drops a
-  // concurrent (double-click) resolve of the same scene; `copiedLoserBody` records
-  // the losing body last preserved per scene, so a retry with the *same* loser
-  // (e.g. an offline save that keeps failing) doesn't stack duplicate copies,
-  // while a genuine re-race (the server version changed) still gets preserved.
-  const resolvingScenes = useRef<Set<string>>(new Set());
-  const copiedLoserBody = useRef<Map<string, string>>(new Map());
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
   const bookRef = useRef(book);
@@ -440,13 +405,13 @@ export function useHotCocoaDb() {
       pendingSaves.current.clear();
 
       // One tab at a time drains the shared queue, so two open tabs can't race the
-      // same write (no-op lock where Web Locks is unsupported). Each save is
-      // conditioned on the scene's base version so a cross-device change surfaces
-      // as a conflict instead of a silent overwrite.
+      // same write (no-op lock where Web Locks is unsupported). Each save carries
+      // its edit-time authoredAt; the server keeps whichever edit is newest, so an
+      // older one is silently superseded rather than surfaced as a conflict.
       const results = await offlineQueue.runExclusive(() =>
         Promise.allSettled(
           saves.map(([sceneId, patch]) =>
-            db.saveScene(sceneId, patch, pendingBases.current.get(sceneId) ?? null)
+            db.saveScene(sceneId, patch, pendingAuthoredAt.current.get(sceneId) ?? null)
           )
         )
       );
@@ -459,71 +424,69 @@ export function useHotCocoaDb() {
       }
 
       const requeue: [string, Partial<Scene>][] = [];
-      const doneIds: string[] = []; // durable copies to drop (saved or gone)
-      const savedUpdates = new Map<string, string>(); // sceneId → new updatedAt
-      const newConflicts: SceneConflict[] = [];
+      const doneIds: string[] = []; // durable copies to drop (saved, gone, or adopted)
+      // Per-scene state patches to apply after the pass: a clean save advances the
+      // version fields; a stale save silently adopts the newer server row's content.
+      const patches = new Map<string, Partial<Scene>>();
 
       saves.forEach(([sceneId, patch], i) => {
         const result = results[i];
         if (result.status === "rejected") {
-          // Network / unknown error — keep it (and its base) queued and retry.
+          // Network / unknown error — keep it (and its authoredAt) queued and retry.
           requeue.push([sceneId, patch]);
           return;
         }
+        // A newer edit that landed mid-save keeps its own authoredAt and wins the
+        // next flush, so don't clear its stamp or overwrite it with this result.
+        const hasNewer = pendingSaves.current.has(sceneId);
         const outcome = result.value;
         if (outcome.status === "saved") {
-          savedUpdates.set(sceneId, outcome.updatedAt);
           doneIds.push(sceneId);
-          // Record the new base synchronously so an edit arriving before the
-          // `setSections` advance below commits still bases on this version.
-          sceneVersions.current.set(sceneId, outcome.updatedAt);
-          pendingBases.current.delete(sceneId);
+          patches.set(sceneId, { updatedAt: outcome.updatedAt, contentEditedAt: outcome.contentEditedAt });
         } else if (outcome.status === "deleted") {
           // Scene removed elsewhere — drop the orphaned edit.
           doneIds.push(sceneId);
-          pendingBases.current.delete(sceneId);
         } else {
-          // Conflict: hand it to the user. Leave the durable copy in IndexedDB so
-          // an unresolved conflict survives a reload (recovery skips it meanwhile).
-          const local = [
-            ...sectionsRef.current.flatMap((s) => s.chapters),
-            ...(infoChapterRef.current ? [infoChapterRef.current] : []),
-          ]
-            .flatMap((c) => c.scenes.map((sc) => ({ scene: sc, chapter: c })))
-            .find((x) => x.scene.id === sceneId);
-          newConflicts.push({
-            sceneId,
-            chapterId: local?.chapter.id ?? null,
-            chapterTitle: local?.chapter.title ?? null,
-            mine: {
-              label: patch.label ?? local?.scene.label ?? outcome.server.label,
-              body: patch.body ?? local?.scene.body ?? outcome.server.body,
-              basedOn: local?.scene.updatedAt ?? null,
-            },
-            theirs: outcome.server,
-          });
-          pendingBases.current.delete(sceneId);
+          // Stale: the server holds a newer-or-equal edit (last-write-wins). Adopt
+          // it silently — no modal, no copy — unless a newer local edit is already
+          // queued, which will win the next flush and shouldn't be clobbered.
+          doneIds.push(sceneId);
+          if (!hasNewer) {
+            patches.set(sceneId, {
+              label: outcome.server.label,
+              body: outcome.server.body,
+              updatedAt: outcome.server.updatedAt,
+              contentEditedAt: outcome.server.contentEditedAt,
+            });
+          }
         }
+        if (!hasNewer) pendingAuthoredAt.current.delete(sceneId);
       });
 
       if (doneIds.length > 0) offlineQueue.removeSceneWrites(doneIds).catch(() => {});
 
-      // Advance the concurrency base for cleanly-saved scenes so the next edit
-      // conditions on the version we just wrote; recompute the word count too.
+      // Apply version advances (clean saves) and adopted server content (stale) to
+      // local state. Shared mapper so `sections` and the out-of-band info chapter
+      // stay in sync.
+      const applyPatches = (scenes: Scene[]): { scenes: Scene[]; touched: boolean } => {
+        let touched = false;
+        const next = scenes.map((s) => {
+          const p = patches.get(s.id);
+          if (!p) return s;
+          touched = true;
+          return { ...s, ...p };
+        });
+        return { scenes: next, touched };
+      };
+
       setSections((prev) => {
         const next =
-          savedUpdates.size > 0
+          patches.size > 0
             ? prev.map((sec) => ({
                 ...sec,
                 chapters: sec.chapters.map((ch) => {
-                  let touched = false;
-                  const scenes = ch.scenes.map((s) => {
-                    const updatedAt = savedUpdates.get(s.id);
-                    if (!updatedAt) return s;
-                    touched = true;
-                    return { ...s, updatedAt };
-                  });
-                  return touched ? { ...ch, scenes } : ch;
+                  const applied = applyPatches(ch.scenes);
+                  return applied.touched ? { ...ch, scenes: applied.scenes } : ch;
                 }),
               }))
             : prev;
@@ -537,28 +500,14 @@ export function useHotCocoaDb() {
         return next;
       });
 
-      // The Synopsis scene lives on the info chapter (outside `sections`), so
-      // advance its base version here too — otherwise the next synopsis edit
-      // would condition on a stale updatedAt and self-conflict.
-      if (savedUpdates.size > 0) {
+      // The Synopsis scene lives on the info chapter (outside `sections`), so apply
+      // there too.
+      if (patches.size > 0) {
         setInfoChapter((prev) => {
           if (!prev) return prev;
-          let touched = false;
-          const scenes = prev.scenes.map((s) => {
-            const updatedAt = savedUpdates.get(s.id);
-            if (!updatedAt) return s;
-            touched = true;
-            return { ...s, updatedAt };
-          });
-          return touched ? { ...prev, scenes } : prev;
+          const applied = applyPatches(prev.scenes);
+          return applied.touched ? { ...prev, scenes: applied.scenes } : prev;
         });
-      }
-
-      if (newConflicts.length > 0) {
-        setConflicts((prev) => [
-          ...prev.filter((c) => !newConflicts.some((n) => n.sceneId === c.sceneId)),
-          ...newConflicts,
-        ]);
       }
 
       // Re-queue any failed scene beneath edits that arrived while saving (newer
@@ -613,25 +562,20 @@ export function useHotCocoaDb() {
     // Scenes: merge into the in-memory queue (an in-tab edit stays newest) and
     // reflect edits recovered from elsewhere in any loaded editor.
     const showScenes = new Map<string, offlineQueue.ScenePatch>();
-    for (const { id, patch, baseUpdatedAt } of sceneWrites) {
-      // A conflict awaiting the user's decision — don't re-queue or it'd just
-      // re-detect the same conflict on every reconnect/focus.
-      if (conflictsRef.current.some((c) => c.sceneId === id)) continue;
+    for (const { id, patch, authoredAt } of sceneWrites) {
       const active = pendingSaves.current.get(id);
       if (active) {
-        // Actively editing here; the in-memory copy is newer — don't disturb it.
+        // Actively editing here; the in-memory copy is newer — don't disturb it
+        // (its own, later authoredAt stays in pendingAuthoredAt and wins).
         pendingSaves.current.set(id, { ...patch, ...active });
       } else {
-        // From a prior session / other tab: queue it and surface it so a
-        // recovered edit is visible, not just re-synced. Carry the durable base
-        // so the flush conditions on the version the edit was derived from.
+        // From a prior session / other tab: queue it and surface it so a recovered
+        // edit is visible, not just re-synced. Carry the durable authoredAt so the
+        // replay wins or loses on when the edit was actually made; a pre-021 row
+        // has none and falls back to now() at save time.
         pendingSaves.current.set(id, patch);
-        if (!pendingBases.current.has(id)) {
-          // A durable row can be re-created with a now-stale base if its
-          // fire-and-forget enqueue lands after the save that removed it. Trust
-          // our synchronous last-written version over the persisted base when we
-          // have one, so recovery can't replay a scene against an outdated base.
-          pendingBases.current.set(id, sceneVersions.current.get(id) ?? baseUpdatedAt);
+        if (!pendingAuthoredAt.current.has(id) && authoredAt) {
+          pendingAuthoredAt.current.set(id, authoredAt);
         }
         showScenes.set(id, patch);
       }
@@ -702,124 +646,6 @@ export function useHotCocoaDb() {
     };
   }, [recoverAndFlush]);
 
-  // ── Conflict resolution ─────────────────────────────────────────────────
-  // Non-destructive: the version the author *doesn't* pick isn't discarded — it's
-  // kept as a "… (conflicting copy · date)" scene in the same chapter, so a wrong
-  // choice in the modal is recoverable rather than a silent data loss. "theirs"
-  // adopts the server version; "mine" force-writes the local version over it
-  // (conditioned on the server version we're overwriting, so a further concurrent
-  // change re-opens the conflict rather than clobbering).
-  const resolveConflict = useCallback(async (sceneId: string, choice: "mine" | "theirs") => {
-    const conflict = conflictsRef.current.find((c) => c.sceneId === sceneId);
-    if (!conflict) return;
-    // Drop a concurrent resolve of the same scene (double-click) — otherwise two
-    // in-flight passes could each create a copy before either records it.
-    if (resolvingScenes.current.has(sceneId)) return;
-    resolvingScenes.current.add(sceneId);
-
-    try {
-      const setScene = (patch: Partial<Scene>) =>
-        setSections((prev) =>
-          prev.map((sec) => ({
-            ...sec,
-            chapters: sec.chapters.map((ch) => {
-              if (!ch.scenes.some((s) => s.id === sceneId)) return ch;
-              return {
-                ...ch,
-                scenes: ch.scenes.map((s) => (s.id === sceneId ? { ...s, ...patch } : s)),
-              };
-            }),
-          }))
-        );
-
-      // Preserve the losing version as a copy scene before anything destructive
-      // happens. Returns false only if it *should* have copied but couldn't persist
-      // — the caller then leaves the conflict open so nothing is lost. Skips
-      // silently when there's nothing worth keeping (empty / identical to the
-      // winner / already copied this exact body), or the chapter isn't a real one
-      // (the hidden Book-Info chapter).
-      const winnerBody = choice === "mine" ? conflict.mine.body : conflict.theirs.body;
-      const loser = choice === "mine" ? conflict.theirs : conflict.mine;
-      const preserveLoser = async (): Promise<boolean> => {
-        if (!loser.body.trim() || loser.body === winnerBody) return true;
-        if (copiedLoserBody.current.get(sceneId) === loser.body) return true;
-        if (!conflict.chapterId) return true;
-
-        // chapterId not among the loaded real chapters (e.g. Book-Info) → skip copy.
-        const chapter = sectionsRef.current
-          .flatMap((s) => s.chapters)
-          .find((c) => c.id === conflict.chapterId);
-        if (!chapter) return true;
-
-        const date = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
-        const base = (loser.label || conflict.chapterTitle || "Scene").trim();
-        const label = `${base} (conflicting copy · ${date})`;
-        // Append at the end of the chapter. We deliberately do NOT renumber the
-        // existing scenes: a reorder would bump the conflicted scene's updated_at,
-        // invalidating the base for the overwrite below (a spurious re-conflict)
-        // and leaving a stale base behind on the "theirs" path too.
-        const pos = chapter.scenes.length;
-        try {
-          const copy = await db.createScene(conflict.chapterId, pos, label, loser.body);
-          copiedLoserBody.current.set(sceneId, loser.body);
-          setSections((prev) =>
-            mapChapter(prev, conflict.chapterId!, (c) => ({ ...c, scenes: [...c.scenes, copy] }))
-          );
-          setConflictCopyNotice({ label });
-          return true;
-        } catch {
-          return false; // couldn't persist the copy — don't proceed and lose it
-        }
-      };
-
-      if (choice === "theirs") {
-        // Loser ("mine") lives only in memory / the durable queue, so persist the
-        // copy before adopting theirs and clearing the queue below.
-        if (!(await preserveLoser())) return;
-        sceneVersions.current.set(sceneId, conflict.theirs.updatedAt);
-        setScene({ label: conflict.theirs.label, body: conflict.theirs.body, updatedAt: conflict.theirs.updatedAt });
-      } else {
-        // Loser ("theirs") is the current server row; copy it first so its content
-        // survives the overwrite that follows.
-        if (!(await preserveLoser())) return;
-        try {
-          const res = await db.saveScene(
-            sceneId,
-            { label: conflict.mine.label, body: conflict.mine.body },
-            conflict.theirs.updatedAt
-          );
-          if (res.status === "conflict") {
-            // Raced again — refresh "theirs" and leave the conflict open. A retry
-            // preserves the newer server version too (its body differs), while an
-            // unchanged retry is deduped by body.
-            setConflicts((prev) => prev.map((c) => (c.sceneId === sceneId ? { ...c, theirs: res.server } : c)));
-            return;
-          }
-          if (res.status === "saved") {
-            sceneVersions.current.set(sceneId, res.updatedAt);
-            setScene({ updatedAt: res.updatedAt });
-          }
-          // "deleted" → the scene is gone; just clear the conflict below.
-        } catch {
-          return; // network error — leave the conflict for another try
-        }
-      }
-
-      offlineQueue.removeSceneWrites([sceneId]).catch(() => {});
-      pendingSaves.current.delete(sceneId);
-      pendingBases.current.delete(sceneId);
-      // sceneVersions is left set to the resolved version (theirs, or the row we
-      // just wrote) by both branches above, so the next edit bases on it directly
-      // without waiting for the scene-state advance to commit.
-      copiedLoserBody.current.delete(sceneId);
-      setConflicts((prev) => prev.filter((c) => c.sceneId !== sceneId));
-    } finally {
-      resolvingScenes.current.delete(sceneId);
-    }
-  }, []);
-
-  const dismissConflictCopyNotice = useCallback(() => setConflictCopyNotice(null), []);
-
   // Persist any pending scene/note edits immediately when the writer unmounts
   // (e.g. navigating to /backups or /books) or the tab is hidden. Autosaves are
   // otherwise 30s-debounced, so without this a backup taken elsewhere could
@@ -830,17 +656,16 @@ export function useHotCocoaDb() {
     if (pendingSaves.current.size > 0) {
       const saves = Array.from(pendingSaves.current.entries());
       pendingSaves.current.clear();
-      // Best-effort on unmount/hide — can't re-queue or show conflict UI after
-      // we're gone, so just swallow failures. Still pass the concurrency base so
-      // this path can't silently clobber a cross-device change: only drop the
-      // durable copy on a clean save; a conflict stays queued and is surfaced on
-      // the next visit's recovery flush.
+      // Best-effort on unmount/hide — can't re-queue after we're gone, so swallow
+      // failures. Pass the edit-time authoredAt so last-write-wins still settles a
+      // cross-device overlap; drop the durable copy on any resolved outcome (a
+      // "stale" loss is intended silent LWW), keep it only on a network error to
+      // retry on the next visit's recovery flush.
       saves.forEach(([sceneId, patch]) =>
         db
-          .saveScene(sceneId, patch, pendingBases.current.get(sceneId) ?? null)
+          .saveScene(sceneId, patch, pendingAuthoredAt.current.get(sceneId) ?? null)
           .then((res) => {
-            if (res.status === "saved") sceneVersions.current.set(sceneId, res.updatedAt);
-            if (res.status === "saved" || res.status === "deleted") {
+            if (res.status === "saved" || res.status === "deleted" || res.status === "stale") {
               offlineQueue.removeSceneWrites([sceneId]).catch(() => {});
             }
           })
@@ -1122,26 +947,11 @@ export function useHotCocoaDb() {
   // ── Scene actions ─────────────────────────────────────────────────────
   const updateScene = useCallback(
     (chapterId: string, sceneId: string, patch: Partial<Scene>) => {
-      // Capture the concurrency base the first time this scene goes dirty — the
-      // server version it's being edited from. Held (not re-captured per
-      // keystroke) until a save advances it, so the whole edit conditions on it.
-      if (!pendingBases.current.has(sceneId)) {
-        // Prefer the synchronous last-written version over scene state: after a
-        // mid-typing flush the state advance may not have committed yet, so
-        // reading `updatedAt` from state here would recapture a stale base and
-        // self-conflict. Fall back to state for a scene not saved this session.
-        const known = sceneVersions.current.get(sceneId);
-        if (known !== undefined) {
-          pendingBases.current.set(sceneId, known);
-        } else {
-          const chapters = [
-            ...sectionsRef.current.flatMap((s) => s.chapters),
-            ...(infoChapterRef.current ? [infoChapterRef.current] : []),
-          ];
-          const scene = chapters.flatMap((c) => c.scenes).find((s) => s.id === sceneId);
-          pendingBases.current.set(sceneId, scene?.updatedAt ?? null);
-        }
-      }
+      // Stamp this edit with the current time (last-write-wins token). Overwritten
+      // every keystroke so the flushed batch carries when the author *last* edited
+      // it; a save that wins advances the row's token past it, a stale one loses.
+      const authoredAt = new Date().toISOString();
+      pendingAuthoredAt.current.set(sceneId, authoredAt);
       updateChapterState(chapterId, (c) => ({
         ...c,
         scenes: c.scenes.map((s) => (s.id === sceneId ? { ...s, ...patch } : s)),
@@ -1152,9 +962,7 @@ export function useHotCocoaDb() {
       // Mirror to IndexedDB so the edit survives a tab close / crash before the
       // debounced flush fires. Fire-and-forget; the in-memory queue is primary.
       if (userId) {
-        offlineQueue
-          .enqueueSceneWrite(userId, sceneId, merged, pendingBases.current.get(sceneId) ?? null)
-          .catch(() => {});
+        offlineQueue.enqueueSceneWrite(userId, sceneId, merged, authoredAt).catch(() => {});
       }
       scheduleSave();
     },
@@ -1173,41 +981,9 @@ export function useHotCocoaDb() {
     [sections]
   );
 
-  // Refresh the optimistic-concurrency base for scenes whose server row was
-  // touched by a *structural* write (reorder / move / split). Migration 020 keeps
-  // updated_at from bumping on those, but selecting it back and syncing here makes
-  // the client trust the server value no matter what — so a drag-then-edit can't
-  // condition on a stale base and pop a false conflict. Skips any scene with a
-  // pending content edit (its own save reconciles the base) and only ever advances
-  // a version forward, so a slow structural response can't regress a base past a
-  // content save that already landed.
-  const applySceneVersions = useCallback((versions: db.SceneVersion[]) => {
-    const advanced = new Map<string, string>();
-    for (const { id, updatedAt } of versions) {
-      if (pendingBases.current.has(id) || pendingSaves.current.has(id)) continue;
-      const cur = sceneVersions.current.get(id);
-      if (!cur || Date.parse(updatedAt) >= Date.parse(cur)) {
-        sceneVersions.current.set(id, updatedAt);
-        advanced.set(id, updatedAt);
-      }
-    }
-    if (advanced.size === 0) return;
-    setSections((prev) =>
-      prev.map((sec) => ({
-        ...sec,
-        chapters: sec.chapters.map((ch) => {
-          let touched = false;
-          const scenes = ch.scenes.map((s) => {
-            const u = advanced.get(s.id);
-            if (!u) return s;
-            touched = true;
-            return { ...s, updatedAt: u };
-          });
-          return touched ? { ...ch, scenes } : ch;
-        }),
-      }))
-    );
-  }, []);
+  // Structural writes (reorder / move / split) no longer need to reconcile a
+  // concurrency base: content saves win purely on their authoredAt (LWW), which a
+  // reorder never touches. So these just fire the DB write and drop the result.
 
   const reorderScenes = useCallback(
     (chapterId: string, fromIndex: number, toIndex: number) => {
@@ -1216,14 +992,12 @@ export function useHotCocoaDb() {
           const next = [...c.scenes];
           const [moved] = next.splice(fromIndex, 1);
           next.splice(toIndex, 0, moved);
-          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })))
-            .then(applySceneVersions)
-            .catch(() => {});
+          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i }))).catch(() => {});
           return { ...c, scenes: next };
         })
       );
     },
-    [applySceneVersions]
+    []
   );
 
   // Move a scene to a (possibly different) chapter, inserting at gap `toIndex`
@@ -1251,9 +1025,7 @@ export function useHotCocoaDb() {
           const insertAt = Math.max(0, Math.min(toIndex > fromIndex ? toIndex - 1 : toIndex, next.length));
           if (insertAt === fromIndex) return prev; // no-op drop onto itself
           next.splice(insertAt, 0, scene);
-          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })))
-            .then(applySceneVersions)
-            .catch(() => {});
+          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i }))).catch(() => {});
           return mapChapter(prev, fromChapterId, (c) => ({ ...c, scenes: next }));
         }
 
@@ -1268,9 +1040,7 @@ export function useHotCocoaDb() {
           toChapterId,
           fromScenes.map((s, i) => ({ id: s.id, position: i })),
           toScenes.map((s, i) => ({ id: s.id, position: i }))
-        )
-          .then(applySceneVersions)
-          .catch(() => {});
+        ).catch(() => {});
         return prev.map((sec) => ({
           ...sec,
           chapters: sec.chapters.map((c) => {
@@ -1281,7 +1051,7 @@ export function useHotCocoaDb() {
         }));
       });
     },
-    [loadChapter, applySceneVersions]
+    [loadChapter]
   );
 
   const deleteScene = useCallback(
@@ -1292,7 +1062,7 @@ export function useHotCocoaDb() {
           scenes: c.scenes.filter((s) => s.id !== sceneId),
         }))
       );
-      sceneVersions.current.delete(sceneId);
+      pendingAuthoredAt.current.delete(sceneId);
       db.deleteScene(sceneId);
     },
     []
@@ -1308,14 +1078,12 @@ export function useHotCocoaDb() {
           const next = [...c.scenes];
           const at = Math.max(0, Math.min(index, next.length));
           next.splice(at, 0, newScene);
-          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i })))
-            .then(applySceneVersions)
-            .catch(() => {});
+          db.reorderScenes(next.map((s, i) => ({ id: s.id, position: i }))).catch(() => {});
           return { ...c, scenes: next };
         })
       );
     },
-    [applySceneVersions]
+    []
   );
 
   // Split a chapter at gap `index`: scenes[index..] move into a brand-new chapter
@@ -1344,9 +1112,7 @@ export function useHotCocoaDb() {
         movedScenes.map((s) => s.id),
         keptScenes.map((s, i) => ({ id: s.id, position: i })),
         movedScenes.map((s, i) => ({ id: s.id, position: i }))
-      )
-        .then(applySceneVersions)
-        .catch(() => {});
+      ).catch(() => {});
 
       setSections((prev) =>
         prev.map((sec) => {
@@ -1359,7 +1125,7 @@ export function useHotCocoaDb() {
         })
       );
     },
-    [book, sections, applySceneVersions]
+    [book, sections]
   );
 
   // Duplicate a chapter (title + scenes only; library starts empty). The copy is
@@ -1657,10 +1423,6 @@ export function useHotCocoaDb() {
     book,
     hydrated,
     saveStatus,
-    conflicts,
-    resolveConflict,
-    conflictCopyNotice,
-    dismissConflictCopyNotice,
     activeChapter,
     activeChapterLoaded,
     isChapterLoaded,

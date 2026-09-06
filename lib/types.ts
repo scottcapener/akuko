@@ -2,11 +2,18 @@ export interface Scene {
   id: string;
   label: string;
   body: string;
-  // Server `updated_at` as of load or last successful save — the optimistic-
-  // concurrency base. A queued offline edit conditions its save on this value so
-  // a change made on another device isn't silently clobbered (Phase 2 conflict
-  // detection). Advances on every successful save.
+  // Server `updated_at` as of load or last successful save. Still tracked for the
+  // shared-chapter "View as reader" freshness check; no longer a concurrency base
+  // (see contentEditedAt).
   updatedAt: string;
+  // Last-write-wins token (migration 021): when the text was last actually edited,
+  // on whichever device. A save wins only if its authoredAt is newer than the
+  // row's content_edited_at, so the latest edit wins with no cached base to go
+  // stale — this is what retired the false-conflict modal. Set on load and when a
+  // newer server version is adopted; the value SENT on a save is the client's
+  // edit-time clock, not this field. Optional: absent for synthetic scenes and
+  // pre-021 rows. See CONFLICT_SUNSET.md.
+  contentEditedAt?: string;
 }
 
 export interface LibraryImage {

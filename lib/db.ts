@@ -537,6 +537,7 @@ export async function getScenesForChapter(chapterId: string): Promise<Scene[]> {
     label: s.label ?? "",
     body: s.body ?? "",
     updatedAt: s.updated_at,
+    contentEditedAt: s.content_edited_at ?? undefined,
   }));
 }
 
@@ -552,66 +553,67 @@ export async function createScene(
     .select()
     .single();
   if (error) throw error;
-  return { id: data.id, label, body, updatedAt: data.updated_at };
+  return { id: data.id, label, body, updatedAt: data.updated_at, contentEditedAt: data.content_edited_at ?? undefined };
 }
 
 export type SaveSceneResult =
-  | { status: "saved"; updatedAt: string }
-  | { status: "conflict"; server: { label: string; body: string; updatedAt: string } }
+  | { status: "saved"; updatedAt: string; contentEditedAt: string }
+  // The server holds a newer (or equal) edit — the caller adopts `server` and
+  // drops its own queued edit. No user prompt (see CONFLICT_SUNSET.md).
+  | { status: "stale"; server: { label: string; body: string; updatedAt: string; contentEditedAt: string } }
   | { status: "deleted" };
 
-// Optimistic-concurrency save. When `baseUpdatedAt` is given, the write only
-// applies if the row's `updated_at` still matches it — so an offline edit
-// derived from an older version doesn't clobber a change made on another device.
-// Returns "conflict" (with the current server row) instead of overwriting, or
-// "deleted" if the scene is gone. Network/unknown errors still throw so the
-// autosave loop can re-queue.
+// Last-write-wins save (see migration 021). `authoredAt` is the client's edit-time
+// timestamp; the write applies only if it beats the row's `content_edited_at`, so
+// the newest edit wins on whichever device made it — no cached base, no conflict
+// class. A 0-row result means the server already has a newer-or-equal edit
+// ("stale" → adopt it) or the scene is gone ("deleted"). A missing `authoredAt`
+// (a pre-021 durable replay) falls back to now(), i.e. "treat as newest". Network
+// errors still throw so the autosave loop can re-queue.
 export async function saveScene(
   sceneId: string,
   patch: Partial<Pick<Scene, "label" | "body">>,
-  baseUpdatedAt?: string | null
+  authoredAt?: string | null
 ): Promise<SaveSceneResult> {
   const db = supabase();
-
-  // No known base (brand-new local scene): unconditional write — nothing on the
-  // server to conflict with yet.
-  if (!baseUpdatedAt) {
-    const { data, error } = await db
-      .from("scenes")
-      .update({ ...patch })
-      .eq("id", sceneId)
-      .select("updated_at")
-      .maybeSingle();
-    if (error) throw error;
-    return data ? { status: "saved", updatedAt: data.updated_at } : { status: "deleted" };
-  }
+  const stamp = authoredAt ?? new Date().toISOString();
 
   const { data, error } = await db
     .from("scenes")
-    .update({ ...patch })
+    .update({ ...patch, content_edited_at: stamp })
     .eq("id", sceneId)
-    .eq("updated_at", baseUpdatedAt)
-    .select("updated_at")
+    // Win only if our edit is strictly newer than the row's. `.or` keeps a row
+    // whose token is null (pre-backfill / brand-new) writable. The strict `<`
+    // makes a re-sent write (same authoredAt, e.g. a lost-ack retry) a no-op that
+    // reconciles silently rather than a spurious conflict.
+    .or(`content_edited_at.is.null,content_edited_at.lt.${stamp}`)
+    .select("updated_at, content_edited_at")
     .maybeSingle();
   if (error) throw error;
-  if (data) return { status: "saved", updatedAt: data.updated_at };
+  if (data) return { status: "saved", updatedAt: data.updated_at, contentEditedAt: data.content_edited_at };
 
-  // Zero rows updated: either the row changed under us (conflict) or it's gone.
+  // Zero rows updated: the row has a newer-or-equal edit (stale) or it's gone.
   const { data: current, error: readErr } = await db
     .from("scenes")
-    .select("label, body, updated_at")
+    .select("label, body, updated_at, content_edited_at")
     .eq("id", sceneId)
     .maybeSingle();
   if (readErr) throw readErr;
   if (!current) return { status: "deleted" };
   return {
-    status: "conflict",
-    server: { label: current.label ?? "", body: current.body ?? "", updatedAt: current.updated_at },
+    status: "stale",
+    server: {
+      label: current.label ?? "",
+      body: current.body ?? "",
+      updatedAt: current.updated_at,
+      contentEditedAt: current.content_edited_at,
+    },
   };
 }
 
-// The server `updated_at` for a scene after a structural write, so the client can
-// refresh its optimistic-concurrency base (see useHotCocoaDb `applySceneVersions`).
+// The server `updated_at` for each scene touched by a structural write (reorder /
+// move / split). Returned for callers that want the post-write versions; the LWW
+// save path no longer needs it (content saves win on their own authoredAt).
 export type SceneVersion = { id: string; updatedAt: string };
 
 function collectSceneVersions(
@@ -703,7 +705,7 @@ export async function duplicateChapterScenes(
   return (data ?? [])
     .slice()
     .sort((a, b) => a.position - b.position)
-    .map((s) => ({ id: s.id, label: s.label ?? "", body: s.body ?? "", updatedAt: s.updated_at }));
+    .map((s) => ({ id: s.id, label: s.label ?? "", body: s.body ?? "", updatedAt: s.updated_at, contentEditedAt: s.content_edited_at ?? undefined }));
 }
 
 // Split: reparent `movedSceneIds` onto the new chapter and renumber both lists.
