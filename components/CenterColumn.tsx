@@ -9,6 +9,7 @@ import SceneBlock from "@/components/SceneBlock";
 import { useReorderList } from "@/lib/useReorderList";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
 import { useSceneDrag, SceneDragPayload } from "@/lib/useSceneDrag";
+import { findUniqueTextRange } from "@/lib/shared/anchor";
 
 interface Props {
   chapter: Chapter;
@@ -26,8 +27,9 @@ interface Props {
   // A request from the Book Panel to reveal a specific scene: scroll it into view
   // and place the caret in its body. `nonce` bumps on every click so re-clicking
   // the same scene re-fires. Self-guarded by scene id, so the panes that don't
-  // hold the scene simply find nothing and no-op.
-  scrollToScene?: { sceneId: string; nonce: number } | null;
+  // hold the scene simply find nothing and no-op. `alignText` (a comment's quote)
+  // scrolls that text into view instead of the scene top; `focus` seats the caret.
+  scrollToScene?: { sceneId: string; nonce: number; focus?: boolean; alignText?: string } | null;
   // ── Side-by-side ──
   // `focused` is undefined in ordinary single-editor Write mode, which suppresses
   // the focus rail entirely. In side-by-side both panes pass a boolean and the
@@ -101,20 +103,46 @@ export default function CenterColumn({
   // Reveal the scene the Book Panel asked for. Scoped to this pane's scroll
   // container, so only the pane actually rendering that scene reacts — the id is
   // unique across chapters, so the others' querySelector comes back empty. The
-  // element's own scrollIntoView drives the smooth scroll; focusing the body then
-  // drops the caret there (preventScroll so it doesn't fight the smooth scroll).
+  // element's own scrollIntoView drives the smooth scroll; when `focus` is set,
+  // focusing the body then drops the caret there (preventScroll so it doesn't
+  // fight the smooth scroll). Selecting a comment reveals the scene with focus
+  // off, so the author isn't pulled into an edit state just for looking.
   const scrollNonce = scrollToScene?.nonce;
   const scrollSceneId = scrollToScene?.sceneId;
+  const scrollFocus = scrollToScene?.focus ?? true;
+  const scrollAlignText = scrollToScene?.alignText;
   useEffect(() => {
-    if (!scrollSceneId || !scrollRef.current) return;
-    const el = scrollRef.current.querySelector<HTMLElement>(
+    const container = scrollRef.current;
+    if (!scrollSceneId || !container) return;
+    const el = container.querySelector<HTMLElement>(
       `[data-scene-id="${CSS.escape(scrollSceneId)}"]`
     );
     // offsetParent is null for a hidden pane (the mobile/desktop layout the
     // viewport isn't showing) — skip it so focus never lands off-screen.
     if (!el || el.offsetParent === null) return;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-    el.querySelector<HTMLElement>('[contenteditable="true"]')?.focus({ preventScroll: true });
+
+    // When a comment asks for a scene, land on its quoted text rather than the
+    // scene top, so the highlight the reader commented on is what comes into
+    // view. Fall back to the scene top if the quote no longer matches uniquely
+    // (the author revised it) — the same tier-2 condition that governs whether
+    // the highlight is painted at all.
+    const body = scrollAlignText
+      ? el.querySelector<HTMLElement>('[contenteditable]')
+      : null;
+    const range = body && findUniqueTextRange(body, scrollAlignText!);
+    if (range) {
+      // Range has no scrollIntoView; nudge the container by the gap between the
+      // quote and a comfortable inset from the top of the reading area.
+      const target = range.getBoundingClientRect();
+      const view = container.getBoundingClientRect();
+      const inset = Math.min(160, view.height * 0.3);
+      container.scrollBy({ top: target.top - view.top - inset, behavior: "smooth" });
+    } else {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (scrollFocus) {
+      el.querySelector<HTMLElement>('[contenteditable="true"]')?.focus({ preventScroll: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollNonce]);
   const sceneReorder = useReorderList((from, to) => onReorderScenes(chapter.id, from, to));

@@ -174,8 +174,14 @@ export default function WritePage() {
   // the reveal; the target is broadcast to every Chapter Editor and each self-
   // guards by scene id (see CenterColumn).
   const sceneScrollNonce = useRef(0);
-  const [sceneScrollTarget, setSceneScrollTarget] = useState<{ sceneId: string; nonce: number } | null>(null);
-  const handleSceneClick = useCallback((chapterId: string, sceneId: string) => {
+  const [sceneScrollTarget, setSceneScrollTarget] = useState<{ sceneId: string; nonce: number; focus: boolean; alignText?: string } | null>(null);
+  // `focus` (default true) also drops the caret into the revealed scene body —
+  // right when clicking a scene in the Book Panel to start editing. Selecting a
+  // comment passes false: it reveals the scene but leaves it un-focused, so the
+  // author isn't yanked into an edit state (caret at the scene top) just for
+  // looking at a comment. `alignText` (the comment's quote) scrolls that text
+  // into view instead of the scene top.
+  const handleSceneClick = useCallback((chapterId: string, sceneId: string, focus = true, alignText?: string) => {
     setBookView(false);
     // In side-by-side, focus the pane that holds the clicked scene's chapter so
     // the reveal lands in the pane the user is looking at.
@@ -184,7 +190,7 @@ export default function WritePage() {
       else if (chapterId === activeChapterId) setFocusedPane(1);
     }
     sceneScrollNonce.current += 1;
-    setSceneScrollTarget({ sceneId, nonce: sceneScrollNonce.current });
+    setSceneScrollTarget({ sceneId, nonce: sceneScrollNonce.current, focus, alignText });
   }, [secondaryChapterId, activeChapterId, setFocusedPane]);
 
   // Open the Book Info editor. Force side-by-side off — Book Info is single-column.
@@ -717,7 +723,7 @@ export default function WritePage() {
         <RightColumn
           {...rightProps}
           onClose={() => setMobilePanel(null)}
-          onSceneClick={(chapterId, sceneId) => { handleSceneClick(chapterId, sceneId); setMobilePanel(null); }}
+          onSceneClick={(chapterId, sceneId, focus, alignText) => { handleSceneClick(chapterId, sceneId, focus, alignText); setMobilePanel(null); }}
         />
       </div>
       <InstallHint />
