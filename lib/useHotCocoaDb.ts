@@ -1425,6 +1425,7 @@ export function useHotCocoaDb() {
     book,
     hydrated,
     saveStatus,
+    flushSaves,
     activeChapter,
     activeChapterLoaded,
     isChapterLoaded,

@@ -1107,10 +1107,11 @@ export default function LeftColumn({
         <DropLine active={sectionReorder.activeGap === sections.length} />
         </div>
       </div>
-        {/* Tips overlay — floats over the bottom of the chapter list. The wrapper
-            is click-through; the card itself re-enables pointer events. */}
+        {/* Card overlay — floats over the bottom of the chapter list. Stacks its
+            cards (Tips on top, New Version below); the wrapper is click-through,
+            each card re-enables pointer events. */}
         {overlay && (
-          <div className="absolute inset-x-0 bottom-0 z-10 px-3 pb-3 pointer-events-none">
+          <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col gap-2 px-3 pb-3 pointer-events-none">
             {overlay}
           </div>
         )}
