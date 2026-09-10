@@ -74,6 +74,10 @@ export function EditorComments({
   const [sharedChapterId, setSharedChapterId] = useState<string | null>(seeded?.sharedChapterId ?? null);
   const [shared, setShared] = useState<boolean | null>(seeded?.shared ?? null); // null = loading
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Comments whose stored quote no longer matches the live text uniquely (the
+  // author revised it) — they can't be highlighted or scrolled to, so their
+  // cards take the unlocatable style and selecting them scrolls nowhere.
+  const [unlocatableIds, setUnlocatableIds] = useState<Set<string>>(new Set());
 
   // Clicking anywhere outside a comment card deselects the current one. Clicks
   // inside a card are handled by the card itself (select / edit). Mirrors the
@@ -204,17 +208,30 @@ export function EditorComments({
     const activeHl = new HighlightCtor();
     const resolved = new HighlightCtor();
 
+    // A comment with no unique live match is "unlocatable": no highlight to
+    // paint, and selecting it must not scroll (there's nothing to scroll to).
+    // Collect those ids in the same pass that paints the highlights.
+    const unlocatable = new Set<string>();
     for (const c of comments) {
-      if (!c.sceneId) continue;
-      const body = document.querySelector<HTMLElement>(
-        `[data-scene-id="${CSS.escape(c.sceneId)}"] [contenteditable]`
-      );
+      const body = c.sceneId
+        ? document.querySelector<HTMLElement>(
+            `[data-scene-id="${CSS.escape(c.sceneId)}"] [contenteditable]`
+          )
+        : null;
       const range = body && findUniqueTextRange(body, c.quoteText);
-      if (!range) continue;
+      if (!range) {
+        unlocatable.add(c.id);
+        continue;
+      }
       if (c.id === activeId) activeHl.add(range);
       else if (c.resolvedAt) resolved.add(range);
       else inactive.add(range);
     }
+    setUnlocatableIds((prev) =>
+      prev.size === unlocatable.size && [...prev].every((id) => unlocatable.has(id))
+        ? prev
+        : unlocatable
+    );
 
     highlights.set("hc-comment-inactive", inactive);
     highlights.set("hc-comment-active", activeHl);
@@ -294,11 +311,15 @@ export function EditorComments({
 
   function selectCard(c: CommentDTO) {
     setActiveId(c.id);
+    // Unlocatable comments have no live highlight, so there's nothing to reveal —
+    // scrolling would only jump the editor to the scene top (the reported
+    // "scroll to top"), so skip it entirely and just select the card.
+    if (!c.sceneId || unlocatableIds.has(c.id)) return;
     // Reveal the comment's scene but don't focus it — selecting a comment
     // shouldn't drag the author into an edit state (caret at the scene top).
     // Pass the quote so the editor scrolls to the highlighted text, matching the
     // tier-2 highlight that lights up for the selected card.
-    if (c.sceneId) onSceneClick?.(chapterId, c.sceneId, false, c.quoteText);
+    onSceneClick?.(chapterId, c.sceneId, false, c.quoteText);
   }
 
   // Stage 7: one flat list of ALL comments — resolved and formerly-"stale" ones
@@ -338,6 +359,7 @@ export function EditorComments({
             key={c.id}
             comment={c}
             active={c.id === activeId}
+            unlocatable={unlocatableIds.has(c.id)}
             isMine={c.authorId === currentUserId}
             isOwner={isOwner}
             onSelect={() => selectCard(c)}
@@ -356,6 +378,7 @@ export function EditorComments({
 function EditorCommentCard({
   comment,
   active,
+  unlocatable,
   isMine,
   isOwner,
   onSelect,
@@ -365,6 +388,7 @@ function EditorCommentCard({
 }: {
   comment: CommentDTO;
   active: boolean;
+  unlocatable: boolean;
   isMine: boolean;
   isOwner: boolean;
   onSelect: () => void;
@@ -409,8 +433,12 @@ function EditorCommentCard({
     <div
       data-comment-card
       onClick={onSelect}
-      className={`bg-panel rounded-xl p-3 border-2 cursor-pointer transition-colors ${
-        active ? "border-accent" : "border-border-subtle hover:bg-elevated"
+      className={`rounded-xl p-3 cursor-pointer transition-colors ${
+        active
+          ? "bg-panel border-2 border-accent"
+          : unlocatable
+          ? "hc-card-unlocatable"
+          : "bg-panel border-2 border-border-subtle hover:bg-elevated"
       } ${resolved ? "opacity-60" : ""}`}
     >
       {/* Author profile line — always shown (Stage 7); no quoted snippet, no
