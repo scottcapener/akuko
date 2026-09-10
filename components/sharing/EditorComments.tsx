@@ -25,8 +25,14 @@ interface Props {
   /** Live scenes of this chapter — for group labels + tier-2 highlight lookup. */
   scenes: Scene[];
   currentUserId: string;
-  /** Scrolls the editor to a live scene (reused Book-Panel scene-scroll). */
-  onSceneClick?: (chapterId: string, sceneId: string) => void;
+  /**
+   * Scrolls the editor to a live scene (reused Book-Panel scene-scroll). `focus`
+   * (default true) also drops the caret into the scene body; comment selection
+   * passes false so the scene is revealed without entering an edit state.
+   * `alignText` (the comment's quote) scrolls that text into view rather than the
+   * scene top, landing on the highlight the reader commented on.
+   */
+  onSceneClick?: (chapterId: string, sceneId: string, focus?: boolean, alignText?: string) => void;
   /**
    * Whether the Comments tab is the one on screen. On desktop the tab stays
    * mounted behind the Library so the two can cross-slide, so "opening" it is a
@@ -288,7 +294,11 @@ export function EditorComments({
 
   function selectCard(c: CommentDTO) {
     setActiveId(c.id);
-    if (c.sceneId) onSceneClick?.(chapterId, c.sceneId);
+    // Reveal the comment's scene but don't focus it — selecting a comment
+    // shouldn't drag the author into an edit state (caret at the scene top).
+    // Pass the quote so the editor scrolls to the highlighted text, matching the
+    // tier-2 highlight that lights up for the selected card.
+    if (c.sceneId) onSceneClick?.(chapterId, c.sceneId, false, c.quoteText);
   }
 
   // Stage 7: one flat list of ALL comments — resolved and formerly-"stale" ones

@@ -546,7 +546,10 @@ interface Props {
   // The signed-in author — decides who may resolve/edit in the Comments tab.
   currentUserId?: string | null;
   // Scrolls the editor to a live scene when a comment card is clicked (§3.7).
-  onSceneClick?: (chapterId: string, sceneId: string) => void;
+  // `focus` (default true) also drops the caret into the scene body; comment
+  // selection passes false to reveal the scene without entering an edit state.
+  // `alignText` (the comment's quote) scrolls that text into view, not scene top.
+  onSceneClick?: (chapterId: string, sceneId: string, focus?: boolean, alignText?: string) => void;
   // Delete the chapter — the Chapter Menu (§3.6 / Stage 8) offers it too.
   onDeleteChapter?: (chapterId: string) => void;
   // "Show stats" — an account-wide toggle (not per-chapter). When on, a chapter
