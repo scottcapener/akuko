@@ -230,16 +230,16 @@ export function ReadComments({
     };
   }, [comments, activeId, hoverId, composer, proseReady]);
 
-  // Stale comments (§7) index into text that has since changed, so they can't be
-  // anchored in the prose; they still show, listed at the top of the rail. Stage 7
-  // shows them (and resolved comments) unconditionally — no "show N" toggles.
-  const staleComments = comments.filter((c) => c.stale);
-
   // ── Stacking layout — measure anchors + card heights, cascade downward ──
   // Resolved comments stay in the cascade (anchored, dimmed) rather than hiding.
-  const visible = comments.filter((c) => !c.stale);
-  // Sort by scene order then quote position (§3.4).
-  const ordered = [...visible].sort(
+  // Stale comments (§7) index into text that has since changed, so they can't be
+  // anchored in the prose — they cascade at the very top of the rail (a forced
+  // minTop anchor in relayout) and scroll WITH the column like every other card.
+  // (They used to sit in a `sticky` block, which pinned them over the scrolling
+  // cards — the reported "stuck on top, won't scroll" bug.)
+  // Sort by scene order then quote position (§3.4); stale cards land at minTop
+  // regardless, so they group at the top in their stored order.
+  const ordered = [...comments].sort(
     (a, b) => a.scenePosition - b.scenePosition || a.quoteStart - b.quoteStart
   );
 
@@ -266,7 +266,9 @@ export function ReadComments({
     for (const c of ordered) {
       const el = cardRefs.current.get(c.id);
       if (!el) continue;
-      const map = mapsRef.current.get(c.sharedSceneId);
+      // Stale comments can't anchor (their offsets index the old text) — pin them
+      // to the top so they cascade above the anchored cards, still scrolling.
+      const map = c.stale ? null : mapsRef.current.get(c.sharedSceneId);
       const r = map && rangeFromOffsets(map, c.quoteStart, c.quoteEnd);
       const rect = r?.getBoundingClientRect();
       const centerY = rect
@@ -318,6 +320,25 @@ export function ReadComments({
       window.removeEventListener("resize", onScroll);
     };
   }, [relayout, scrollRef]);
+
+  // Selecting a card highlights its quote and scrolls that text into view at a
+  // comfortable inset — matching the editor's Comments tab. Stale comments have
+  // no anchor in the changed prose, so they're exempt: select without scrolling.
+  const selectCard = useCallback(
+    (c: CommentDTO) => {
+      setActiveId(c.id);
+      if (c.stale) return;
+      const scroll = scrollRef.current;
+      const map = mapsRef.current.get(c.sharedSceneId);
+      const r = map && rangeFromOffsets(map, c.quoteStart, c.quoteEnd);
+      if (!scroll || !r) return;
+      const target = r.getBoundingClientRect();
+      const view = scroll.getBoundingClientRect();
+      const inset = Math.min(160, view.height * 0.3);
+      scroll.scrollBy({ top: target.top - view.top - inset, behavior: "smooth" });
+    },
+    [scrollRef]
+  );
 
   // ── Actions ──
   async function createComment(body: string) {
@@ -395,27 +416,6 @@ export function ReadComments({
         </button>
       </div>
 
-      {/* Stale comments (§7) can't anchor to the changed prose, so they list here
-          at the top of the rail rather than in the cascade. Stage 7: shown
-          unconditionally — no "show N from a previous version" toggle. */}
-      {!collapsed && staleComments.length > 0 && (
-        <div className="sticky top-[4.5rem] z-20 mx-3 mt-2 flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
-          {staleComments.map((c) => (
-            <CommentCard
-              key={c.id}
-              comment={c}
-              active={false}
-              isMine={c.authorId === currentUserId}
-              isOwner={isOwner}
-              onSelect={() => {}}
-              onEdit={(body) => editComment(c.id, body)}
-              onDelete={() => deleteComment(c.id)}
-              onToggleResolved={() => toggleResolved(c)}
-            />
-          ))}
-        </div>
-      )}
-
       {!collapsed && composer && (
         <div ref={composerRef} className="absolute right-3 left-3" style={{ top: 0 }}>
           <Composer
@@ -435,15 +435,16 @@ export function ReadComments({
           }}
           className="absolute right-3 left-3"
           style={{ top: 0 }}
-          onMouseEnter={() => !c.resolvedAt && setHoverId(c.id)}
+          onMouseEnter={() => !c.resolvedAt && !c.stale && setHoverId(c.id)}
           onMouseLeave={() => setHoverId((h) => (h === c.id ? null : h))}
         >
           <CommentCard
             comment={c}
             active={c.id === activeId}
+            unlocatable={!!c.stale}
             isMine={c.authorId === currentUserId}
             isOwner={isOwner}
-            onSelect={() => setActiveId(c.id)}
+            onSelect={() => selectCard(c)}
             onEdit={(body) => editComment(c.id, body)}
             onDelete={() => deleteComment(c.id)}
             onToggleResolved={() => toggleResolved(c)}
@@ -535,6 +536,7 @@ function Composer({
 function CommentCard({
   comment,
   active,
+  unlocatable,
   isMine,
   isOwner,
   onSelect,
@@ -544,6 +546,7 @@ function CommentCard({
 }: {
   comment: CommentDTO;
   active: boolean;
+  unlocatable: boolean;
   isMine: boolean;
   isOwner: boolean;
   onSelect: () => void;
@@ -588,8 +591,12 @@ function CommentCard({
     <div
       data-comment-card
       onClick={onSelect}
-      className={`bg-panel rounded-xl p-3 border-2 transition-colors ${
-        active ? "border-accent" : "border-border-subtle hover:bg-elevated"
+      className={`rounded-xl p-3 transition-colors ${
+        active
+          ? "bg-panel border-2 border-accent"
+          : unlocatable
+          ? "hc-card-unlocatable"
+          : "bg-panel border-2 border-border-subtle hover:bg-elevated"
       } ${resolved ? "opacity-60" : ""}`}
     >
       {/* Author profile line — always shown (Stage 7); no quoted snippet. */}

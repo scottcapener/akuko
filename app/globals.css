@@ -122,6 +122,29 @@ body {
   background-color: color-mix(in srgb, var(--hc-hover) calc(var(--hc-hl-opacity) * 100%), transparent);
 }
 
+/* Unlocatable comment cards (Shared With You §7). When a reader's quoted text no
+   longer matches the live/snapshot prose, the comment can't anchor to a
+   highlight — so its card recedes onto the page background with a dashed border
+   instead of the solid panel-and-border of an anchored card. CSS `border` can't
+   set an exact dash length, so the 4px-dash / 4px-gap edges are painted as four
+   repeating-linear-gradient strips (one per side); the transparent 2px border
+   keeps the box metrics identical to a `border-2` card. Used by both the editor
+   Comments tab and the reader rail, so the two stay in visual sync. */
+.hc-card-unlocatable {
+  border: 2px solid transparent;
+  background-color: var(--hc-bg);
+  background-image:
+    repeating-linear-gradient(90deg, var(--hc-border-subtle) 0 4px, transparent 4px 8px),
+    repeating-linear-gradient(90deg, var(--hc-border-subtle) 0 4px, transparent 4px 8px),
+    repeating-linear-gradient(180deg, var(--hc-border-subtle) 0 4px, transparent 4px 8px),
+    repeating-linear-gradient(180deg, var(--hc-border-subtle) 0 4px, transparent 4px 8px);
+  background-size: 100% 2px, 100% 2px, 2px 100%, 2px 100%;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-clip: border-box;
+}
+
 /* Inline wordmark logo (logo-S.svg is authored near-black). Render it light on
    the dark theme; leave it dark on the light theme. */
 .logo-inline {
