@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useTips } from "@/lib/useTips";
 
 // ── Tips card ("Tip of the day") ───────────────────────────────────────────────
-// A small widget that floats over the book panel's chapter list. It appears once,
-// at the start of the first writing session each day, showing the next tip in the
-// list (basic → advanced). Tips are consumed in order and never repeat: once the
-// whole list has been shown, the card stops appearing.
+// A small widget that floats over the book panel's chapter list, showing the next
+// tip in the list (basic → advanced). The current tip stays put — across reloads
+// and sessions — until the reader dismisses it with the ×; dismissing advances to
+// the next tip, which surfaces on the next load. Tips never repeat: once the whole
+// list has been dismissed, the card stops appearing.
 //
 // All of its state is device-scoped localStorage, consistent with the other view
 // preferences (scenes/links/theme). `hc.tipsEnabled` is the shared key the
@@ -15,18 +16,9 @@ import { useTips } from "@/lib/useTips";
 
 const K = {
   enabled: "hc.tipsEnabled", // shared with the Settings toggle (JSON boolean)
-  cursor: "hc.tipsCursor", // index of the next tip to show
-  lastShown: "hc.tipsLastShownDate", // YYYY-MM-DD the card last appeared
+  cursor: "hc.tipsCursor", // index of the tip currently shown / to show next
   firstSeen: "hc.tipsFirstSeen", // has the card ever been shown (drives the CTA variant)
 } as const;
-
-// Local calendar day — a new value here is what triggers the once-a-day appearance.
-function todayKey(): string {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
-}
 
 // URL of the full tips page, opened from "View all". Navigates in place rather
 // than in a new tab — the How to Use page lives in the Workspace group and carries
@@ -49,24 +41,19 @@ export default function TipsCard() {
 
   useEffect(() => {
     // Decide exactly once, after the tip list has loaded. The ref also guards
-    // against React StrictMode's double-invoke in development advancing twice.
+    // against React StrictMode's double-invoke in development.
     if (decided.current || tips === null) return;
     decided.current = true;
     try {
       if (localStorage.getItem(K.enabled) === "false") return; // turned off (absent = on)
 
       const cursor = Number(localStorage.getItem(K.cursor) ?? "0") || 0;
-      if (cursor >= tips.length) return; // every tip has been shown — stop appearing
-
-      if (localStorage.getItem(K.lastShown) === todayKey()) return; // already shown today
+      if (cursor >= tips.length) return; // every tip has been dismissed — stop appearing
 
       const firstTime = localStorage.getItem(K.firstSeen) !== "true";
       setCard({ text: tips[cursor], firstTime });
-
-      // Consume this tip for the day: record the date and advance the cursor so
-      // the next new day shows the next tip, whether or not this one is dismissed.
-      localStorage.setItem(K.lastShown, todayKey());
-      localStorage.setItem(K.cursor, String(cursor + 1));
+      // Showing doesn't consume the tip — it stays until dismissed. Just record
+      // that the card has been seen once, to fold away the first-run CTA.
       localStorage.setItem(K.firstSeen, "true");
     } catch {
       // localStorage unavailable — just don't show the card.
@@ -75,7 +62,15 @@ export default function TipsCard() {
 
   if (!card) return null;
 
-  const dismiss = () => setCard(null);
+  // Manual dismiss (×) — advance to the next tip so it surfaces on the next load,
+  // and hide for now (the current session doesn't roll straight into the next one).
+  const dismiss = () => {
+    try {
+      const cursor = Number(localStorage.getItem(K.cursor) ?? "0") || 0;
+      localStorage.setItem(K.cursor, String(cursor + 1));
+    } catch {}
+    setCard(null);
+  };
   const turnOff = () => {
     try {
       localStorage.setItem(K.enabled, "false");
@@ -106,9 +101,10 @@ export default function TipsCard() {
       {/* First-time only — a way to see them all or to turn the feature off. */}
       {card.firstTime && (
         <div className="mt-3 flex items-center gap-2">
+          {/* Navigates in place (unmounts the card); leaves the current tip in
+              place — only × advances it — so it's still here on return. */}
           <a
             href={HOW_TO_URL}
-            onClick={dismiss}
             className="flex-1 rounded-lg bg-hover py-1.5 text-center text-xs text-muted transition-colors hover:text-text"
           >
             View all

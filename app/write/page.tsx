@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useHotCocoaDb } from "@/lib/useHotCocoaDb";
 import LeftColumn from "@/components/LeftColumn";
 import TipsCard from "@/components/TipsCard";
+import NewVersionCard from "@/components/NewVersionCard";
 import CenterColumn from "@/components/CenterColumn";
 import BookInfoColumn from "@/components/BookInfoColumn";
 import RightColumn from "@/components/RightColumn";
@@ -592,7 +593,12 @@ export default function WritePage() {
             collapsed={leftCollapsed}
             onToggleCollapse={() => setLeftCollapsed((v) => !v)}
             expandedWidth={left.width}
-            overlay={<TipsCard />}
+            overlay={
+              <>
+                <TipsCard />
+                <NewVersionCard onBeforeReload={store.flushSaves} />
+              </>
+            }
           />
         </div>
         {!leftCollapsed && (
