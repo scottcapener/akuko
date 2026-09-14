@@ -34,6 +34,35 @@ export interface Update {
 // Newest first. `updates[0]` is what the modal announces.
 export const updates: Update[] = [
   {
+    id: "find-and-replace",
+    date: "2026-09-14",
+    title: "Find/replace + chapter word count",
+    image: "/updates/wn-findreplace.jpg",
+    imageAlt: "The Find and replace bar across the top of the Hot Cocoa editor",
+    body: [
+      {
+        kind: "paragraph",
+        html: "You can now <strong>find &amp; replace text</strong> across specific chapters or your entire book, plus a few other fixes 🔍",
+      },
+      {
+        kind: "bullets",
+        items: [
+          "Use <strong>cmd+F (Mac)</strong> or <strong>ctrl+F (Windows)</strong> to open the new Find/Replace tool",
+          "Use the find options menu (top-left) to <strong>choose which chapters</strong> to search",
+        ],
+      },
+      { kind: "paragraph", html: "Other changes:" },
+      {
+        kind: "bullets",
+        items: [
+          "<strong>Chapter word counts</strong> have been added",
+          "<strong>Autosave</strong> has been improved",
+          "Hot Cocoa now tells you when to <strong>update</strong>",
+        ],
+      },
+    ],
+  },
+  {
     id: "share-and-comment",
     date: "2026-08-14",
     title: "Share chapters & add comments",

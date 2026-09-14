@@ -11,6 +11,7 @@ import NewVersionCard from "@/components/NewVersionCard";
 import CenterColumn from "@/components/CenterColumn";
 import BookInfoColumn from "@/components/BookInfoColumn";
 import RightColumn from "@/components/RightColumn";
+import FindReplaceBar from "@/components/FindReplaceBar";
 import { InstallHint } from "@/components/InstallHint";
 import WhatsNewModal from "@/components/WhatsNewModal";
 import { SceneDragProvider } from "@/lib/useSceneDrag";
@@ -118,6 +119,13 @@ export default function WritePage() {
   // When on, the center pane renders BookInfoColumn and the Library binds to the
   // book's info chapter; side-by-side is forced off.
   const [bookView, setBookView] = useState(false);
+  // Find/Replace bar open/close. `findOpen` is the intent; the bar slides in/out
+  // via the grid-rows trick, so it stays mounted through the exit: `findRender`
+  // keeps it in the DOM and `findExpand` drives the 1fr⇄0fr height. Book Info is
+  // single-column and not part of the manuscript, so the bar hides there.
+  const [findOpen, setFindOpen] = useState(false);
+  const [findRender, setFindRender] = useState(false);
+  const [findExpand, setFindExpand] = useState(false);
   const [authorName, setAuthorName] = useState("");
   const left = useColumnResize("hc.leftWidth", LEFT_DEFAULT, LEFT_MIN, LEFT_MAX, 1);
   const right = useColumnResize("hc.rightWidth", RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX, -1);
@@ -211,6 +219,50 @@ export default function WritePage() {
     if (focusedPane === 2) setSecondaryChapterId(id);
     else setActiveChapter(id);
   }, [secondaryChapterId, activeChapterId, focusedPane, setActiveChapter, setSecondaryChapterId, setFocusedPane]);
+
+  // Bring a chapter into a mounted editor pane so the Find bar can reveal a match
+  // in it. No-op when it's already showing in either pane; otherwise it takes
+  // over pane 1 (and drops Book Info, which is single-column).
+  const revealChapter = useCallback((id: string) => {
+    if (id === activeChapterId || id === secondaryChapterId) return;
+    setBookView(false);
+    setActiveChapter(id);
+  }, [activeChapterId, secondaryChapterId, setActiveChapter]);
+
+  // Cmd/Ctrl+F opens the Find/Replace bar (grabbing the browser's native find).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        setFindOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Slide the Find bar in/out: mount it collapsed, then expand — but only after a
+  // double rAF, so the browser actually paints the 0fr/translated/transparent
+  // "from" frame before we flip to the target (a single frame coalesces the two
+  // and the open snaps in). Collapse runs straight off the mounted state, and the
+  // unmount is deferred to the end of the 300ms slide.
+  const findWanted = findOpen && !bookView;
+  useEffect(() => {
+    if (findWanted) {
+      setFindRender(true);
+      let raf2 = 0;
+      const raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setFindExpand(true));
+      });
+      return () => {
+        cancelAnimationFrame(raf1);
+        cancelAnimationFrame(raf2);
+      };
+    }
+    setFindExpand(false);
+    const t = setTimeout(() => setFindRender(false), 300);
+    return () => clearTimeout(t);
+  }, [findWanted]);
 
   // ── Enter/exit animation ──────────────────────────────────────────────────
   // Entering and leaving side-by-side is a cross-fade in place: the split divider
@@ -491,6 +543,7 @@ export default function WritePage() {
     onToggleLinks: () => setLinksVisible((v) => !v),
     sectionViews,
     onSetSectionView: setSectionView,
+    onOpenFindReplace: () => setFindOpen(true),
   };
 
   // Everything a Chapter Editor needs except the chapter itself, so the three
@@ -560,6 +613,40 @@ export default function WritePage() {
     <SceneDragProvider>
     <ChapterDragProvider>
     <div className="h-full flex flex-col bg-bg overflow-hidden">
+      {/* ── Find/Replace bar — a header above the three columns, shown for the
+          manuscript view only. The grid-rows 0fr⇄1fr trick pushes the columns
+          down/up, while the bar's content translates + fades in step so it reads
+          as one slide rather than a reveal. ── */}
+      {findRender && (
+        <div
+          className="grid flex-shrink-0 min-h-0"
+          style={{
+            gridTemplateRows: findExpand ? "1fr" : "0fr",
+            transition: "grid-template-rows 300ms ease-in-out",
+          }}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div
+              style={{
+                opacity: findExpand ? 1 : 0,
+                transform: findExpand ? "translateY(0)" : "translateY(-100%)",
+                transition: "opacity 300ms ease-in-out, transform 300ms ease-in-out",
+              }}
+            >
+              <FindReplaceBar
+                sections={store.sections}
+                activeChapterId={store.activeChapter.id}
+                secondaryChapterId={secondaryChapterId}
+                onClose={() => setFindOpen(false)}
+                onUpdateScene={store.updateScene}
+                onUpdateChapterTitle={store.updateChapterTitle}
+                onNavigateToChapter={revealChapter}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Mobile top bar ── */}
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border-subtle flex-shrink-0">
         <button

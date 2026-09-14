@@ -226,6 +226,10 @@ export default function CenterColumn({
             value={chapter.title}
             placeholder="Chapter title…"
             onChange={(e) => onChapterTitleChange(chapter.id, e.target.value)}
+            // data-chapter-title lets the Find/Replace bar locate this input to
+            // native-select a title match (the Custom Highlight API can't tint an
+            // <input>).
+            data-chapter-title={chapter.id}
             className="w-full bg-transparent text-heading-l text-text placeholder:text-subtle/40 focus:outline-none"
           />
         </div>

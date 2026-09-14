@@ -122,6 +122,21 @@ body {
   background-color: color-mix(in srgb, var(--hc-hover) calc(var(--hc-hl-opacity) * 100%), transparent);
 }
 
+/* Find/Replace match highlights. Painted via the same CSS Custom Highlight API as
+   comments and deliberately reusing the comment default/selected colors, so a
+   search result reads exactly like a commented range: every match gets the subtle
+   inactive tint, the one the arrows have centred gets the accent fill. Painted at
+   full opacity (independent of --hc-hl-opacity, which only fades the Comments
+   tab's highlights) since the Find bar is its own overlay. Registered in
+   components/FindReplaceBar. */
+::highlight(hc-find) {
+  background-color: var(--hc-inactive-highlight);
+}
+::highlight(hc-find-active) {
+  background-color: var(--hc-accent);
+  color: var(--hc-on-accent);
+}
+
 /* Unlocatable comment cards (Shared With You §7). When a reader's quoted text no
    longer matches the live/snapshot prose, the comment can't anchor to a
    highlight — so its card recedes onto the page background with a dashed border
