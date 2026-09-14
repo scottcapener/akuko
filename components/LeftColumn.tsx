@@ -57,6 +57,8 @@ interface Props {
   onToggleLinks: () => void;
   sectionViews: Record<string, "grid" | "list">;
   onSetSectionView: (sectionId: string, view: "grid" | "list") => void;
+  // Opens the Find/Replace bar from the account menu (also bound to Cmd/Ctrl+F).
+  onOpenFindReplace?: () => void;
   // ── Side-by-side ──
   // The chapter open in the second Chapter Editor, or null when side-by-side is
   // off. `activeChapter` is always pane 1's chapter.
@@ -766,6 +768,7 @@ export default function LeftColumn({
   onToggleLinks,
   sectionViews,
   onSetSectionView,
+  onOpenFindReplace,
   secondaryChapterId = null,
   focusedPane = 1,
   onOpenSideBySide,
@@ -1121,6 +1124,18 @@ export default function LeftColumn({
       <div ref={menuRef} className="px-5 py-4 flex-shrink-0 border-t border-border-subtle relative flex items-center justify-between">
         {menuOpen && (
           <div className="absolute bottom-full right-4 mb-2 w-40 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden z-20">
+            {/* Find/replace — top of the menu, its own group (also Cmd/Ctrl+F). */}
+            {onOpenFindReplace && (
+              <>
+                <button
+                  onClick={() => { setMenuOpen(false); onOpenFindReplace(); }}
+                  className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
+                >
+                  Find/replace…
+                </button>
+                <div className="border-t border-hover" />
+              </>
+            )}
             <Link
               href="/books"
               onClick={() => setMenuOpen(false)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import { ensureDevSession } from "@/lib/ensureDevSession";
@@ -34,13 +34,15 @@ export default function WhatsNewModal() {
   // Drives the enter transition (drawer rise / fade) — flipped on the frame after
   // the portal mounts so the browser animates from the off-screen start state.
   const [shown, setShown] = useState(false);
-  const decided = useRef(false);
-
-  // Decide whether to show, exactly once. The ref also guards against React
-  // StrictMode's double-invoke in development.
+  // Decide whether to show. A `cancelled` flag keeps a fetch that resolves after
+  // unmount from calling setOpen. We deliberately DON'T dedupe across React
+  // StrictMode's dev double-invoke: a persistent ref did that, but it let the
+  // throwaway first mount claim the decision and then self-cancel, so the modal
+  // never opened in dev. Letting each mount run its own fetch means StrictMode's
+  // second (live) mount still opens it — production only mounts once — and the
+  // extra dev-only read is harmless.
   useEffect(() => {
-    if (decided.current || !latestUpdate) return;
-    decided.current = true;
+    if (!latestUpdate) return;
     const supabase = createClient();
     let cancelled = false;
     (async () => {
