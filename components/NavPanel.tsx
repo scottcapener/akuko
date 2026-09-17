@@ -102,21 +102,22 @@ type NavItem = {
 };
 
 // Grouped exactly as in the Figma. "Shared with you" sits in its own section
-// between the file group and Settings/Account (§3.1).
-const PRIMARY: NavItem[] = [
+// between the file group and Settings/Account (§3.1). Exported so the writer's
+// Main Menu (LeftColumn) renders the identical rows rather than duplicating them.
+export const PRIMARY: NavItem[] = [
   { href: "/books", label: "Books", Icon: BooksIcon },
   { href: "/backups", label: "Backups", Icon: BackupsIcon },
   { href: "/export", label: "Export", Icon: ExportIcon },
 ];
-const SHARED: NavItem[] = [
+export const SHARED: NavItem[] = [
   { href: "/shared", label: "Shared", Icon: SharedIcon },
 ];
-const SECONDARY: NavItem[] = [
+export const SECONDARY: NavItem[] = [
   { href: "/settings", label: "Settings", Icon: SettingsIcon },
   { href: "/account", label: "Account", Icon: AccountIcon },
 ];
 
-function NavRow({ item, active, badge = 0, onNavigate }: { item: NavItem; active: boolean; badge?: number; onNavigate?: () => void }) {
+export function NavRow({ item, active, badge = 0, onNavigate }: { item: NavItem; active: boolean; badge?: number; onNavigate?: () => void }) {
   return (
     <Link
       href={item.href}
