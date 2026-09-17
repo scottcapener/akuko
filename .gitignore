@@ -42,3 +42,6 @@ next-env.d.ts
 
 # source assets (copied to public/ as needed)
 /assets
+
+# scratch / debug dumps
+/tmp
