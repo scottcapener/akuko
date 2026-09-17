@@ -301,9 +301,12 @@ Showing chapters I've shared in the `/shared` list works, but sharing a chapter 
 Bigger question: how do I view my own book in Read mode? A Preview button? A separate control? Needs product
 thought before any build.
 
-### Live comments & author presence 🤔
-How to handle live comments being added while someone is reading, and author presence. Needs a design +
-product decision (realtime subscription? polling? presence indicators?).
+### Live comments & author presence 🎨↑ — spec drafted
+How to handle live comments being added while someone is reading, and author presence. **Now spec'd** in
+[REALTIME_SYNC.md](REALTIME_SYNC.md) as **Track B — Live Conversation**: Supabase Realtime (Presence +
+Postgres-Changes-as-refetch-signal), the `<PartnerPresence>` stack on the chapter-title row
+(Figma 360-3646 / 360-3742), over the shared realtime foundation (§1). Promote out of the backlog once the
+open decisions in §4 there are confirmed.
 
 ---
 
