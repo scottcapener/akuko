@@ -295,7 +295,7 @@ export default function SceneBlock({
           onCopy={handleCopy}
           onKeyDown={handleKeyDown}
           data-placeholder={placeholder ?? "Write here…"}
-          className="w-full bg-transparent text-text text-manuscript-l font-serif indent-9 empty:indent-0 focus:outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-subtle/30 empty:before:pointer-events-none [&_em]:italic"
+          className="w-full bg-transparent text-text manuscript-body indent-9 empty:indent-0 focus:outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-subtle/30 empty:before:pointer-events-none [&_em]:italic"
           style={{ minHeight: "3em" }}
         />
       </div>

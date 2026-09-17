@@ -18,7 +18,7 @@ import { SceneDragProvider } from "@/lib/useSceneDrag";
 import { ChapterDragProvider } from "@/lib/useChapterDrag";
 import { useLocalStorageState } from "@/lib/useLocalStorageState";
 import { useColumnResize } from "@/lib/useColumnResize";
-import { Scene } from "@/lib/types";
+import { Scene, Typeface, Spacing } from "@/lib/types";
 
 type MobilePanel = "left" | "right" | null;
 
@@ -132,6 +132,12 @@ export default function WritePage() {
 
   const [scenesVisible, setScenesVisible] = useLocalStorageState("hc.scenesVisible", true);
   const [linksVisible, setLinksVisible] = useLocalStorageState("hc.linksVisible", true);
+  // Scene-body typeface + spacing (Main Menu → Typeface / Spacing). Applied as
+  // data-attributes on the writer root below, which the `.manuscript-body` rules
+  // read — so a change repaints every scene live without threading through the
+  // editor. Read view is intentionally unaffected (option C).
+  const [typeface, setTypeface] = useLocalStorageState<Typeface>("hc.typeface", "scotch");
+  const [spacing, setSpacing] = useLocalStorageState<Spacing>("hc.spacing", "compact");
   // "Show stats" — account-wide (not per-chapter): one key drives the chapter
   // word-count card for every chapter and the Chapter Menu's switch.
   const [chapterStatsVisible, setChapterStatsVisible] = useLocalStorageState("hc.chapterStatsVisible", false);
@@ -541,6 +547,10 @@ export default function WritePage() {
     onToggleScenes: () => setScenesVisible((v) => !v),
     linksVisible,
     onToggleLinks: () => setLinksVisible((v) => !v),
+    typeface,
+    onSelectTypeface: setTypeface,
+    spacing,
+    onSelectSpacing: setSpacing,
     sectionViews,
     onSetSectionView: setSectionView,
     onOpenFindReplace: () => setFindOpen(true),
@@ -612,7 +622,11 @@ export default function WritePage() {
   return (
     <SceneDragProvider>
     <ChapterDragProvider>
-    <div className="h-full flex flex-col bg-bg overflow-hidden">
+    <div
+      className="h-full flex flex-col bg-bg overflow-hidden"
+      data-manuscript-typeface={typeface}
+      data-manuscript-spacing={spacing}
+    >
       {/* ── Find/Replace bar — a header above the three columns, shown for the
           manuscript view only. The grid-rows 0fr⇄1fr trick pushes the columns
           down/up, while the bar's content translates + fades in step so it reads

@@ -343,7 +343,7 @@ function Prose({ view }: { view: ReadView }) {
   return (
     <article className="max-w-[700px] mx-auto px-6 py-12 md:py-16">
       <h1 className="font-serif text-text text-2xl mb-8">{view.chapterTitle}</h1>
-      <div className="font-serif text-manuscript-l text-text">
+      <div className="manuscript-body text-text">
         {view.scenes.map((scene, i) => (
           <div key={scene.id} data-shared-scene-id={scene.id}>
             {i > 0 && (
