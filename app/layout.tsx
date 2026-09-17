@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Red_Hat_Text } from "next/font/google";
 import "./styles/tokens.css";
 import "./globals.css";
 import ScrollbarAutoHide from "@/components/ScrollbarAutoHide";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+// The "gothic" manuscript typeface option (Main Menu → Typeface). Georgia and
+// Times New Roman are system fonts; Red Hat Text is the one we load. Its family
+// is wired into --hc-manuscript-gothic-font via this CSS variable.
+const redHatText = Red_Hat_Text({ subsets: ["latin"], variable: "--font-red-hat-text" });
 
 export const metadata: Metadata = {
   title: "Hot Cocoa",
@@ -29,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} h-full`} suppressHydrationWarning>
+    <html lang="en" className={`${inter.variable} ${redHatText.variable} h-full`} suppressHydrationWarning>
       <head>
         {/* Apply the saved theme before first paint to avoid a flash of the
             default (dark) palette. Runs synchronously; dark is the default so

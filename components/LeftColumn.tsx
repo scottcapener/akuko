@@ -3,14 +3,12 @@
 import { Fragment, useState, useRef, useEffect } from "react";
 import type React from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { Book, Section, Chapter, Scene } from "@/lib/types";
+import { Book, Section, Chapter, Scene, Typeface, Spacing } from "@/lib/types";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { DropLine } from "@/components/ui/DropLine";
 import BookOverview from "@/components/BookOverview";
+import { NavRow, PRIMARY, SHARED, SECONDARY } from "@/components/NavPanel";
 import { Badge } from "@/components/ui/Badge";
 import { useUnread } from "@/lib/useUnread";
 import { useTheme } from "@/lib/useTheme";
@@ -26,6 +24,102 @@ import { useChapterDrag } from "@/lib/useChapterDrag";
 function gapFromEvent(e: React.DragEvent, index: number): number {
   const rect = e.currentTarget.getBoundingClientRect();
   return e.clientY > rect.top + rect.height / 2 ? index + 1 : index;
+}
+
+// A toggle row in the Main Menu's Options group (Light mode / Show scenes /
+// Show links). Sized to sit alongside the NavRow items (text-sm, px-3 py-2).
+function MenuToggle({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      role="switch"
+      aria-checked={on}
+      className="flex w-full items-center justify-between px-3 py-2 rounded-lg text-sm text-muted hover:text-text hover:bg-panel transition-colors"
+    >
+      <span>{label}</span>
+      <span className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${on ? "bg-accent" : "bg-hover"}`}>
+        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${on ? "left-[18px]" : "left-0.5"}`} />
+      </span>
+    </button>
+  );
+}
+
+// Typeface picker — a custom dropdown in the app's mini-menu style (matching the
+// Chapter/Sharing menu) rather than a native <select>. Labels are the type-style
+// names; values are the manuscript typefaces. Manages its own open state so a
+// pick keeps the Main Menu open (like the toggles); the enclosing Main Menu's
+// outside-click still closes everything.
+const TYPEFACE_OPTIONS: { value: Typeface; label: string }[] = [
+  { value: "scotch", label: "Scotch" },
+  { value: "classic", label: "Classic" },
+  { value: "gothic", label: "Gothic" },
+];
+
+function TypefaceMenu({ value, onChange }: { value: Typeface; onChange: (t: Typeface) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+  const current = TYPEFACE_OPTIONS.find((o) => o.value === value) ?? TYPEFACE_OPTIONS[0];
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Scene typeface"
+        className="flex min-w-[112px] items-center justify-between gap-2 rounded-lg border border-hover bg-panel py-1.5 pl-3 pr-2 text-sm text-text hover:bg-hover transition-colors"
+      >
+        <span>{current.label}</span>
+        <svg className={`w-4 h-4 text-subtle transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M5 7.5L10 12.5L15 7.5" />
+        </svg>
+      </button>
+      {open && (
+        <div role="listbox" className="absolute top-full right-0 mt-1 w-40 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden z-50">
+          {TYPEFACE_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              role="option"
+              aria-selected={o.value === value}
+              onClick={() => { onChange(o.value); setOpen(false); }}
+              className="flex w-full items-center justify-between px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
+            >
+              <span>{o.label}</span>
+              {o.value === value && (
+                <svg className="w-3.5 h-3.5 text-accent" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 10.5L8 14.5L16 5.5" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One segment of the Main Menu's Spacing control (compact / wide).
+function SpacingButton({ label, active, onClick, children }: { label: string; active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      title={label}
+      aria-label={label}
+      className={`flex items-center justify-center rounded-md px-2.5 py-1 transition-colors ${
+        active ? "bg-hover text-text" : "text-subtle hover:text-text"
+      }`}
+    >
+      {children}
+    </button>
+  );
 }
 
 interface Props {
@@ -55,6 +149,11 @@ interface Props {
   onToggleScenes: () => void;
   linksVisible: boolean;
   onToggleLinks: () => void;
+  // Scene-body display prefs surfaced in the Main Menu (applied by app/write).
+  typeface: Typeface;
+  onSelectTypeface: (t: Typeface) => void;
+  spacing: Spacing;
+  onSelectSpacing: (s: Spacing) => void;
   sectionViews: Record<string, "grid" | "list">;
   onSetSectionView: (sectionId: string, view: "grid" | "list") => void;
   // Opens the Find/Replace bar from the account menu (also bound to Cmd/Ctrl+F).
@@ -766,6 +865,10 @@ export default function LeftColumn({
   onToggleScenes,
   linksVisible,
   onToggleLinks,
+  typeface,
+  onSelectTypeface,
+  spacing,
+  onSelectSpacing,
   sectionViews,
   onSetSectionView,
   onOpenFindReplace,
@@ -778,8 +881,6 @@ export default function LeftColumn({
   expandedWidth,
   overlay,
 }: Props) {
-  const router = useRouter();
-  const supabase = createClient();
   const { theme, toggleTheme } = useTheme();
   const { total: unreadTotal } = useUnread();
 
@@ -871,23 +972,28 @@ export default function LeftColumn({
     };
   }, [chapterMenu]);
 
+  // Main Menu — close on an outside click or Escape. menuRef wraps the whole
+  // footer slot (drawer + Main Nav Bar), so clicks inside either count as inside.
   useEffect(() => {
+    if (!menuOpen) return;
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
     }
-    if (menuOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKey);
+    };
   }, [menuOpen]);
 
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    router.push("/");
-  }
-
   return (
-    <div className="flex flex-col h-full bg-bg border-r border-border-subtle w-full">
+    <div className="relative flex flex-col h-full bg-bg border-r border-border-subtle w-full overflow-hidden">
 
       {/* Chapter right-click menu — positioned at the cursor. Same styling as the
           section kebab menu. Closes on outside interaction (see effect above). */}
@@ -1120,144 +1226,155 @@ export default function LeftColumn({
         )}
       </div>
 
-      {/* ── Logo + user menu ── */}
-      <div ref={menuRef} className="px-5 py-4 flex-shrink-0 border-t border-border-subtle relative flex items-center justify-between">
-        {menuOpen && (
-          <div className="absolute bottom-full right-4 mb-2 w-40 bg-panel border border-hover rounded-lg shadow-lg overflow-hidden z-20">
-            {/* Find/replace — top of the menu, its own group (also Cmd/Ctrl+F). */}
+      {/* Book Panel content dims while the Main Menu is open. This overlay covers
+          the header + body (default stacking); the footer slot below sits above it
+          (z-40), so the Main Nav Bar and the drawer stay at full brightness.
+          Clicking the dimmed area closes the menu. */}
+      <div
+        aria-hidden
+        onClick={() => setMenuOpen(false)}
+        className={`absolute inset-0 z-30 bg-bg transition-opacity duration-[400ms] ease-[cubic-bezier(0,0,0.2,1)] ${
+          menuOpen ? "opacity-60" : "opacity-0 pointer-events-none"
+        }`}
+      />
+
+      {/* ── Main Nav Bar + Main Menu ──────────────────────────────────────────
+          The footer slot. The Main Menu drawer is anchored to the top edge of the
+          Main Nav Bar (bottom-full) and, when closed, is translated down so it
+          hides behind the bar (which paints last with a solid bg) and is clipped
+          by the panel's overflow-hidden — so it reads as sliding up from *behind*
+          the bar. z-40 keeps the whole slot above the dim overlay. menuRef wraps
+          both so an outside click closes, but clicks within the drawer/bar don't. */}
+      <div ref={menuRef} className="relative flex-shrink-0 z-40">
+        {/* Main Menu drawer — the surface itself only slides (translate is animated
+            via the CSS `translate` property in Tailwind v4, hence transition-[translate]);
+            its background/border stay solid throughout. The inner content fades
+            separately (below), so the panel never fades in or out. */}
+        <div
+          role="menu"
+          aria-hidden={!menuOpen}
+          className={`absolute inset-x-0 bottom-full max-h-[calc(100vh-7rem)] overflow-y-auto bg-bg border-t border-border-subtle transition-[translate] duration-[400ms] ease-[cubic-bezier(0,0,0.2,1)] ${
+            menuOpen ? "translate-y-0" : "translate-y-full pointer-events-none"
+          }`}
+        >
+          {/* Content fades over the same 400ms while the surface slides. */}
+          <div
+            className={`px-3 py-3 flex flex-col gap-1 transition-opacity duration-[400ms] ease-[cubic-bezier(0,0,0.2,1)] ${
+              menuOpen ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            {/* Find/replace — its own group at the top (also Cmd/Ctrl+F). */}
             {onOpenFindReplace && (
               <>
                 <button
                   onClick={() => { setMenuOpen(false); onOpenFindReplace(); }}
-                  className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
+                  className="flex w-full items-center px-3 py-2 rounded-lg text-sm text-muted hover:text-text hover:bg-panel transition-colors"
                 >
                   Find/replace…
                 </button>
-                <div className="border-t border-hover" />
+                <div className="my-2 -mx-3 border-t border-border-subtle" />
               </>
             )}
-            <Link
-              href="/books"
-              onClick={() => setMenuOpen(false)}
-              className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
-            >
-              Books
-            </Link>
-            <Link
-              href="/backups"
-              onClick={() => setMenuOpen(false)}
-              className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
-            >
-              Backups
-            </Link>
-            <Link
-              href="/export"
-              onClick={() => setMenuOpen(false)}
-              className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
-            >
-              Export
-            </Link>
-            <Link
-              href="/settings"
-              onClick={() => setMenuOpen(false)}
-              className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
-            >
-              Settings
-            </Link>
-            <Link
-              href="/account"
-              onClick={() => setMenuOpen(false)}
-              className="block w-full text-left px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
-            >
-              Account
-            </Link>
 
-            {/* Shared with you — its own section below Account (§3.1). Label is
-                "Shared"; the page title is "Shared with you". */}
-            <div className="border-t border-hover" />
-            <Link
-              href="/shared"
-              onClick={() => setMenuOpen(false)}
-              className="flex w-full items-center justify-between px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
-            >
-              <span>Shared</span>
-              {unreadTotal > 0 && <Badge count={unreadTotal} />}
-            </Link>
+            {/* Options — account-level workspace preferences. Light mode persists
+                to localStorage (applied app-wide via data-theme on <html>); scenes
+                and links are view preferences that show/hide those surfaces. */}
+            <div className="px-3 pt-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-subtle">
+              Workspace
+            </div>
+            <MenuToggle label="Light mode" on={theme === "light"} onClick={toggleTheme} />
+            <MenuToggle label="Show scenes" on={scenesVisible} onClick={onToggleScenes} />
+            <MenuToggle label="Show links" on={linksVisible} onClick={onToggleLinks} />
 
-            {/* Scene visibility — a user-level view preference, not a book edit.
-                Off hides scene descriptions + the Add scene button everywhere;
-                the underlying scene structure is left untouched. */}
-            <div className="border-t border-hover" />
-            <button
-              onClick={onToggleScenes}
-              className="flex w-full items-center justify-between px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
-              role="switch"
-              aria-checked={scenesVisible}
-            >
-              <span>Show scenes</span>
-              <span className={`relative w-7 h-4 rounded-full flex-shrink-0 transition-colors ${scenesVisible ? "bg-accent" : "bg-hover"}`}>
-                <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${scenesVisible ? "left-3.5" : "left-0.5"}`} />
-              </span>
-            </button>
+            {/* Typeface — the scene-body type style (Scotch/Classic/Gothic),
+                picked from a mini-menu dropdown matching the app's other menus. */}
+            <div className="flex w-full items-center justify-between px-3 py-2">
+              <span className="text-sm text-muted">Typeface</span>
+              <TypefaceMenu value={typeface} onChange={onSelectTypeface} />
+            </div>
 
-            {/* Link visibility — a user-level view preference, mirroring Show
-                scenes. Off hides the Links section in the library panel. */}
-            <button
-              onClick={onToggleLinks}
-              className="flex w-full items-center justify-between px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
-              role="switch"
-              aria-checked={linksVisible}
-            >
-              <span>Show links</span>
-              <span className={`relative w-7 h-4 rounded-full flex-shrink-0 transition-colors ${linksVisible ? "bg-accent" : "bg-hover"}`}>
-                <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${linksVisible ? "left-3.5" : "left-0.5"}`} />
-              </span>
-            </button>
+            {/* Spacing — line-height for any typeface: compact (144%) or wide
+                (200%, double-spaced). Segmented, one active at a time. */}
+            <div className="flex w-full items-center justify-between px-3 py-2">
+              <span className="text-sm text-muted">Spacing</span>
+              <div className="flex items-center gap-0.5 rounded-lg border border-border-subtle p-0.5">
+                <SpacingButton
+                  label="Compact"
+                  active={spacing === "compact"}
+                  onClick={() => onSelectSpacing("compact")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
+                    <line x1="3" y1="5" x2="13" y2="5" />
+                    <line x1="3" y1="8" x2="13" y2="8" />
+                    <line x1="3" y1="11" x2="13" y2="11" />
+                  </svg>
+                </SpacingButton>
+                <SpacingButton
+                  label="Wide"
+                  active={spacing === "wide"}
+                  onClick={() => onSelectSpacing("wide")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
+                    <line x1="3" y1="4" x2="13" y2="4" />
+                    <line x1="3" y1="12" x2="13" y2="12" />
+                  </svg>
+                </SpacingButton>
+              </div>
+            </div>
 
-            {/* Light mode — a user-level display preference. Persisted to
-                localStorage and applied app-wide via data-theme on <html>. */}
-            <button
-              onClick={toggleTheme}
-              className="flex w-full items-center justify-between px-4 py-2.5 text-xs text-text hover:bg-hover transition-colors"
-              role="switch"
-              aria-checked={theme === "light"}
-            >
-              <span>Light mode</span>
-              <span className={`relative w-7 h-4 rounded-full flex-shrink-0 transition-colors ${theme === "light" ? "bg-accent" : "bg-hover"}`}>
-                <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${theme === "light" ? "left-3.5" : "left-0.5"}`} />
-              </span>
-            </button>
-            <div className="border-t border-hover" />
+            <div className="my-2 -mx-3 border-t border-border-subtle" />
 
-            <button
-              onClick={handleSignOut}
-              className="block w-full text-left px-4 py-2.5 text-xs text-accent hover:bg-hover transition-colors"
-            >
-              Log out
-            </button>
+            {/* Navigation — the exact Nav Panel rows (grouped as in the workspace:
+                the file group, Shared with its unread badge, then Settings/Account).
+                Navigating closes the menu. Nothing is "active" from the writer. */}
+            {PRIMARY.map((item) => (
+              <NavRow key={item.href} item={item} active={false} onNavigate={() => setMenuOpen(false)} />
+            ))}
+            <div className="my-2 -mx-3 border-t border-border-subtle" />
+            {SHARED.map((item) => (
+              <NavRow key={item.href} item={item} active={false} badge={unreadTotal} onNavigate={() => setMenuOpen(false)} />
+            ))}
+            <div className="my-2 -mx-3 border-t border-border-subtle" />
+            {SECONDARY.map((item) => (
+              <NavRow key={item.href} item={item} active={false} onNavigate={() => setMenuOpen(false)} />
+            ))}
           </div>
-        )}
-        <Image
-          src="/logo-wordmark.svg"
-          alt="Hot Cocoa"
-          width={93}
-          height={17}
-          priority
-        />
-        <button
-          onClick={() => setMenuOpen((o) => !o)}
-          className="relative text-subtle hover:text-text transition-colors leading-none flex items-center justify-center"
-          title="Account"
-          aria-label="Account menu"
-        >
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="5" cy="12" r="1.5" />
-            <circle cx="12" cy="12" r="1.5" />
-            <circle cx="19" cy="12" r="1.5" />
-          </svg>
-          {/* Menu closed: a dot flags new shared activity without opening it. */}
-          {!menuOpen && unreadTotal > 0 && <Badge dot className="absolute -top-1 -right-1" />}
-        </button>
+        </div>
+
+        {/* Main Nav Bar — wordmark + the Main Menu toggle. Solid bg so the closed
+            drawer is hidden behind it. */}
+        <div className="px-5 py-4 border-t border-border-subtle bg-bg relative flex items-center justify-between">
+          <Image
+            src="/logo-wordmark.svg"
+            alt="Hot Cocoa"
+            width={93}
+            height={17}
+            preload
+          />
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            className="relative text-subtle hover:text-text transition-colors leading-none flex items-center justify-center"
+            title="Main menu"
+            aria-label={menuOpen ? "Close main menu" : "Open main menu"}
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? (
+              // Chevron-down — closes the Main Menu.
+              <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 7.5L10 12.5L15 7.5" />
+              </svg>
+            ) : (
+              // icon-main_menu — redrawn with currentColor so it tracks the theme
+              // (the source SVG bakes in a fixed grey). Two rounded rules.
+              <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                <line x1="1.75" y1="6.75" x2="16.25" y2="6.75" />
+                <line x1="1.75" y1="12.75" x2="12.25" y2="12.75" />
+              </svg>
+            )}
+            {/* Menu closed: a dot flags new shared activity without opening it. */}
+            {!menuOpen && unreadTotal > 0 && <Badge dot className="absolute -top-1 -right-1" />}
+          </button>
+        </div>
       </div>
       </div>
     </div>

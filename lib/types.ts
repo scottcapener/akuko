@@ -97,3 +97,9 @@ export interface Book {
   // whole-book achievements — this only narrows the Book Info total.
   excludedSectionIds: string[];
 }
+
+// Scene-body manuscript display preferences (Main Menu → Typeface / Spacing).
+// User-level view settings stored in localStorage, applied via data-attributes
+// on the writer root (see app/globals.css `.manuscript-body`).
+export type Typeface = "scotch" | "classic" | "gothic";
+export type Spacing = "compact" | "wide";

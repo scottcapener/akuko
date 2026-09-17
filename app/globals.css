@@ -54,12 +54,6 @@
   --text-body-l--line-height: 24px;
   --text-body-l--font-weight: 400;
 
-  /* Scene body / manuscript — pair with `font-serif` and `indent-9` (36px
-     first-line indent, which inherits to each paragraph block). */
-  --text-manuscript-l: 16px;
-  --text-manuscript-l--line-height: 144%;
-  --text-manuscript-l--font-weight: 400;
-
   --text-body-m: 12px;
   --text-body-m--line-height: 1;
   --text-body-m--font-weight: 400;
@@ -89,6 +83,30 @@ body {
   color: var(--hc-text);
   font-family: var(--hc-font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Scene-body manuscript type (the former `text-manuscript-l`). The typeface
+   (family + size) and spacing (line-height) are chosen per user in the Main Menu
+   and applied via data-manuscript-typeface / data-manuscript-spacing on the
+   writer root, so every scene updates live. Pair with `indent-9` for the
+   first-line indent. Read view (shared chapters) has no writer root, so it
+   renders the scotch/compact default (Typeface & Spacing option C). */
+.manuscript-body {
+  font-family: var(--hc-manuscript-scotch-font);
+  font-size: var(--hc-manuscript-scotch-size);
+  line-height: var(--hc-manuscript-line-compact);
+  font-weight: 400;
+}
+[data-manuscript-typeface="classic"] .manuscript-body {
+  font-family: var(--hc-manuscript-classic-font);
+  font-size: var(--hc-manuscript-classic-size);
+}
+[data-manuscript-typeface="gothic"] .manuscript-body {
+  font-family: var(--hc-manuscript-gothic-font);
+  font-size: var(--hc-manuscript-gothic-size);
+}
+[data-manuscript-spacing="wide"] .manuscript-body {
+  line-height: var(--hc-manuscript-line-wide);
 }
 
 /* Comment highlights (Shared With You §3.4) — painted via the CSS Custom
@@ -238,7 +256,9 @@ input:focus {
 
 /* Prevent iOS auto-zoom on input focus: iOS zooms when font-size < 16px.
    contenteditable divs aren't covered by the component-level fixes below,
-   so we enforce it here globally with !important. */
-[contenteditable] {
+   so we enforce it here globally with !important. The scene body is exempt:
+   its Typeface option sets its own sizes (all ≥ 16px, so still zoom-safe) and
+   the !important floor would otherwise pin it to 16px. */
+[contenteditable]:not(.manuscript-body) {
   font-size: 16px !important;
 }

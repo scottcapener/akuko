@@ -35,7 +35,21 @@
   /* ── Typography ── */
   --hc-font-sans: "Inter", system-ui, sans-serif;
   --hc-font-mono: "JetBrains Mono", "Fira Mono", ui-monospace, monospace;
-  --hc-font-serif: "Georgia", serif;   /* manuscript / scene body */
+  --hc-font-serif: "Georgia", serif;   /* decorative serif (stat numerals) */
+
+  /* Manuscript type styles — the scene-body typeface × spacing chosen per user
+     in the Main Menu (Typeface / Spacing). Scotch (Georgia) is the default and
+     was the former `manuscript-l`; Classic/Gothic run 2px/1px larger to even out
+     their x-heights. Spacing swaps line-height for any typeface. Applied via the
+     `.manuscript-body` rules + data-attributes in globals.css. */
+  --hc-manuscript-scotch-font:  "Georgia", serif;
+  --hc-manuscript-scotch-size:  16px;
+  --hc-manuscript-classic-font: "Times New Roman", Times, serif;
+  --hc-manuscript-classic-size: 18px;
+  --hc-manuscript-gothic-font:  var(--font-red-hat-text), "Red Hat Text", sans-serif;
+  --hc-manuscript-gothic-size:  17px;
+  --hc-manuscript-line-compact: 1.44;  /* 144% */
+  --hc-manuscript-line-wide:    2;      /* 200% — double-spaced */
 
   /* ── Radius ── */
   --hc-radius-sm:   0.25rem;   /* 4px  — maps to rounded */
