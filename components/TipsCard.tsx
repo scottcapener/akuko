@@ -5,10 +5,12 @@ import { useTips } from "@/lib/useTips";
 
 // ── Tips card ("Tip of the day") ───────────────────────────────────────────────
 // A small widget that floats over the book panel's chapter list, showing the next
-// tip in the list (basic → advanced). The current tip stays put — across reloads
-// and sessions — until the reader dismisses it with the ×; dismissing advances to
-// the next tip, which surfaces on the next load. Tips never repeat: once the whole
-// list has been dismissed, the card stops appearing.
+// tip in the list (basic → advanced). It surfaces once a day, on the first session
+// of a new calendar day, and then stays put — across reloads and navigation back to
+// Write — until the reader dismisses it with the ×. Dismissing advances to the next
+// tip and suppresses the card for the rest of that day; the next tip surfaces on the
+// first session of the next day. Tips never repeat: once the whole list has been
+// dismissed, the card stops appearing.
 //
 // All of its state is device-scoped localStorage, consistent with the other view
 // preferences (scenes/links/theme). `hc.tipsEnabled` is the shared key the
@@ -18,7 +20,17 @@ const K = {
   enabled: "hc.tipsEnabled", // shared with the Settings toggle (JSON boolean)
   cursor: "hc.tipsCursor", // index of the tip currently shown / to show next
   firstSeen: "hc.tipsFirstSeen", // has the card ever been shown (drives the CTA variant)
+  lastDismissed: "hc.tipsLastDismissedDate", // YYYY-MM-DD the card was last dismissed
 } as const;
+
+// Local calendar day — dismissing stamps this, and a matching value suppresses the
+// card for the rest of the day; a new day lets the next tip through.
+function todayKey(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
 
 // URL of the full tips page, opened from "View all". Navigates in place rather
 // than in a new tab — the How to Use page lives in the Workspace group and carries
@@ -50,6 +62,8 @@ export default function TipsCard() {
       const cursor = Number(localStorage.getItem(K.cursor) ?? "0") || 0;
       if (cursor >= tips.length) return; // every tip has been dismissed — stop appearing
 
+      if (localStorage.getItem(K.lastDismissed) === todayKey()) return; // already dismissed today — wait for a new day
+
       const firstTime = localStorage.getItem(K.firstSeen) !== "true";
       setCard({ text: tips[cursor], firstTime });
       // Showing doesn't consume the tip — it stays until dismissed. Just record
@@ -62,12 +76,14 @@ export default function TipsCard() {
 
   if (!card) return null;
 
-  // Manual dismiss (×) — advance to the next tip so it surfaces on the next load,
-  // and hide for now (the current session doesn't roll straight into the next one).
+  // Manual dismiss (×) — advance to the next tip and stamp today so the card stays
+  // hidden for the rest of the day (surviving reloads / navigation back to Write);
+  // the next tip surfaces on the first session of the next day.
   const dismiss = () => {
     try {
       const cursor = Number(localStorage.getItem(K.cursor) ?? "0") || 0;
       localStorage.setItem(K.cursor, String(cursor + 1));
+      localStorage.setItem(K.lastDismissed, todayKey());
     } catch {}
     setCard(null);
   };
