@@ -5,6 +5,7 @@ import type React from "react";
 import Image from "next/image";
 import { Book, Section, Chapter, Scene, Typeface, Spacing } from "@/lib/types";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { FeedbackModal } from "@/components/FeedbackModal";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { DropLine } from "@/components/ui/DropLine";
 import BookOverview from "@/components/BookOverview";
@@ -158,6 +159,10 @@ interface Props {
   onSetSectionView: (sectionId: string, view: "grid" | "list") => void;
   // Opens the Find/Replace bar from the account menu (also bound to Cmd/Ctrl+F).
   onOpenFindReplace?: () => void;
+  // Author identity for the Give Feedback modal's author line (§ Main Menu). The
+  // feedback email resolves name + email server-side; these are display-only.
+  authorName?: string;
+  authorAvatarUrl?: string | null;
   // ── Side-by-side ──
   // The chapter open in the second Chapter Editor, or null when side-by-side is
   // off. `activeChapter` is always pane 1's chapter.
@@ -872,6 +877,8 @@ export default function LeftColumn({
   sectionViews,
   onSetSectionView,
   onOpenFindReplace,
+  authorName = "Anonymous",
+  authorAvatarUrl,
   secondaryChapterId = null,
   focusedPane = 1,
   onOpenSideBySide,
@@ -885,6 +892,7 @@ export default function LeftColumn({
   const { total: unreadTotal } = useUnread();
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<Section | null>(null);
   const [confirmDeleteChapter, setConfirmDeleteChapter] = useState<Chapter | null>(null);
   // Is the chapter pending deletion currently shared? (§7) When it is, the
@@ -1103,6 +1111,15 @@ export default function LeftColumn({
             setConfirmDeleteChapter(null);
           }}
           onCancel={() => setConfirmDeleteChapter(null)}
+        />
+      )}
+
+      {/* Give Feedback — opened from the Main Menu; renders through a portal. */}
+      {feedbackOpen && (
+        <FeedbackModal
+          authorName={authorName}
+          authorAvatarUrl={authorAvatarUrl}
+          onClose={() => setFeedbackOpen(false)}
         />
       )}
 
@@ -1379,6 +1396,15 @@ export default function LeftColumn({
             {SECONDARY.map((item) => (
               <NavRow key={item.href} item={item} active={false} onNavigate={() => setMenuOpen(false)} />
             ))}
+
+            {/* Give feedback — pinned to the bottom of the menu (mt-auto). Its own
+                warm-on-dark treatment sets it apart from the nav rows. */}
+            <button
+              onClick={() => { setMenuOpen(false); setFeedbackOpen(true); }}
+              className="mt-auto mb-1 w-full py-2.5 rounded-lg border border-accent bg-[#211711] text-[#8F705C] text-sm font-semibold hover:bg-[#2a1e16] transition-colors"
+            >
+              Give feedback
+            </button>
           </div>
         </div>{/* /Main Menu */}
     </div>
