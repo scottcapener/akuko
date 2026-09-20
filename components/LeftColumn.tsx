@@ -1106,6 +1106,19 @@ export default function LeftColumn({
         />
       )}
 
+      {/* ── Book Panel content ─────────────────────────────────────────────────
+          Header + body + Main Nav Bar. Cross-slides against the Main Menu layer
+          below (mirroring the Library ↔ Comments transition in the right column):
+          when the menu opens this slides right off the column and fades out; on
+          close it slides back in from the right and fades back in. Clipped by the
+          column's overflow-hidden. */}
+      <div
+        aria-hidden={menuOpen}
+        className={`flex-1 min-h-0 flex flex-col transition-[translate,opacity] duration-[300ms] ease-[cubic-bezier(0,0,0.2,1)] ${
+          menuOpen ? "translate-x-full opacity-0 pointer-events-none" : "translate-x-0 opacity-100"
+        }`}
+      >
+
       {/* Panel Header — book-open icon, mirroring the Library Panel Header.
           Fixed h-16 so the Book Cover top lines up with the first Scene and
           the Image Gallery. The icon doubles as the collapse toggle (desktop
@@ -1226,43 +1239,71 @@ export default function LeftColumn({
         )}
       </div>
 
-      {/* Book Panel content dims while the Main Menu is open. This overlay covers
-          the header + body (default stacking); the footer slot below sits above it
-          (z-40), so the Main Nav Bar and the drawer stay at full brightness.
-          Clicking the dimmed area closes the menu. */}
-      <div
-        aria-hidden
-        onClick={() => setMenuOpen(false)}
-        className={`absolute inset-0 z-30 bg-bg transition-opacity duration-[400ms] ease-[cubic-bezier(0,0,0.2,1)] ${
-          menuOpen ? "opacity-60" : "opacity-0 pointer-events-none"
-        }`}
-      />
-
-      {/* ── Main Nav Bar + Main Menu ──────────────────────────────────────────
-          The footer slot. The Main Menu drawer is anchored to the top edge of the
-          Main Nav Bar (bottom-full) and, when closed, is translated down so it
-          hides behind the bar (which paints last with a solid bg) and is clipped
-          by the panel's overflow-hidden — so it reads as sliding up from *behind*
-          the bar. z-40 keeps the whole slot above the dim overlay. menuRef wraps
-          both so an outside click closes, but clicks within the drawer/bar don't. */}
-      <div ref={menuRef} className="relative flex-shrink-0 z-40">
-        {/* Main Menu drawer — the surface itself only slides (translate is animated
-            via the CSS `translate` property in Tailwind v4, hence transition-[translate]);
-            its background/border stay solid throughout. The inner content fades
-            separately (below), so the panel never fades in or out. */}
-        <div
-          role="menu"
-          aria-hidden={!menuOpen}
-          className={`absolute inset-x-0 bottom-full max-h-[calc(100vh-7rem)] overflow-y-auto bg-bg border-t border-border-subtle transition-[translate] duration-[400ms] ease-[cubic-bezier(0,0,0.2,1)] ${
-            menuOpen ? "translate-y-0" : "translate-y-full pointer-events-none"
-          }`}
+      {/* Main Nav Bar — wordmark + the button that opens the Main Menu. Part of
+          the Book Panel content, so it slides away to the right with the rest of
+          it when the menu opens. */}
+      <div className="px-5 py-4 border-t border-border-subtle bg-bg relative flex items-center justify-between flex-shrink-0">
+        <Image
+          src="/logo-wordmark.svg"
+          alt="Hot Cocoa"
+          width={93}
+          height={17}
+          preload
+        />
+        <button
+          onClick={() => setMenuOpen(true)}
+          className="relative text-subtle hover:text-text transition-colors leading-none flex items-center justify-center"
+          title="Main menu"
+          aria-label="Open main menu"
+          aria-expanded={menuOpen}
         >
-          {/* Content fades over the same 400ms while the surface slides. */}
-          <div
-            className={`px-3 py-3 flex flex-col gap-1 transition-opacity duration-[400ms] ease-[cubic-bezier(0,0,0.2,1)] ${
-              menuOpen ? "opacity-100" : "opacity-0"
-            }`}
+          {/* icon-main_menu — redrawn with currentColor so it tracks the theme
+              (the source SVG bakes in a fixed grey). Two rounded rules. */}
+          <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <line x1="1.75" y1="6.75" x2="16.25" y2="6.75" />
+            <line x1="1.75" y1="12.75" x2="12.25" y2="12.75" />
+          </svg>
+          {/* A dot flags new shared activity without opening the menu. */}
+          {unreadTotal > 0 && <Badge dot className="absolute -top-1 -right-1" />}
+        </button>
+      </div>
+
+      </div>{/* /body width+fade wrapper */}
+      </div>{/* /Book Panel content */}
+
+      {/* ── Main Menu ───────────────────────────────────────────────────────────
+          A full-height layer that cross-slides against the Book Panel content
+          (mirroring the Library ↔ Comments transition in the right column): on open
+          it slides in from the left and fades in, covering the Main Nav Bar; on
+          close it slides back out to the left and fades. It paints solid over the
+          whole column via z-40. menuRef scopes the outside-click/Escape close so a
+          click inside the menu doesn't dismiss it. */}
+      <div
+        ref={menuRef}
+        role="menu"
+        aria-hidden={!menuOpen}
+        className={`absolute inset-0 z-40 flex flex-col bg-bg transition-[translate,opacity] duration-[300ms] ease-[cubic-bezier(0,0,0.2,1)] ${
+          menuOpen ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0 pointer-events-none"
+        }`}
+      >
+        {/* Menu header — wordmark + close. Fixed h-16 so the wordmark lines up
+            with the Book Panel header it slides over. */}
+        <div className="h-16 px-5 flex-shrink-0 flex items-center justify-between">
+          <Image src="/logo-wordmark.svg" alt="Hot Cocoa" width={93} height={17} />
+          <button
+            onClick={() => setMenuOpen(false)}
+            className="text-subtle hover:text-text transition-colors"
+            title="Close main menu"
+            aria-label="Close main menu"
           >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Menu content — scrolls if it outgrows the viewport height. */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-1">
             {/* Find/replace — its own group at the top (also Cmd/Ctrl+F). */}
             {onOpenFindReplace && (
               <>
@@ -1339,44 +1380,7 @@ export default function LeftColumn({
               <NavRow key={item.href} item={item} active={false} onNavigate={() => setMenuOpen(false)} />
             ))}
           </div>
-        </div>
-
-        {/* Main Nav Bar — wordmark + the Main Menu toggle. Solid bg so the closed
-            drawer is hidden behind it. */}
-        <div className="px-5 py-4 border-t border-border-subtle bg-bg relative flex items-center justify-between">
-          <Image
-            src="/logo-wordmark.svg"
-            alt="Hot Cocoa"
-            width={93}
-            height={17}
-            preload
-          />
-          <button
-            onClick={() => setMenuOpen((o) => !o)}
-            className="relative text-subtle hover:text-text transition-colors leading-none flex items-center justify-center"
-            title="Main menu"
-            aria-label={menuOpen ? "Close main menu" : "Open main menu"}
-            aria-expanded={menuOpen}
-          >
-            {menuOpen ? (
-              // Chevron-down — closes the Main Menu.
-              <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 7.5L10 12.5L15 7.5" />
-              </svg>
-            ) : (
-              // icon-main_menu — redrawn with currentColor so it tracks the theme
-              // (the source SVG bakes in a fixed grey). Two rounded rules.
-              <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                <line x1="1.75" y1="6.75" x2="16.25" y2="6.75" />
-                <line x1="1.75" y1="12.75" x2="12.25" y2="12.75" />
-              </svg>
-            )}
-            {/* Menu closed: a dot flags new shared activity without opening it. */}
-            {!menuOpen && unreadTotal > 0 && <Badge dot className="absolute -top-1 -right-1" />}
-          </button>
-        </div>
-      </div>
-      </div>
+        </div>{/* /Main Menu */}
     </div>
   );
 }
