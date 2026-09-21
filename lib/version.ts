@@ -8,4 +8,4 @@
 //
 // A merge to `main` is a Vercel production deploy, which is what actually makes
 // the card appear for users sitting on an older tab.
-export const APP_VERSION = "0.1.26";
+export const APP_VERSION = "0.1.27";

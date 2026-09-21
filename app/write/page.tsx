@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
+import { getProfile } from "@/lib/profile";
 import { useHotCocoaDb } from "@/lib/useHotCocoaDb";
 import LeftColumn from "@/components/LeftColumn";
 import TipsCard from "@/components/TipsCard";
@@ -127,6 +128,7 @@ export default function WritePage() {
   const [findRender, setFindRender] = useState(false);
   const [findExpand, setFindExpand] = useState(false);
   const [authorName, setAuthorName] = useState("");
+  const [authorAvatarUrl, setAuthorAvatarUrl] = useState<string | null>(null);
   const left = useColumnResize("hc.leftWidth", LEFT_DEFAULT, LEFT_MIN, LEFT_MAX, 1);
   const right = useColumnResize("hc.rightWidth", RIGHT_DEFAULT, RIGHT_MIN, RIGHT_MAX, -1);
 
@@ -436,12 +438,10 @@ export default function WritePage() {
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("pen_name, display_name")
-        .eq("id", user.id)
-        .maybeSingle();
-      setAuthorName((data?.pen_name?.trim() || data?.display_name?.trim() || "").trim());
+      const profile = await getProfile(user.id);
+      // Pen Name for display where set; the avatar backs the Give Feedback line.
+      setAuthorName((profile.penName?.trim() || profile.displayName?.trim() || "").trim());
+      setAuthorAvatarUrl(profile.avatarUrl);
     });
   }, [store.hydrated]);
 
@@ -554,6 +554,8 @@ export default function WritePage() {
     sectionViews,
     onSetSectionView: setSectionView,
     onOpenFindReplace: () => setFindOpen(true),
+    authorName: authorName || "Anonymous",
+    authorAvatarUrl,
   };
 
   // Everything a Chapter Editor needs except the chapter itself, so the three
