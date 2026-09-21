@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 
 // A small destructive-confirmation modal, shared across surfaces (chapter/section
-// delete). `extra` slots content between the message and the buttons — e.g. the
-// "also stop sharing" checkbox on the delete-chapter flow (§7 / Stage 8).
+// delete). `extra` slots optional content between the message and the buttons.
 export function ConfirmModal({
   message,
   confirmLabel,
