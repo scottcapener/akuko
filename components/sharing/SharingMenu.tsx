@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { Checkbox } from "@/components/ui/Checkbox";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { DeleteChapterModal } from "@/components/DeleteChapterModal";
 import { Modal } from "@/components/ui/Modal";
 import { ShareModal } from "./ShareModal";
 import { useUnread } from "@/lib/useUnread";
@@ -48,7 +47,6 @@ export function SharingMenu({
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [alsoStopSharing, setAlsoStopSharing] = useState(false);
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>("idle");
   const [busy, setBusy] = useState(false);
   // "View as reader" freshness prompt (§ View as reader): shown only when the
@@ -178,20 +176,6 @@ export function SharingMenu({
     }
   }
 
-  async function confirmDeleteChapter() {
-    // Stop sharing BEFORE deleting: the snapshot is keyed by chapter_id, which the
-    // delete nulls out (§7), so it must go first.
-    if (state.shared && alsoStopSharing) {
-      try {
-        await fetch(`/api/share?chapterId=${encodeURIComponent(chapterId)}`, { method: "DELETE" });
-      } catch {
-        // Best-effort; still delete the chapter (its snapshot just lingers).
-      }
-    }
-    onDeleteChapter(chapterId);
-    setConfirmDelete(false);
-  }
-
   const count = state.recipients.length;
 
   // The dot signals *new comments to look at* on this chapter — not merely that
@@ -301,7 +285,7 @@ export function SharingMenu({
           {/* Delete chapter — separated, in the Account Menu's divided style. */}
           <div className="border-t border-hover" />
           <button
-            onClick={() => { setMenuOpen(false); setAlsoStopSharing(false); setConfirmDelete(true); }}
+            onClick={() => { setMenuOpen(false); setConfirmDelete(true); }}
             className="block w-full text-left px-4 py-2.5 text-xs text-error hover:bg-hover transition-colors"
           >
             Delete chapter
@@ -357,33 +341,12 @@ export function SharingMenu({
       )}
 
       {confirmDelete && (
-        <ConfirmModal
-          message={
-            <>
-              Delete <strong className="text-text">{chapterTitle}</strong>?{" "}
-              All scenes and library items will be permanently deleted.
-              {state.shared && (
-                <> This chapter is shared — the copy your readers have keeps working unless you stop sharing too.</>
-              )}
-            </>
-          }
-          extra={
-            state.shared ? (
-              <Checkbox
-                checked={alsoStopSharing}
-                onChange={setAlsoStopSharing}
-                label={
-                  <>
-                    Also stop sharing this chapter — removes recipients’ access and deletes their
-                    comments.
-                  </>
-                }
-              />
-            ) : undefined
-          }
-          confirmLabel="Delete chapter"
-          onConfirm={confirmDeleteChapter}
-          onCancel={() => setConfirmDelete(false)}
+        <DeleteChapterModal
+          chapterId={chapterId}
+          chapterTitle={chapterTitle}
+          shared={state.shared}
+          onDelete={onDeleteChapter}
+          onClose={() => setConfirmDelete(false)}
         />
       )}
     </div>
