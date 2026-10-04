@@ -187,9 +187,6 @@ export default function SignupPage() {
 
   // ── Render ────────────────────────────────────────────────────────────
 
-  const stepLabel = ["", "Account", "Verify", "Profile"][step];
-  const stepProgress = (step / 3) * 100;
-
   return (
     <div className="min-h-full flex flex-col items-center justify-center bg-bg px-6 py-12">
       <div className="w-full max-w-sm">
@@ -197,24 +194,12 @@ export default function SignupPage() {
           <Link href="/">
             <Image src="/logo-L.svg" alt="Hot Cocoa" width={90} height={52} />
           </Link>
-          <div className="w-full">
-            <div className="flex justify-between text-[10px] text-subtle uppercase tracking-wide mb-1.5">
-              <span>{stepLabel}</span>
-              <span>{step} / 3</span>
-            </div>
-            <div className="h-px bg-border-subtle rounded-full overflow-hidden">
-              <div
-                className="h-full bg-accent rounded-full transition-all duration-300"
-                style={{ width: `${stepProgress}%` }}
-              />
-            </div>
-          </div>
         </div>
 
         {/* Step 1 — Email + password */}
         {step === 1 && (
           <div className="flex flex-col gap-4">
-            <h1 className="text-text text-lg font-semibold">Create your account</h1>
+            <h1 className="text-text text-lg font-semibold text-center">Create your account</h1>
             <div>
               <Label>Email</Label>
               <Input type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleStep1()} />
@@ -263,7 +248,7 @@ export default function SignupPage() {
         {/* Step 2 — Email verification code */}
         {step === 2 && (
           <div className="flex flex-col gap-4">
-            <div>
+            <div className="text-center">
               <h1 className="text-text text-lg font-semibold">Check your email</h1>
               <p className="text-subtle text-xs mt-1">We sent a 6-digit code to {email}. Valid for 1 hour.</p>
             </div>
@@ -295,7 +280,7 @@ export default function SignupPage() {
         {/* Step 3 — Display name */}
         {step === 3 && (
           <div className="flex flex-col gap-4">
-            <div>
+            <div className="text-center">
               <h1 className="text-text text-lg font-semibold">One last thing</h1>
               <p className="text-subtle text-xs mt-1">What should we call you?</p>
             </div>
