@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **Effective date:** July 22, 2026
-**Last updated:** July 22, 2026
+**Last updated:** October 6, 2026
 
 This policy explains what Hot Cocoa collects, why, who helps us run the service, and the control you have over your information. It is part of our [Terms of Service](/terms).
 
@@ -73,6 +73,7 @@ Running an app means relying on a few trusted companies for infrastructure. They
 | **Supabase** | Authentication, database, and file storage | Your email, profile, manuscripts, and uploaded files |
 | **Vercel** | Website hosting and delivery | Requests to the site and standard server logs |
 | **Resend** | Sends our account and service emails | Your email address and the contents of those messages |
+| **PostHog** | Product analytics (how the app is used) | Usage events and counts tied to your account ID; never your writing, titles, or email (see Section 6) |
 
 If we ever add or change a provider in a way that matters to your privacy, we will update this list and, for a material change, give a direct update via email.
 
@@ -84,9 +85,14 @@ We will also disclose information when the law genuinely requires it, such as a 
 
 **Cookies.** Hot Cocoa uses only the essential cookies needed to keep you signed in and to keep your session secure. We do not use advertising cookies or third-party tracking cookies, so there is no consent banner to click through, because there is nothing to consent to.
 
-**Analytics.** As of the date at the top of this policy, we run no analytics and no behavioral tracking of any kind.
+**Analytics.** We use PostHog to understand how Hot Cocoa is used, so we can make it better at helping you write: how often people write, how long their sessions last, how many chapters they work on, and how many words they add. Here is exactly what that does and does not include:
 
-**Analytics, cont.** We may add measurement in the future, and we want to be upfront about what that would and would not be. Anything we add will be **author-first and platform-health focused**: things that help you write; word counts and writing streaks, and things that help us keep the service healthy, like aggregate usage and error rates. We will not add advertising trackers, we will not sell what we measure, and we will not use any of it to profile you for marketing. If we introduce analytics, we'll update this policy first.
+- **What we record:** page views, the start and end of a writing session, the length of that session, the number of words added or removed, how many chapters you worked on, and your device and browser type. These are tied to your account ID, not to your name or email address.
+- **What we never record:** the text of your writing, your book, chapter, or note titles, your name, or your email address. We do not record your screen, your keystrokes, or your mouse movements, and we do not use session replay.
+- **Storage:** analytics identifiers are kept in your browser's local storage, not in cookies, and are cleared when you sign out. Your traffic reaches PostHog through our own domain.
+- **Who sees it:** only us. PostHog processes this data on our behalf and does not use it for its own purposes. We do not sell it, and we do not use it for advertising or to profile you for marketing.
+
+We will keep analytics author-first and platform-health focused, as described in Section 4. If we ever change what we measure in a way that matters to your privacy, we will update this policy first.
 
 ---
 

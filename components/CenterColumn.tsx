@@ -180,6 +180,8 @@ export default function CenterColumn({
     <div
       className="flex flex-col h-full bg-bg w-full relative"
       data-paste-scope="center"
+      // Lets the writing-session analytics attribute edits to a chapter (id only).
+      data-chapter-id={chapter.id}
       onPaste={handlePaste}
       // Capture phase, so focusing the pane wins even when the click lands on a
       // child that stops propagation (scene buttons, the title input, etc.).

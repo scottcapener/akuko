@@ -42,6 +42,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // Supabase & other cross-origin → network only
   if (url.pathname.startsWith("/api/")) return; // dynamic app endpoints → network only
+  if (url.pathname.startsWith("/ingest")) return; // analytics proxy (PostHog) → network only
 
   // Navigations: network-first so an online user always gets the freshest shell
   // (and we refresh the cache), falling back to the cached shell when offline.

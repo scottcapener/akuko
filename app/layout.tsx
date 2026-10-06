@@ -4,6 +4,7 @@ import "./styles/tokens.css";
 import "./globals.css";
 import ScrollbarAutoHide from "@/components/ScrollbarAutoHide";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
+import AnalyticsIdentify from "@/components/AnalyticsIdentify";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 // The "gothic" manuscript typeface option (Main Menu → Typeface). Georgia and
@@ -47,6 +48,7 @@ export default function RootLayout({
       <body className="h-full">
         <ScrollbarAutoHide />
         <ServiceWorkerRegistrar />
+        <AnalyticsIdentify />
         {children}
       </body>
     </html>
