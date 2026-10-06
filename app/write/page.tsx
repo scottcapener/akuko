@@ -19,6 +19,8 @@ import { SceneDragProvider } from "@/lib/useSceneDrag";
 import { ChapterDragProvider } from "@/lib/useChapterDrag";
 import { useLocalStorageState } from "@/lib/useLocalStorageState";
 import { useColumnResize } from "@/lib/useColumnResize";
+import { useWritingSessions } from "@/lib/useWritingSessions";
+import { track } from "@/lib/analytics";
 import { Scene, Typeface, Spacing } from "@/lib/types";
 
 type MobilePanel = "left" | "right" | null;
@@ -484,6 +486,14 @@ export default function WritePage() {
       window.removeEventListener("beforeunload", flush);
     };
   }, [recordActiveTime]);
+
+  // Writing-session analytics (counts only — see lib/useWritingSessions.ts).
+  useWritingSessions(store.wordCount);
+
+  // Which chapters people open; paired with chapter_edited to see browsing vs writing.
+  useEffect(() => {
+    if (activeChapterId) track("chapter_opened", { chapter_id: activeChapterId });
+  }, [activeChapterId]);
 
   if (!store.hydrated || !store.book || !store.activeChapter) {
     return <div className="h-full bg-bg" />;
