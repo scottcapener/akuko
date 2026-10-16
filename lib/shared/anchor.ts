@@ -2,9 +2,10 @@
 
 // Character-offset anchoring for read-view comments (SHARED_WITH_YOU.md §3.4).
 // A comment stores [quote_start, quote_end) offsets into a scene's plain-text
-// projection plus the quoted string. Because the snapshot HTML is immutable,
-// the same deterministic DOM walk maps selection → offsets at create time and
-// offsets → DOM Range at paint time — so anchors never drift within a render.
+// projection plus the quoted string. The same deterministic DOM walk maps
+// selection → offsets at create time and offsets → DOM Range at paint time.
+// "Update shared copy" rewrites a scene's text under its comments, so at paint
+// time the offsets are only a hint and the quote is the truth (locateQuotes).
 //
 // The plain-text basis matches the server's body_text projection (lib/shared/
 // snapshot.ts htmlToText): block boundaries (</p>, </div>) and <br> become a
@@ -98,6 +99,59 @@ export function rangeFromOffsets(map: TextMap, start: number, end: number): Rang
   } catch {
     return null;
   }
+}
+
+export interface StoredQuote {
+  id: string;
+  quote: string;
+  start: number;
+  end: number;
+}
+
+export type QuoteSpan = { start: number; end: number };
+
+/** Where each stored quote of ONE scene sits in its current text, by id.
+ *
+ *  Stored offsets are exact until the author re-shares the chapter, which
+ *  rewrites the scene text under them — text added or cut above a quote shifts
+ *  it. So the quote is the truth and the offsets are a hint:
+ *   - quote appears exactly once → that's it, and the gap from its stored start
+ *     is how far the text shifted around it;
+ *   - quote appears several times (short or common words) → the occurrence
+ *     nearest its stored start moved by the shift of the closest uniquely-placed
+ *     quote in the scene. Plain "nearest the stored start" picks the wrong copy
+ *     whenever the shift exceeds the gap between copies;
+ *   - quote no longer appears → null (unanchored).
+ *  An empty quote has nothing to verify, so its offsets are taken as-is. On an
+ *  un-reshared snapshot every shift is 0 and every quote lands on its offsets. */
+export function locateQuotes(text: string, quotes: StoredQuote[]): Map<string, QuoteSpan | null> {
+  const out = new Map<string, QuoteSpan | null>();
+  const found = quotes.map((q) => {
+    const at: number[] = [];
+    for (let i = q.quote ? text.indexOf(q.quote) : -1; i !== -1; i = text.indexOf(q.quote, i + 1)) {
+      at.push(i);
+    }
+    return { q, at };
+  });
+  const shifts = found
+    .filter((f) => f.at.length === 1)
+    .map((f) => ({ start: f.q.start, shift: f.at[0] - f.q.start }));
+
+  for (const { q, at } of found) {
+    if (!q.quote) { out.set(q.id, { start: q.start, end: q.end }); continue; }
+    if (at.length === 0) { out.set(q.id, null); continue; }
+    let shift = 0;
+    let gap = Infinity;
+    for (const s of shifts) {
+      const d = Math.abs(s.start - q.start);
+      if (d < gap) { gap = d; shift = s.shift; }
+    }
+    const target = q.start + shift;
+    // First-wins on ties, so an exact midpoint resolves to the earlier copy.
+    const best = at.reduce((a, b) => (Math.abs(b - target) < Math.abs(a - target) ? b : a));
+    out.set(q.id, { start: best, end: best + q.quote.length });
+  }
+  return out;
 }
 
 // ── Tier-2 editor highlighting (SHARED_WITH_YOU.md §3.7) ──────────────────────

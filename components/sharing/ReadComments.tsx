@@ -11,7 +11,15 @@ import {
 import { Avatar } from "@/components/ui/Avatar";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { getProfile } from "@/lib/profile";
-import { buildTextMap, offsetsFromRange, rangeFromOffsets, type TextMap } from "@/lib/shared/anchor";
+import {
+  buildTextMap,
+  offsetsFromRange,
+  locateQuotes,
+  rangeFromOffsets,
+  type QuoteSpan,
+  type StoredQuote,
+  type TextMap,
+} from "@/lib/shared/anchor";
 import type { CommentDTO } from "@/lib/shared/comments";
 
 /** The current user's identity, for the composer's author line (§ Stage 7). */
@@ -39,6 +47,37 @@ interface Props {
   proseRef: RefObject<HTMLElement | null>;
   /** Bumped by the page whenever the prose finishes (re)rendering, so we rebuild maps. */
   proseReady: number;
+  /** The share generation of the prose on screen — stamped on new comments so
+   *  one made on a page loaded before a re-share records the text it quoted. */
+  snapshotVersion: string;
+}
+
+/** Every saved comment's quote located in the current prose, by comment id —
+ *  verified against the quote text, so a re-share that shifted a scene can't
+ *  drift its highlights (anchor.ts locateQuotes). */
+function locateAll(maps: Map<string, TextMap>, comments: CommentDTO[]): Map<string, QuoteSpan | null> {
+  const byScene = new Map<string, StoredQuote[]>();
+  for (const c of comments) {
+    const list = byScene.get(c.sharedSceneId) ?? [];
+    list.push({ id: c.id, quote: c.quoteText, start: c.quoteStart, end: c.quoteEnd });
+    byScene.set(c.sharedSceneId, list);
+  }
+  const spans = new Map<string, QuoteSpan | null>();
+  byScene.forEach((quotes, sceneId) => {
+    const map = maps.get(sceneId);
+    if (map) locateQuotes(map.text, quotes).forEach((at, id) => spans.set(id, at));
+  });
+  return spans;
+}
+
+function quoteRange(
+  maps: Map<string, TextMap>,
+  spans: Map<string, QuoteSpan | null>,
+  c: CommentDTO
+): Range | null {
+  const map = maps.get(c.sharedSceneId);
+  const at = spans.get(c.id);
+  return map && at ? rangeFromOffsets(map, at.start, at.end) : null;
 }
 
 interface Composer {
@@ -55,6 +94,7 @@ export function ReadComments({
   scrollRef,
   proseRef,
   proseReady,
+  snapshotVersion,
 }: Props) {
   const [comments, setComments] = useState<CommentDTO[]>([]);
   const [ownerId, setOwnerId] = useState<string | null>(null);
@@ -96,6 +136,8 @@ export function ReadComments({
   const composerRef = useRef<HTMLDivElement>(null);
   // Per-scene text maps, rebuilt when the prose (re)renders.
   const mapsRef = useRef<Map<string, TextMap>>(new Map());
+  // Where each saved comment's quote sits in those maps, relocated alongside them.
+  const spansRef = useRef<Map<string, QuoteSpan | null>>(new Map());
 
   // ── Load comments ──
   const load = useCallback(async () => {
@@ -196,9 +238,7 @@ export function ReadComments({
     const resolved = new HighlightCtor();
 
     const draw = (c: CommentDTO, target: HL) => {
-      const map = mapsRef.current.get(c.sharedSceneId);
-      if (!map) return;
-      const r = rangeFromOffsets(map, c.quoteStart, c.quoteEnd);
+      const r = quoteRange(mapsRef.current, spansRef.current, c);
       if (r) target.add(r);
     };
 
@@ -247,7 +287,10 @@ export function ReadComments({
     const scroll = scrollRef.current;
     const prose = proseRef.current;
     if (!scroll || !prose) return;
-    if (rebuild) rebuildMaps();
+    if (rebuild) {
+      rebuildMaps();
+      spansRef.current = locateAll(mapsRef.current, ordered);
+    }
     const scrollTop = scroll.scrollTop;
     const scrollRectTop = scroll.getBoundingClientRect().top;
 
@@ -268,8 +311,7 @@ export function ReadComments({
       if (!el) continue;
       // Stale comments can't anchor (their offsets index the old text) — pin them
       // to the top so they cascade above the anchored cards, still scrolling.
-      const map = c.stale ? null : mapsRef.current.get(c.sharedSceneId);
-      const r = map && rangeFromOffsets(map, c.quoteStart, c.quoteEnd);
+      const r = c.stale ? null : quoteRange(mapsRef.current, spansRef.current, c);
       const rect = r?.getBoundingClientRect();
       const centerY = rect
         ? rect.top + rect.height / 2 - scrollRectTop + scrollTop
@@ -329,8 +371,7 @@ export function ReadComments({
       setActiveId(c.id);
       if (c.stale) return;
       const scroll = scrollRef.current;
-      const map = mapsRef.current.get(c.sharedSceneId);
-      const r = map && rangeFromOffsets(map, c.quoteStart, c.quoteEnd);
+      const r = quoteRange(mapsRef.current, spansRef.current, c);
       if (!scroll || !r) return;
       const target = r.getBoundingClientRect();
       const view = scroll.getBoundingClientRect();
@@ -353,6 +394,7 @@ export function ReadComments({
         quoteText: composer.quoteText,
         quoteStart: composer.quoteStart,
         quoteEnd: composer.quoteEnd,
+        snapshotVersion,
       }),
     });
     const data = await res.json();

@@ -157,10 +157,15 @@ export interface CreateCommentInput {
   quoteText: string;
   quoteStart: number;
   quoteEnd: number;
+  /** The generation of the text the reader quoted (their loaded read view). */
+  snapshotVersion?: string;
 }
 
 /** Insert a comment as the caller and return it enriched. RLS enforces access
- *  and self-authorship; this stamps the current snapshot generation. */
+ *  and self-authorship. Stamps the generation the reader's page was showing: a
+ *  page loaded before a re-share quotes the OLD text, and stamping the current
+ *  generation would hide that from the stale check. Anything missing, invalid,
+ *  or newer than the current generation falls back to the current one. */
 export async function createComment(
   supabase: SupabaseClient,
   userId: string,
@@ -171,6 +176,12 @@ export async function createComment(
     .select("updated_at")
     .eq("id", input.sharedChapterId)
     .maybeSingle();
+  const current = (chapter?.updated_at as string | undefined) ?? new Date().toISOString();
+  const loaded = input.snapshotVersion ? new Date(input.snapshotVersion).getTime() : NaN;
+  const snapshotVersion =
+    Number.isFinite(loaded) && loaded < new Date(current).getTime()
+      ? new Date(loaded).toISOString()
+      : current;
 
   const { data: inserted, error } = await supabase
     .from("comments")
@@ -182,7 +193,7 @@ export async function createComment(
       quote_text: input.quoteText,
       quote_start: input.quoteStart,
       quote_end: input.quoteEnd,
-      snapshot_version: chapter?.updated_at ?? new Date().toISOString(),
+      snapshot_version: snapshotVersion,
     })
     .select(COLS)
     .single();

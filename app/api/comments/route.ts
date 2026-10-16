@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 // caller's session — RLS gates read/write to chapters they can access.
 //
 //   GET  ?sharedChapterId=…  → { ownerId, comments }
-//   POST { sharedChapterId, sharedSceneId, body, quoteText, quoteStart, quoteEnd }
+//   POST { sharedChapterId, sharedSceneId, body, quoteText, quoteStart, quoteEnd, snapshotVersion? }
 
 export async function GET(request: Request) {
   const supabase = await createServerClient();
@@ -60,6 +60,7 @@ export async function POST(request: Request) {
       quoteText: typeof body.quoteText === "string" ? body.quoteText : "",
       quoteStart: Number.isFinite(body.quoteStart) ? Number(body.quoteStart) : 0,
       quoteEnd: Number.isFinite(body.quoteEnd) ? Number(body.quoteEnd) : 0,
+      snapshotVersion: typeof body.snapshotVersion === "string" ? body.snapshotVersion : undefined,
     });
     // Notify the chapter's author off the response path (leading-edge, cooldown
     // gated). Best-effort — never blocks or fails the comment.

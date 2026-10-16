@@ -182,6 +182,7 @@ export default function SharedReadPage({
                   scrollRef={scrollRef}
                   proseRef={proseRef}
                   proseReady={proseReady}
+                  snapshotVersion={view.snapshotVersion}
                 />
               </div>
             )}
