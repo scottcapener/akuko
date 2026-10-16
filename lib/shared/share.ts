@@ -53,7 +53,18 @@ export async function shareChapter(
 ): Promise<ShareResult> {
   const clean = normalizeEmails(emails);
 
-  const { sharedChapterId, created } = await snapshotChapter(supabase, chapterId, ownerId);
+  // Already shared → grant only. Re-snapshotting here would publish the
+  // author's latest edits under existing comments every time they add someone;
+  // refreshing the copy is "Update shared copy"'s job alone.
+  const { data: existing } = await supabase
+    .from("shared_chapters")
+    .select("id")
+    .eq("chapter_id", chapterId)
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+  const { sharedChapterId, created } = existing
+    ? { sharedChapterId: existing.id as string, created: false }
+    : await snapshotChapter(supabase, chapterId, ownerId);
 
   const addedEmails = await grantRecipients(supabase, ownerId, sharedChapterId, clean);
   // Every submitted email ends with an active grant (new, reactivated, or

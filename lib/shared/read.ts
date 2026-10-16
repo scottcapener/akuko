@@ -31,6 +31,9 @@ export interface ReadView {
   /** The viewer owns this book — they reached Read via "View as reader", not a
    *  share. Changes the exit target (back to Write, not the /shared feed). */
   isOwner: boolean;
+  /** The share generation (shared_chapters.updated_at) these scenes belong to —
+   *  new comments are stamped with it, not with whatever is current at save. */
+  snapshotVersion: string;
 }
 
 export async function getSharedChapterView(
@@ -40,7 +43,7 @@ export async function getSharedChapterView(
 ): Promise<ReadView | null> {
   const { data: snapshot } = await supabase
     .from("shared_chapters")
-    .select("id, owner_id, book_id, book_title, cover_path, chapter_title")
+    .select("id, owner_id, book_id, book_title, cover_path, chapter_title, updated_at")
     .eq("id", sharedChapterId)
     .maybeSingle();
 
@@ -92,5 +95,6 @@ export async function getSharedChapterView(
     scenes: (scenes ?? []).map((s) => ({ id: s.id, bodyHtml: s.body_html ?? "" })),
     chapters,
     isOwner: snapshot.owner_id === userId,
+    snapshotVersion: snapshot.updated_at as string,
   };
 }
