@@ -262,3 +262,29 @@ input:focus {
 [contenteditable]:not(.manuscript-body) {
   font-size: 16px !important;
 }
+
+/* ── Start-of-session loader (components/StartupLoader.tsx) ──
+   Hidden unless <html data-hc-boot> is set (before first paint by the inline
+   script in layout.tsx, or by the component on in-app navigation). */
+.hc-boot {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+  background: var(--hc-bg);
+}
+html[data-hc-boot] .hc-boot { display: flex; }
+.hc-boot-track {
+  width: 168px;
+  padding: 4px;
+  border: 2px solid var(--hc-border-subtle);
+  border-radius: 4px;
+}
+.hc-boot-fill {
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--hc-accent);
+  opacity: 0.5;
+}

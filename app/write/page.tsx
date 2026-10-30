@@ -21,6 +21,7 @@ import { useLocalStorageState } from "@/lib/useLocalStorageState";
 import { useColumnResize } from "@/lib/useColumnResize";
 import { useWritingSessions } from "@/lib/useWritingSessions";
 import { track } from "@/lib/analytics";
+import { markWriteReady } from "@/components/StartupLoader";
 import { Scene, Typeface, Spacing } from "@/lib/types";
 
 type MobilePanel = "left" | "right" | null;
@@ -494,6 +495,13 @@ export default function WritePage() {
   useEffect(() => {
     if (activeChapterId) track("chapter_opened", { chapter_id: activeChapterId });
   }, [activeChapterId]);
+
+  // Tells the start-of-session loader the writer has content to show (or, offline
+  // with no cache, that there's nothing more to wait for).
+  const writeReady = store.hydrated && (!store.book || store.activeChapterLoaded);
+  useEffect(() => {
+    if (writeReady) markWriteReady();
+  }, [writeReady]);
 
   if (!store.hydrated || !store.book || !store.activeChapter) {
     return <div className="h-full bg-bg" />;
