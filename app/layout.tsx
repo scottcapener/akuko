@@ -66,7 +66,7 @@ export default function RootLayout({
             we only set the attribute when the user chose light. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem("hc.theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}`,
+            __html: `try{if(localStorage.getItem("hc.theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}try{if(location.pathname.indexOf("/write")===0&&sessionStorage.getItem("hc.sessionStarted")!=="1")document.documentElement.dataset.hcBoot=""}catch(e){}`,
           }}
         />
       </head>
