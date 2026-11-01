@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createClient } from "./supabase/client";
 import { ensureDevSession } from "./ensureDevSession";
 import * as db from "./db";
+import { track } from "./analytics";
 import * as offlineQueue from "./offlineQueue";
 import * as offlineCache from "./offlineCache";
 import * as offlineDb from "./offlineDb";
@@ -747,9 +748,9 @@ export function useHotCocoaDb() {
     setBook((b) => {
       if (!b) return b;
       const current = b.tags ?? [];
-      const tags = current.includes(tagId)
-        ? current.filter((t) => t !== tagId)
-        : [...current, tagId];
+      const adding = !current.includes(tagId);
+      const tags = adding ? [...current, tagId] : current.filter((t) => t !== tagId);
+      if (adding) track("book_tag_added", { tag_id: tagId, book_id: b.id });
       db.updateBookTags(b.id, tags);
       return { ...b, tags };
     });
@@ -874,6 +875,7 @@ export function useHotCocoaDb() {
       const section = sections.find((s) => s.id === sectionId);
       const position = section?.chapters.length ?? 0;
       const newChapter = await db.createChapter(book.id, sectionId, position);
+      track("chapter_created", { chapter_id: newChapter.id });
       const scenes = await db.getScenesForChapter(newChapter.id);
       const fullChapter = { ...newChapter, scenes };
       // The chapter is fully materialized locally (empty scenes/library), so

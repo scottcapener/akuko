@@ -8,6 +8,7 @@ import {
   useState,
   type RefObject,
 } from "react";
+import { track } from "@/lib/analytics";
 import { Avatar } from "@/components/ui/Avatar";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { getProfile } from "@/lib/profile";
@@ -399,6 +400,7 @@ export function ReadComments({
     });
     const data = await res.json();
     if (res.ok) {
+      track("comment_created", { shared_chapter_id: sharedChapterId });
       setComments((prev) => [...prev, data.comment]);
       setComposer(null);
       setActiveId(data.comment.id);
