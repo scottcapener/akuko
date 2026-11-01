@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { track } from "@/lib/analytics";
 import { Avatar } from "@/components/ui/Avatar";
 import { Portal } from "@/components/ui/Portal";
 import type { ShareState, ShareRecipient, RecentPartner } from "@/lib/shared/types";
@@ -83,6 +84,7 @@ export function ShareModal({ chapterId, initialState, onClose, onStateChange }: 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Couldn't add that person.");
       apply(data as ShareState);
+      track("chapter_shared", { chapter_id: chapterId });
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");

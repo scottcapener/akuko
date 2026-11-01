@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ensureDevSession } from "@/lib/ensureDevSession";
 import * as db from "@/lib/db";
+import { track } from "@/lib/analytics";
 import type { BookSummary } from "@/lib/db";
 import { importDocx } from "@/lib/import/docx";
 import { Button, Modal } from "@/components/ui";
@@ -201,7 +202,8 @@ export default function BooksPage() {
     if (!userId || creating || switchingId) return;
     setCreating(true);
     // createBook sets the new book as active (last_opened_at = now).
-    await db.createBook(userId);
+    const created = await db.createBook(userId);
+    track("book_created", { book_id: created.id });
     router.push("/write");
   }, [userId, creating, switchingId, router]);
 
