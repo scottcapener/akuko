@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import type React from "react";
 import Image from "next/image";
 import { Book, Section, Chapter, Scene, Typeface, Spacing } from "@/lib/types";
@@ -10,6 +11,11 @@ import { FeedbackModal } from "@/components/FeedbackModal";
 import { DropLine } from "@/components/ui/DropLine";
 import BookOverview from "@/components/BookOverview";
 import { NavRow, PRIMARY, SHARED, SECONDARY } from "@/components/NavPanel";
+import { FloatingMainMenu } from "@/components/FloatingMainMenu";
+import { createClient } from "@/lib/supabase/client";
+import { ensureDevSession } from "@/lib/ensureDevSession";
+import * as db from "@/lib/db";
+import type { BookSummary } from "@/lib/db";
 import { Badge } from "@/components/ui/Badge";
 import { useUnread } from "@/lib/useUnread";
 import { useTheme } from "@/lib/useTheme";
@@ -35,7 +41,7 @@ function MenuToggle({ label, on, onClick }: { label: string; on: boolean; onClic
       onClick={onClick}
       role="switch"
       aria-checked={on}
-      className="flex w-full items-center justify-between px-3 py-2 rounded-lg text-sm text-muted hover:text-text hover:bg-panel transition-colors"
+      className="flex w-full cursor-pointer items-center justify-between px-3 py-2 rounded-lg text-sm text-muted hover:text-text hover:bg-panel transition-colors"
     >
       <span>{label}</span>
       <span className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${on ? "bg-accent" : "bg-hover"}`}>
@@ -75,7 +81,7 @@ function TypefaceMenu({ value, onChange }: { value: Typeface; onChange: (t: Type
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label="Scene typeface"
-        className="flex min-w-[112px] items-center justify-between gap-2 rounded-lg border border-hover bg-panel py-1.5 pl-3 pr-2 text-sm text-text hover:bg-hover transition-colors"
+        className="flex min-w-[112px] cursor-pointer items-center justify-between gap-2 rounded-lg border border-hover bg-panel py-1.5 pl-3 pr-2 text-sm text-text hover:bg-hover transition-colors"
       >
         <span>{current.label}</span>
         <svg className={`w-4 h-4 text-subtle transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
@@ -114,12 +120,127 @@ function SpacingButton({ label, active, onClick, children }: { label: string; ac
       aria-pressed={active}
       title={label}
       aria-label={label}
-      className={`flex items-center justify-center rounded-md px-2.5 py-1 transition-colors ${
+      className={`flex cursor-pointer items-center justify-center rounded-md px-2.5 py-1 transition-colors ${
         active ? "bg-hover text-text" : "text-subtle hover:text-text"
       }`}
     >
       {children}
     </button>
+  );
+}
+
+// Books row of the floating Main Menu: a nav row with a right chevron that, on
+// hover, opens a submenu to the right listing every book (most recently opened
+// first) as cover + title + word count. The submenu is portalled to <body> (the
+// menu card is transformed, which would trap a fixed child). Mounted only while
+// the menu is, so its state resets each time the menu opens.
+function BooksNavRow({ item, currentBookId, onNavigate, onSwitchBook }: {
+  item: (typeof PRIMARY)[number];
+  currentBookId: string;
+  onNavigate: () => void;
+  onSwitchBook?: (bookId: string) => void;
+}) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const subRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [open, setOpen] = useState(false);
+  const [books, setBooks] = useState<BookSummary[] | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createClient();
+        await ensureDevSession(supabase);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+        const list = await db.listBooks(user.id);
+        if (!cancelled) setBooks(list);
+      } catch {
+        if (!cancelled) setBooks([]);
+      }
+    })();
+    return () => { cancelled = true; clearTimeout(closeTimer.current); };
+  }, []);
+
+  const show = () => { clearTimeout(closeTimer.current); setOpen(true); };
+  // Short delay so the pointer can cross the gap between the menu and submenu.
+  const hideSoon = () => {
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setOpen(false), 150);
+  };
+
+  // Place the submenu just right of the menu card, vertically centered on the
+  // Books row and kept within the viewport.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const row = rowRef.current;
+    if (!row) return;
+    const r = row.getBoundingClientRect();
+    const menuRight = row.closest("[role=menu]")?.getBoundingClientRect().right ?? r.right;
+    const h = subRef.current?.offsetHeight ?? 0;
+    const vh = window.innerHeight;
+    const top = Math.min(Math.max(r.top + r.height / 2 - h / 2, 24), Math.max(24, vh - 24 - h));
+    setPos({ left: menuRight + 4, top });
+  }, [open, books]);
+
+  return (
+    <div ref={rowRef} onMouseEnter={show} onMouseLeave={hideSoon} onFocus={show}>
+      <NavRow
+        item={item}
+        active={false}
+        className="py-3"
+        onNavigate={onNavigate}
+        trailing={
+          <svg className="ml-auto w-4 h-4 flex-shrink-0 text-subtle" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M7.5 5L12.5 10L7.5 15" />
+          </svg>
+        }
+      />
+      {open && books && books.length > 0 && createPortal(
+        <div
+          ref={subRef}
+          role="menu"
+          aria-label="Books"
+          onMouseEnter={show}
+          onMouseLeave={hideSoon}
+          className="fixed z-50 w-[276px] overflow-y-auto hc-scroll-hoverbar rounded-[28px] border border-hover bg-panel p-3 shadow-2xl"
+          style={{
+            left: pos?.left ?? 0,
+            top: pos?.top ?? 0,
+            maxHeight: "calc(100vh - 48px)",
+            visibility: pos ? "visible" : "hidden",
+          }}
+        >
+          {books.map((b) => {
+            const current = b.id === currentBookId;
+            return (
+              <button
+                key={b.id}
+                role="menuitem"
+                onClick={() => { if (!current) onSwitchBook?.(b.id); onNavigate(); }}
+                className="group flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-1 text-left transition-colors hover:bg-elevated"
+              >
+                <span className={`h-10 aspect-[2/3] flex-shrink-0 overflow-hidden rounded border bg-hover ${current ? "border-subtle" : "border-border-subtle"}`}>
+                  {b.coverImage && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={b.coverImage} alt="" className="h-full w-full object-cover" />
+                  )}
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className={`truncate text-sm leading-5 transition-colors ${current ? "text-text" : "text-muted group-hover:text-text"}`}>{b.title || "Untitled"}</span>
+                  <span className="text-[11px] leading-4 text-subtle">
+                    {b.wordCount.toLocaleString()} {b.wordCount === 1 ? "word" : "words"}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
   );
 }
 
@@ -159,6 +280,9 @@ interface Props {
   onSetSectionView: (sectionId: string, view: "grid" | "list") => void;
   // Opens the Find/Replace bar from the account menu (also bound to Cmd/Ctrl+F).
   onOpenFindReplace?: () => void;
+  // Switch the writer to another book (desktop Books submenu). The host flushes
+  // pending saves, marks the book active and reloads the writer.
+  onSwitchBook?: (bookId: string) => void;
   // Author identity for the Give Feedback modal's author line (§ Main Menu). The
   // feedback email resolves name + email server-side; these are display-only.
   authorName?: string;
@@ -877,6 +1001,7 @@ export default function LeftColumn({
   sectionViews,
   onSetSectionView,
   onOpenFindReplace,
+  onSwitchBook,
   authorName = "Anonymous",
   authorAvatarUrl,
   secondaryChapterId = null,
@@ -892,6 +1017,10 @@ export default function LeftColumn({
   const { total: unreadTotal } = useUnread();
 
   const [menuOpen, setMenuOpen] = useState(false);
+  // Desktop (the collapsible column) gets the floating Main Menu; the mobile
+  // drawer keeps the full-swap menu.
+  const floating = !!onToggleCollapse;
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<Section | null>(null);
   const [confirmDeleteChapter, setConfirmDeleteChapter] = useState<Chapter | null>(null);
@@ -983,7 +1112,8 @@ export default function LeftColumn({
   useEffect(() => {
     if (!menuOpen) return;
     function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      // The floating menu closes via its own backdrop.
+      if (!floating && menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
     }
@@ -996,7 +1126,113 @@ export default function LeftColumn({
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKey);
     };
-  }, [menuOpen]);
+  }, [menuOpen, floating]);
+
+  // Main Menu pieces shared by the floating (desktop) and full-swap (mobile) menus.
+  const divider = (
+    <div className={`my-2 border-t ${floating ? "-ml-5 -mr-[10px] border-hover" : "-mx-3 border-border-subtle"}`} />
+  );
+  const findRow = onOpenFindReplace ? (
+
+                <button
+                  onClick={() => { setMenuOpen(false); onOpenFindReplace(); }}
+                  className={`flex w-full cursor-pointer items-center gap-3 px-3 rounded-lg text-sm text-muted hover:text-text transition-colors ${floating ? "py-3 hover:bg-elevated" : "py-2 hover:bg-panel"}`}
+                >
+                  {floating && (
+                    <svg className="w-5 h-5 flex-shrink-0 text-subtle" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <circle cx="9" cy="9" r="5.5" />
+                      <path d="M13.2 13.2L17 17" />
+                    </svg>
+                  )}
+                  {floating ? "Find/replace" : "Find/replace…"}
+                </button>
+  ) : null;
+  const menuContent = (
+    <>
+            {!floating && findRow && <>{findRow}{divider}</>}
+
+            {/* Options — account-level workspace preferences. Light mode persists
+                to localStorage (applied app-wide via data-theme on <html>); scenes
+                and links are view preferences that show/hide those surfaces. */}
+            {!floating && (
+              <div className="px-3 pt-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-subtle">
+                Workspace
+              </div>
+            )}
+            <MenuToggle label="Light mode" on={theme === "light"} onClick={toggleTheme} />
+            <MenuToggle label="Show scenes" on={scenesVisible} onClick={onToggleScenes} />
+            <MenuToggle label="Show links" on={linksVisible} onClick={onToggleLinks} />
+
+            {/* Typeface — the scene-body type style (Scotch/Classic/Gothic),
+                picked from a mini-menu dropdown matching the app's other menus. */}
+            <div className="flex w-full items-center justify-between px-3 py-2">
+              <span className="text-sm text-muted">Typeface</span>
+              <TypefaceMenu value={typeface} onChange={onSelectTypeface} />
+            </div>
+
+            {/* Spacing — line-height for any typeface: compact (144%) or wide
+                (200%, double-spaced). Segmented, one active at a time. */}
+            <div className="flex w-full items-center justify-between px-3 py-2">
+              <span className="text-sm text-muted">Spacing</span>
+              <div className="flex items-center gap-0.5 rounded-lg border border-border-subtle p-0.5">
+                <SpacingButton
+                  label="Compact"
+                  active={spacing === "compact"}
+                  onClick={() => onSelectSpacing("compact")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
+                    <line x1="3" y1="5" x2="13" y2="5" />
+                    <line x1="3" y1="8" x2="13" y2="8" />
+                    <line x1="3" y1="11" x2="13" y2="11" />
+                  </svg>
+                </SpacingButton>
+                <SpacingButton
+                  label="Wide"
+                  active={spacing === "wide"}
+                  onClick={() => onSelectSpacing("wide")}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
+                    <line x1="3" y1="4" x2="13" y2="4" />
+                    <line x1="3" y1="12" x2="13" y2="12" />
+                  </svg>
+                </SpacingButton>
+              </div>
+            </div>
+
+            {divider}
+            {floating && findRow && <>{findRow}{divider}</>}
+
+            {/* Navigation — the exact Nav Panel rows (grouped as in the workspace:
+                the file group, Shared with its unread badge, then Settings/Account).
+                Navigating closes the menu. Nothing is "active" from the writer. */}
+            {PRIMARY.map((item) =>
+              floating && item.href === "/books" ? (
+                <BooksNavRow key={item.href} item={item} currentBookId={book.id} onNavigate={() => setMenuOpen(false)} onSwitchBook={onSwitchBook} />
+              ) : (
+                <NavRow key={item.href} item={item} active={false} className={floating ? "py-3" : "py-2"} onNavigate={() => setMenuOpen(false)} />
+              )
+            )}
+            {divider}
+            {SHARED.map((item) => (
+              <NavRow key={item.href} item={item} active={false} className={floating ? "py-3" : "py-2"} badge={unreadTotal} onNavigate={() => setMenuOpen(false)} />
+            ))}
+            {divider}
+            {SECONDARY.map((item) => (
+              <NavRow key={item.href} item={item} active={false} className={floating ? "py-3" : "py-2"} onNavigate={() => setMenuOpen(false)} />
+            ))}
+
+    </>
+  );
+  // Give feedback — pinned to the bottom of the menu. Its own warm-on-dark
+  // treatment sets it apart from the nav rows.
+  const feedbackButton = (
+    <button
+              onClick={() => { setMenuOpen(false); setFeedbackOpen(true); }}
+              className={`${floating ? "" : "mt-auto mb-1"} cursor-pointer w-full py-2.5 rounded-lg border border-accent bg-[#211711] text-[#8F705C] text-sm font-semibold hover:bg-[#2a1e16] transition-colors`}
+            >
+              Give feedback
+            </button>
+  );
 
   return (
     <div className="relative flex flex-col h-full bg-bg border-r border-border-subtle w-full overflow-hidden">
@@ -1091,9 +1327,9 @@ export default function LeftColumn({
           close it slides back in from the right and fades back in. Clipped by the
           column's overflow-hidden. */}
       <div
-        aria-hidden={menuOpen}
+        aria-hidden={menuOpen && !floating}
         className={`flex-1 min-h-0 flex flex-col transition-[translate,opacity] duration-[300ms] ease-[cubic-bezier(0,0,0.2,1)] ${
-          menuOpen ? "translate-x-full opacity-0 pointer-events-none" : "translate-x-0 opacity-100"
+          menuOpen && !floating ? "translate-x-full opacity-0 pointer-events-none" : "translate-x-0 opacity-100"
         }`}
       >
 
@@ -1229,6 +1465,7 @@ export default function LeftColumn({
           preload
         />
         <button
+          ref={menuBtnRef}
           onClick={() => setMenuOpen(true)}
           className="relative text-subtle hover:text-text transition-colors leading-none flex items-center justify-center"
           title="Main menu"
@@ -1250,12 +1487,15 @@ export default function LeftColumn({
       </div>{/* /Book Panel content */}
 
       {/* ── Main Menu ───────────────────────────────────────────────────────────
-          A full-height layer that cross-slides against the Book Panel content
-          (mirroring the Library ↔ Comments transition in the right column): on open
-          it slides in from the left and fades in, covering the Main Nav Bar; on
-          close it slides back out to the left and fades. It paints solid over the
-          whole column via z-40. menuRef scopes the outside-click/Escape close so a
-          click inside the menu doesn't dismiss it. */}
+          Desktop: a floating card over the page (FloatingMainMenu), centered on the
+          menu icon, with a Books submenu. Mobile: the full-height layer that
+          cross-slides against the Book Panel content (mirroring the Library ↔
+          Comments transition in the right column). */}
+      {floating ? (
+        <FloatingMainMenu open={menuOpen} onClose={() => setMenuOpen(false)} anchorRef={menuBtnRef} footer={feedbackButton}>
+          {menuContent}
+        </FloatingMainMenu>
+      ) : (
       <div
         ref={menuRef}
         role="menu"
@@ -1264,8 +1504,6 @@ export default function LeftColumn({
           menuOpen ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0 pointer-events-none"
         }`}
       >
-        {/* Menu header — wordmark + close. Fixed h-16 so the wordmark lines up
-            with the Book Panel header it slides over. */}
         <div className="h-16 px-5 flex-shrink-0 flex items-center justify-between">
           <Image src="/logo-wordmark.svg" alt="Hot Cocoa" width={93} height={17} />
           <button
@@ -1279,95 +1517,12 @@ export default function LeftColumn({
             </svg>
           </button>
         </div>
-
-        {/* Menu content — scrolls if it outgrows the viewport height. */}
         <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-1">
-            {/* Find/replace — its own group at the top (also Cmd/Ctrl+F). */}
-            {onOpenFindReplace && (
-              <>
-                <button
-                  onClick={() => { setMenuOpen(false); onOpenFindReplace(); }}
-                  className="flex w-full items-center px-3 py-2 rounded-lg text-sm text-muted hover:text-text hover:bg-panel transition-colors"
-                >
-                  Find/replace…
-                </button>
-                <div className="my-2 -mx-3 border-t border-border-subtle" />
-              </>
-            )}
-
-            {/* Options — account-level workspace preferences. Light mode persists
-                to localStorage (applied app-wide via data-theme on <html>); scenes
-                and links are view preferences that show/hide those surfaces. */}
-            <div className="px-3 pt-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-subtle">
-              Workspace
-            </div>
-            <MenuToggle label="Light mode" on={theme === "light"} onClick={toggleTheme} />
-            <MenuToggle label="Show scenes" on={scenesVisible} onClick={onToggleScenes} />
-            <MenuToggle label="Show links" on={linksVisible} onClick={onToggleLinks} />
-
-            {/* Typeface — the scene-body type style (Scotch/Classic/Gothic),
-                picked from a mini-menu dropdown matching the app's other menus. */}
-            <div className="flex w-full items-center justify-between px-3 py-2">
-              <span className="text-sm text-muted">Typeface</span>
-              <TypefaceMenu value={typeface} onChange={onSelectTypeface} />
-            </div>
-
-            {/* Spacing — line-height for any typeface: compact (144%) or wide
-                (200%, double-spaced). Segmented, one active at a time. */}
-            <div className="flex w-full items-center justify-between px-3 py-2">
-              <span className="text-sm text-muted">Spacing</span>
-              <div className="flex items-center gap-0.5 rounded-lg border border-border-subtle p-0.5">
-                <SpacingButton
-                  label="Compact"
-                  active={spacing === "compact"}
-                  onClick={() => onSelectSpacing("compact")}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-                    <line x1="3" y1="5" x2="13" y2="5" />
-                    <line x1="3" y1="8" x2="13" y2="8" />
-                    <line x1="3" y1="11" x2="13" y2="11" />
-                  </svg>
-                </SpacingButton>
-                <SpacingButton
-                  label="Wide"
-                  active={spacing === "wide"}
-                  onClick={() => onSelectSpacing("wide")}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-                    <line x1="3" y1="4" x2="13" y2="4" />
-                    <line x1="3" y1="12" x2="13" y2="12" />
-                  </svg>
-                </SpacingButton>
-              </div>
-            </div>
-
-            <div className="my-2 -mx-3 border-t border-border-subtle" />
-
-            {/* Navigation — the exact Nav Panel rows (grouped as in the workspace:
-                the file group, Shared with its unread badge, then Settings/Account).
-                Navigating closes the menu. Nothing is "active" from the writer. */}
-            {PRIMARY.map((item) => (
-              <NavRow key={item.href} item={item} active={false} onNavigate={() => setMenuOpen(false)} />
-            ))}
-            <div className="my-2 -mx-3 border-t border-border-subtle" />
-            {SHARED.map((item) => (
-              <NavRow key={item.href} item={item} active={false} badge={unreadTotal} onNavigate={() => setMenuOpen(false)} />
-            ))}
-            <div className="my-2 -mx-3 border-t border-border-subtle" />
-            {SECONDARY.map((item) => (
-              <NavRow key={item.href} item={item} active={false} onNavigate={() => setMenuOpen(false)} />
-            ))}
-
-            {/* Give feedback — pinned to the bottom of the menu (mt-auto). Its own
-                warm-on-dark treatment sets it apart from the nav rows. */}
-            <button
-              onClick={() => { setMenuOpen(false); setFeedbackOpen(true); }}
-              className="mt-auto mb-1 w-full py-2.5 rounded-lg border border-accent bg-[#211711] text-[#8F705C] text-sm font-semibold hover:bg-[#2a1e16] transition-colors"
-            >
-              Give feedback
-            </button>
-          </div>
-        </div>{/* /Main Menu */}
+          {menuContent}
+          {feedbackButton}
+        </div>
+      </div>
+      )}
     </div>
   );
 }

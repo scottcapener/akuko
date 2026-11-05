@@ -21,7 +21,8 @@ import { useLocalStorageState } from "@/lib/useLocalStorageState";
 import { useColumnResize } from "@/lib/useColumnResize";
 import { useWritingSessions } from "@/lib/useWritingSessions";
 import { track } from "@/lib/analytics";
-import { markWriteReady } from "@/components/StartupLoader";
+import { setActiveBook } from "@/lib/db";
+import { markWriteReady, showBookSwitchLoader } from "@/components/StartupLoader";
 import { Scene, Typeface, Spacing } from "@/lib/types";
 
 type MobilePanel = "left" | "right" | null;
@@ -572,6 +573,19 @@ export default function WritePage() {
     sectionViews,
     onSetSectionView: setSectionView,
     onOpenFindReplace: () => setFindOpen(true),
+    // Books submenu: save, mark the chosen book active, then reload the writer
+    // (a full load so every store re-bootstraps on the new book).
+    onSwitchBook: async (bookId: string) => {
+      showBookSwitchLoader();
+      try {
+        await store.flushSaves();
+        await setActiveBook(bookId);
+      } catch {
+        // Reload regardless: the blank overlay only clears on a fresh load, and
+        // the writer reopens whichever book is still active.
+      }
+      window.location.assign("/write");
+    },
     authorName: authorName || "Anonymous",
     authorAvatarUrl,
   };

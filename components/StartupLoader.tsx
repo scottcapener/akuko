@@ -27,6 +27,19 @@ export function markWriteReady() {
   listeners.forEach((fn) => fn());
 }
 
+// Switching books from the writer: blank the page (--hc-bg, no bar) right away,
+// before saves flush and the reload starts, and re-arm the session flag so the
+// freshly loaded /write shows the real bar. No bar here — a fake one would visibly
+// restart when the real one begins. The mounted StartupLoader only needs the event
+// to make sure its overlay is opaque.
+const SWITCH_EVENT = "hc-book-switch";
+export function showBookSwitchLoader() {
+  try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+  setBoot(true);
+  document.documentElement.dataset.hcBootBlank = "";
+  window.dispatchEvent(new Event(SWITCH_EVENT));
+}
+
 function setBoot(on: boolean) {
   if (on) document.documentElement.dataset.hcBoot = "";
   else delete document.documentElement.dataset.hcBoot;
@@ -36,6 +49,20 @@ export default function StartupLoader() {
   const [progress, setProgress] = useState(0);
   const [leaving, setLeaving] = useState(false);
   const active = useRef(false);
+  // True after a book switch so the overlay snaps in with no fade or bar motion.
+  const [instant, setInstant] = useState(false);
+
+  // Book switch (see showBookSwitchLoader): make sure the overlay is opaque at
+  // once. The bar itself stays hidden (CSS) — the reloaded page runs the real one.
+  useEffect(() => {
+    const onSwitch = () => {
+      setInstant(true);
+      setLeaving(false);
+      setProgress(0);
+    };
+    window.addEventListener(SWITCH_EVENT, onSwitch);
+    return () => window.removeEventListener(SWITCH_EVENT, onSwitch);
+  }, []);
 
   useEffect(() => {
     let started = false;
@@ -95,14 +122,14 @@ export default function StartupLoader() {
       aria-hidden
       style={{
         opacity: leaving ? 0 : 1,
-        transition: `opacity ${FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`,
+        transition: instant ? "none" : `opacity ${FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`,
         pointerEvents: leaving ? "none" : "auto",
       }}
     >
       <div className="hc-boot-track">
         <div
           className="hc-boot-fill"
-          style={{ width: `${progress}%`, transition: `width ${FILL_MS}ms ease-out` }}
+          style={{ width: `${progress}%`, transition: instant ? "none" : `width ${FILL_MS}ms ease-out` }}
         />
       </div>
     </div>

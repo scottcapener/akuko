@@ -29,6 +29,7 @@ Dense reference for AI assistants working on UI. Paste this at the start of any 
 | `--hc-accent-hi`   | `bg-accent-hi`     | `#8b6d5a` | Accent hover state                    |
 | `--hc-border-subtle` | `border-border-subtle` | `#1c1b1b` | All borders & dividers          |
 | `--hc-scrim`       | `bg-scrim`         | `rgb(16 15 15 / .87)` | Modal/panel backdrop (`bg` @ 87%) |
+| `--hc-scrim-menu`  | `bg-scrim-menu`    | `rgb(16 15 15 / .66)` | Floating Main Menu backdrop (`bg` @ 66%; light theme 30%) |
 | `--hc-error`       | `text-error`       | `#ef4444` | Error states                          |
 | `--hc-warning`     | `text-warning`     | `#f59e0b` | Warning states                        |
 | `--hc-success`     | `text-success`     | `#84cc16` | Success states                        |

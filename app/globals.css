@@ -25,6 +25,7 @@
 
   /* Scrim */
   --color-scrim: var(--hc-scrim);
+  --color-scrim-menu: var(--hc-scrim-menu);
 
   /* Semantic */
   --color-error:   var(--hc-error);
@@ -197,6 +198,11 @@ body {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+/* Where a horizontal and vertical bar meet (or a resizable box) Chrome paints a
+   white square by default; keep it invisible. */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 9999px;
@@ -276,6 +282,8 @@ input:focus {
   background: var(--hc-bg);
 }
 html[data-hc-boot] .hc-boot { display: flex; }
+/* Book switch: blank --hc-bg only; the reloaded page shows the real bar. */
+html[data-hc-boot-blank] .hc-boot-track { visibility: hidden; }
 .hc-boot-track {
   width: 168px;
   padding: 4px;
