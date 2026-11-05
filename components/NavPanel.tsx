@@ -117,13 +117,13 @@ export const SECONDARY: NavItem[] = [
   { href: "/account", label: "Account", Icon: AccountIcon },
 ];
 
-export function NavRow({ item, active, badge = 0, onNavigate }: { item: NavItem; active: boolean; badge?: number; onNavigate?: () => void }) {
+export function NavRow({ item, active, badge = 0, onNavigate, className = "py-2", trailing }: { item: NavItem; active: boolean; badge?: number; onNavigate?: () => void; className?: string; trailing?: React.ReactNode }) {
   return (
     <Link
       href={item.href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      className={`group flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+      className={`group flex items-center gap-3 px-3 ${className} rounded-lg transition-colors ${
         active ? "bg-hover" : "hover:bg-panel"
       }`}
     >
@@ -132,6 +132,7 @@ export function NavRow({ item, active, badge = 0, onNavigate }: { item: NavItem;
         {item.label}
       </span>
       {badge > 0 && <Badge count={badge} className="ml-auto" />}
+      {trailing}
     </Link>
   );
 }

@@ -31,6 +31,7 @@
 
   /* ── Scrim ── */
   --hc-scrim: rgb(16 15 15 / 0.87);   /* --hc-bg @ 87% — modal/panel backdrop */
+  --hc-scrim-menu: rgb(16 15 15 / 0.66);   /* --hc-bg @ 66% — floating Main Menu backdrop (lighter, page stays legible) */
 
   /* ── Typography ── */
   --hc-font-sans: "Inter", system-ui, sans-serif;
@@ -95,4 +96,5 @@
 
   /* Scrim — kept a translucent warm dark so modals still dim the light page. */
   --hc-scrim: rgb(20 18 16 / 0.45);
+  --hc-scrim-menu: rgb(20 18 16 / 0.3);
 }
