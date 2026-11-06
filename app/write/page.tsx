@@ -241,17 +241,42 @@ export default function WritePage() {
     setActiveChapter(id);
   }, [activeChapterId, secondaryChapterId, setActiveChapter]);
 
-  // Cmd/Ctrl+F opens the Find/Replace bar (grabbing the browser's native find).
+  // Cmd/Ctrl+F toggles the Find/Replace bar (grabbing the browser's native find).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === "f" || e.key === "F")) {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && (e.key === "f" || e.key === "F")) {
         e.preventDefault();
-        setFindOpen(true);
+        setFindOpen((v) => !v);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Cmd/Ctrl+\ collapses the Book and Library panels, then restores whichever
+  // were open (so a lone open panel comes back alone, not both).
+  const panelsHiddenRef = useRef<{ left: boolean; right: boolean } | null>(null);
+  const panelsStateRef = useRef({ leftCollapsed, rightCollapsed });
+  panelsStateRef.current = { leftCollapsed, rightCollapsed };
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key !== "\\") return;
+      e.preventDefault();
+      const { leftCollapsed: lc, rightCollapsed: rc } = panelsStateRef.current;
+      if (!lc || !rc) {
+        panelsHiddenRef.current = { left: !lc, right: !rc };
+        setLeftCollapsed(true);
+        setRightCollapsed(true);
+      } else {
+        const prev = panelsHiddenRef.current ?? { left: true, right: true };
+        panelsHiddenRef.current = null;
+        setLeftCollapsed(!prev.left);
+        setRightCollapsed(!prev.right);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setLeftCollapsed, setRightCollapsed]);
 
   // Slide the Find bar in/out: mount it collapsed, then expand — but only after a
   // double rAF, so the browser actually paints the 0fr/translated/transparent

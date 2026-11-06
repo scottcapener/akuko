@@ -161,8 +161,9 @@ export default function SceneBlock({
       onSceneChange(chapterId, scene.id, { body: bodyRef.current?.innerHTML ?? "" });
       return;
     }
-    // Block every other formatting shortcut; keep clipboard/undo/select-all.
-    if (!["z", "y", "a", "c", "x", "v"].includes(key)) {
+    // Block the remaining native formatting shortcuts (underline/bold). Anything
+    // else (e.g. Cmd+Shift+N for a new browser window) must reach the browser.
+    if (key === "u" || key === "b") {
       e.preventDefault();
     }
   }

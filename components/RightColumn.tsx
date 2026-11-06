@@ -221,8 +221,9 @@ function NoteLightbox({
       syncBody();
       return;
     }
-    // Block every other formatting shortcut; keep clipboard/undo/select-all.
-    if (!["z", "a", "c", "x", "v"].includes(key)) {
+    // Block the remaining native formatting shortcut (underline). Anything else
+    // (e.g. Cmd+Shift+N for a new browser window) must reach the browser.
+    if (key === "u") {
       e.preventDefault();
     }
   }
