@@ -105,6 +105,9 @@ export function useHotCocoaDb() {
   // State mirror of loadedChapterIds so the UI can render a skeleton until a
   // chapter's content has arrived. The ref stays the source of truth for dedup.
   const [loadedChapters, setLoadedChapters] = useState<Set<string>>(new Set());
+  // Arrived (not merely in-flight) chapters, readable from async callbacks.
+  const loadedChaptersRef = useRef(loadedChapters);
+  loadedChaptersRef.current = loadedChapters;
   const prefetchStarted = useRef(false);
 
   // Refs mirror the latest state so async callbacks (flush, recovery) can read the
@@ -494,7 +497,14 @@ export function useHotCocoaDb() {
               }))
             : prev;
         const wc = wordCountAll(next);
-        if (book) {
+        // Unloaded chapters have no scenes yet, so until the background prefetch
+        // finishes `wc` undercounts the book. Persisting it then would drop the
+        // stored total (Books page, analytics snapshot) — the next save after
+        // every chapter has arrived writes the true count instead.
+        const allLoaded = next.every((sec) =>
+          sec.chapters.every((ch) => loadedChaptersRef.current.has(ch.id))
+        );
+        if (book && allLoaded) {
           setUnlocks((currentUnlocks) => {
             db.updateBookWordCount(book.id, wc, currentUnlocks).then((updated) => setUnlocks(updated));
             return currentUnlocks;

@@ -515,7 +515,7 @@ export default function WritePage() {
   }, [recordActiveTime]);
 
   // Writing-session analytics (counts only — see lib/useWritingSessions.ts).
-  useWritingSessions(store.wordCount);
+  useWritingSessions(store.sections);
 
   // Which chapters people open; paired with chapter_edited to see browsing vs writing.
   useEffect(() => {

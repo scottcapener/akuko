@@ -2,6 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "crons": [
-    { "path": "/api/cron/backup-sweep", "schedule": "0 3 * * *" }
+    { "path": "/api/cron/backup-sweep", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/platform-snapshot", "schedule": "15 3 * * *" }
   ]
 }
