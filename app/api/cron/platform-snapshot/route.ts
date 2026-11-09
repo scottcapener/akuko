@@ -9,7 +9,7 @@ export const runtime = "nodejs";
  * once a day by Vercel Cron; guarded by CRON_SECRET.
  *
  * Counts the true all-time totals straight from the database (users, books,
- * chapters, words, writing time, tags, shares, comments) and sends them to
+ * chapters, words, writing time, tags, shares, comments, library items) and sends them to
  * PostHog as one `platform_snapshot` event, plus one `platform_snapshot_tag`
  * event per Book Info tag in use. Client events only exist from the day they
  * shipped; this snapshot covers everything since day one.
@@ -30,12 +30,29 @@ async function handle(request: Request) {
   }
 
   try {
-    const [users, chapters, sharedEver, sharedNow, comments, books, days] = await Promise.all([
-      countRows(admin, "profiles"),
+    const [
+      users,
+      chapters,
+      sharedEver,
+      sharedNow,
+      comments,
+      images,
+      musicLinks,
+      notes,
+      links,
+      books,
+      days,
+    ] = await Promise.all([
+      countAuthUsers(admin),
       countRows(admin, "chapters"),
       countRows(admin, "shared_chapters"),
       countRows(admin, "shared_chapters", { currentOnly: true }),
       countRows(admin, "comments"),
+      // Chapter library items, by type ("text" is a note).
+      countRows(admin, "library_items", { type: "image" }),
+      countRows(admin, "library_items", { type: "music" }),
+      countRows(admin, "library_items", { type: "text" }),
+      countRows(admin, "library_items", { type: "link" }),
       allRows<{ word_count: number | null; tags: string[] | null; info_chapter_id: string | null }>(
         admin,
         "books",
@@ -62,6 +79,10 @@ async function handle(request: Request) {
       shared_chapters: sharedEver,
       shared_chapters_current: sharedNow,
       comments,
+      images,
+      music_links: musicLinks,
+      notes,
+      links,
     };
 
     const timestamp = new Date().toISOString();
@@ -104,13 +125,29 @@ async function handle(request: Request) {
 async function countRows(
   admin: SupabaseClient,
   table: string,
-  opts?: { currentOnly?: boolean } // shared_chapters still shared (not unshared)
+  opts?: {
+    currentOnly?: boolean; // shared_chapters still shared (not unshared)
+    type?: string; // library_items type
+  }
 ): Promise<number> {
   let q = admin.from(table).select("*", { count: "exact", head: true });
   if (opts?.currentOnly) q = q.is("unshared_at", null);
+  if (opts?.type) q = q.eq("type", opts.type);
   const { count, error } = await q;
   if (error) throw new Error(`${table}: ${error.message}`);
   return count ?? 0;
+}
+
+// Accounts, not profiles: a few accounts never got a profile row.
+async function countAuthUsers(admin: SupabaseClient): Promise<number> {
+  const PER_PAGE = 1000;
+  let total = 0;
+  for (let page = 1; ; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: PER_PAGE });
+    if (error) throw new Error(`users: ${error.message}`);
+    total += data.users.length;
+    if (data.users.length < PER_PAGE) return total;
+  }
 }
 
 // PostgREST caps a response at 1000 rows, so page through.
