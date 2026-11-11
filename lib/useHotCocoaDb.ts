@@ -1229,16 +1229,32 @@ export function useHotCocoaDb() {
   );
 
   // ── Library actions ───────────────────────────────────────────────────
+  // In-flight image uploads per chapter (drives the gallery's skeleton cells,
+  // for every entry point: drop, picker, URL, paste) and the latest failure.
+  const [imageUploads, setImageUploads] = useState<Record<string, number>>({});
+  const [imageUploadError, setImageUploadError] = useState("");
+  const imageErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const addLibraryImage = useCallback(
     async (chapterId: string, img: LibraryImage) => {
       if (!userId) return;
-      const chapter = findChapter(chapterId);
-      const position = chapter?.library.images.length ?? 0;
-      const saved = await db.addLibraryImageFromDataUrl(chapterId, userId, img.dataUrl, img.name, position);
-      updateChapterState(chapterId, (c) => ({
-        ...c,
-        library: { ...c.library, images: [...c.library.images, saved] },
-      }));
+      setImageUploads((cur) => ({ ...cur, [chapterId]: (cur[chapterId] ?? 0) + 1 }));
+      try {
+        const chapter = findChapter(chapterId);
+        const position = chapter?.library.images.length ?? 0;
+        const saved = await db.addLibraryImageFromDataUrl(chapterId, userId, img.dataUrl, img.name, position);
+        updateChapterState(chapterId, (c) => ({
+          ...c,
+          library: { ...c.library, images: [...c.library.images, saved] },
+        }));
+      } catch (err) {
+        const msg = err instanceof Error && err.message ? err.message : "Couldn't upload that image. Try again.";
+        setImageUploadError(msg);
+        if (imageErrorTimer.current) clearTimeout(imageErrorTimer.current);
+        imageErrorTimer.current = setTimeout(() => setImageUploadError(""), 6000);
+      } finally {
+        setImageUploads((cur) => ({ ...cur, [chapterId]: Math.max(0, (cur[chapterId] ?? 1) - 1) }));
+      }
     },
     [userId, findChapter, updateChapterState]
   );
@@ -1259,6 +1275,19 @@ export function useHotCocoaDb() {
       },
     }));
   }, [findChapter, updateChapterState]);
+
+  // Remember an image's natural size (learned when its thumbnail first loads)
+  // so later loads can lay out the skeleton at the right proportions.
+  const recordLibraryImageSize = useCallback((chapterId: string, imageId: string, width: number, height: number) => {
+    updateChapterState(chapterId, (c) => ({
+      ...c,
+      library: {
+        ...c.library,
+        images: c.library.images.map((i) => (i.id === imageId ? { ...i, width, height } : i)),
+      },
+    }));
+    void db.setLibraryImageDimensions(imageId, width, height);
+  }, [updateChapterState]);
 
   const removeLibraryImage = useCallback(async (chapterId: string, imageId: string) => {
     // Grab the storage path before the image leaves state, so the stored
@@ -1477,6 +1506,9 @@ export function useHotCocoaDb() {
     addLibraryImage,
     removeLibraryImage,
     refreshLibraryImageUrl,
+    recordLibraryImageSize,
+    imageUploads,
+    imageUploadError,
     reorderLibraryImages,
     addNote,
     updateNote,
