@@ -3,10 +3,11 @@
 import { Fragment, useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
+import { MAX_LIBRARY_IMAGE_BYTES, IMAGE_SIZE_ERROR } from "@/lib/db";
 import { Chapter, LibraryImage, LibraryNote, LibraryLink } from "@/lib/types";
 import { DropLine } from "@/components/ui/DropLine";
 import { useReorderList } from "@/lib/useReorderList";
-import { useReorderGrid } from "@/lib/useReorderGrid";
+import { ImageMasonry } from "@/components/ImageMasonry";
 import { useAutoScrollOnDrag } from "@/lib/useAutoScrollOnDrag";
 import { SharingMenu } from "@/components/sharing/SharingMenu";
 import { chapterWordCount } from "@/lib/words";
@@ -303,13 +304,14 @@ function ImageUploadModal({
   onUrl,
   onClose,
 }: {
-  onFiles: (files: FileList) => void;
+  // Returns an error message (and uploads nothing) if the files are rejected.
+  onFiles: (files: FileList) => string | null;
   onUrl: (url: string) => Promise<void>;
   onClose: () => void;
 }) {
   const [url, setUrl] = useState("");
   const [urlLoading, setUrlLoading] = useState(false);
-  const [urlError, setUrlError] = useState("");
+  const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
@@ -321,16 +323,26 @@ function ImageUploadModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  function handleFiles(files: FileList) {
+    const err = onFiles(files);
+    if (err) setError(err);
+    else onClose();
+  }
+
   async function handleUrlSubmit() {
     const trimmed = url.trim();
     if (!trimmed || urlLoading) return;
-    setUrlError("");
+    setError("");
     setUrlLoading(true);
     try {
       await onUrl(trimmed);
       onClose();
-    } catch {
-      setUrlError("Couldn't load that image. Check the URL and try again.");
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message === IMAGE_SIZE_ERROR
+          ? IMAGE_SIZE_ERROR
+          : "Couldn't load that image. Check the URL and try again."
+      );
     } finally {
       setUrlLoading(false);
     }
@@ -363,7 +375,7 @@ function ImageUploadModal({
               type="url"
               placeholder="https://example.com/image.jpg"
               value={url}
-              onChange={(e) => { setUrl(e.target.value); setUrlError(""); }}
+              onChange={(e) => { setUrl(e.target.value); setError(""); }}
               onKeyDown={(e) => { if (e.key === "Enter") handleUrlSubmit(); }}
               className="flex-1 min-w-0 bg-bg text-text text-sm px-3 py-2 rounded-lg border border-hover placeholder:text-subtle/50 focus:outline-none focus:border-accent/60 transition-colors"
             />
@@ -375,7 +387,7 @@ function ImageUploadModal({
               {urlLoading ? "…" : "Add"}
             </button>
           </div>
-          {urlError && <p className="text-[11px] text-error">{urlError}</p>}
+          {error && <p role="alert" className="text-[11px] text-muted">{error}</p>}
 
           {/* Drop / upload zone */}
           <div
@@ -387,7 +399,7 @@ function ImageUploadModal({
             onDrop={(e) => {
               e.preventDefault();
               setDragging(false);
-              if (e.dataTransfer.files.length) { onFiles(e.dataTransfer.files); onClose(); }
+              if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
             }}
             onClick={() => fileInputRef.current?.click()}
           >
@@ -405,7 +417,10 @@ function ImageUploadModal({
           accept="image/*"
           multiple
           className="hidden"
-          onChange={(e) => { if (e.target.files?.length) { onFiles(e.target.files); onClose(); } }}
+          onChange={(e) => {
+            if (e.target.files?.length) handleFiles(e.target.files);
+            e.target.value = ""; // allow re-picking the same file after an error
+          }}
         />
       </div>
     </div>
@@ -462,72 +477,18 @@ function LinkListItem({ link, onRemove }: { link: LibraryLink; onRemove: () => v
   );
 }
 
-// ── Gallery image cell with skeleton loading ─────────────────────────────────
-
-function GalleryImage({
-  img,
-  cellProps,
-  highlighted,
-  onOpen,
-  onRemove,
-  onLoad,
-  onError,
-}: {
-  img: LibraryImage;
-  index: number;
-  cellProps: React.HTMLAttributes<HTMLDivElement> & { draggable?: boolean };
-  highlighted: boolean;
-  onOpen: () => void;
-  onRemove: () => void;
-  onLoad: () => void;
-  onError: () => void;
-}) {
-  const [loaded, setLoaded] = useState(false);
-  const prevSrc = useRef(img.dataUrl);
-  if (prevSrc.current !== img.dataUrl) {
-    prevSrc.current = img.dataUrl;
-    setLoaded(false);
-  }
-
-  return (
-    <div
-      {...cellProps}
-      className={`relative group aspect-square rounded ${
-        highlighted ? "ring-2 ring-accent" : ""
-      } ${loaded ? "" : "bg-panel animate-pulse"}`}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={img.dataUrl}
-        alt={img.name}
-        className={`w-full h-full object-cover rounded cursor-pointer transition-opacity duration-300 ${
-          loaded ? "opacity-100" : "opacity-0"
-        }`}
-        onClick={onOpen}
-        draggable={false}
-        onLoad={() => { setLoaded(true); onLoad(); }}
-        onError={onError}
-      />
-      <button
-        onClick={(e) => { e.stopPropagation(); onRemove(); }}
-        className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/70 rounded-full items-center justify-center hidden group-hover:flex"
-      >
-        <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
-  );
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   chapter: Chapter;
   loading?: boolean;
-  onAddImage: (chapterId: string, img: LibraryImage) => void;
+  onAddImage: (chapterId: string, img: LibraryImage) => void | Promise<void>;
   onRemoveImage: (chapterId: string, imgId: string) => void;
   onRefreshImage: (chapterId: string, imgId: string) => void;
+  onImageMeasured?: (chapterId: string, imgId: string, width: number, height: number) => void;
+  /** In-flight uploads per chapter id and the latest upload failure (from the store). */
+  imageUploads?: Record<string, number>;
+  imageUploadError?: string;
   onAddNote: (chapterId: string) => Promise<LibraryNote>;
   onUpdateNote: (chapterId: string, noteId: string, patch: { title?: string; body?: string }) => void;
   onRemoveNote: (chapterId: string, noteId: string) => void;
@@ -575,6 +536,9 @@ export default function RightColumn({
   onAddImage,
   onRemoveImage,
   onRefreshImage,
+  onImageMeasured,
+  imageUploads,
+  imageUploadError,
   onAddNote,
   onUpdateNote,
   onRemoveNote,
@@ -690,7 +654,6 @@ export default function RightColumn({
     if (collapsed) onToggleCollapse?.();
   }
   useAutoScrollOnDrag(scrollRef);
-  const imageReorder = useReorderGrid((from, to) => onReorderImages(chapter.id, from, to));
   const musicReorder = useReorderList((from, to) => onReorderMusicLinks(chapter.id, from, to));
   const noteReorder = useReorderList((from, to) => onReorderNotes(chapter.id, from, to));
   const [imageLightboxIndex, setImageLightboxIndex] = useState<number | null>(null);
@@ -698,6 +661,10 @@ export default function RightColumn({
   const [pendingNoteId, setPendingNoteId] = useState<string | null>(null);
   const [draggingOver, setDraggingOver] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
+  const pendingImages = imageUploads?.[chapter.id] ?? 0;
+  // Local = validation rejections here; store = failures from the upload itself.
+  const [localImageError, setImageError] = useState("");
+  const imageError = localImageError || imageUploadError || "";
   const [musicModalOpen, setMusicModalOpen] = useState(false);
   const [musicUrl, setMusicUrl] = useState("");
   const [musicLoading, setMusicLoading] = useState(false);
@@ -710,7 +677,6 @@ export default function RightColumn({
   // Image ids we've already asked to re-sign once, so a still-broken URL can't
   // loop onError → refresh → onError. Cleared per-image on a successful load,
   // re-arming it for a future expiry.
-  const retriedImageIds = useRef<Set<string>>(new Set());
 
   // Focus music URL input when modal opens
   useEffect(() => {
@@ -734,20 +700,29 @@ export default function RightColumn({
     }
   }, [chapter.library.notes, pendingNoteId]);
 
+  const showImageError = useCallback((msg: string) => {
+    setImageError(msg);
+    setTimeout(() => setImageError((cur) => (cur === msg ? "" : cur)), 6000);
+  }, []);
+
+  // Validates the whole batch first: if any file is rejected, nothing uploads
+  // and the error is returned so the caller can show it where the user is looking.
   const processImageFiles = useCallback(
-    (files: FileList | null) => {
-      if (!files) return;
-      Array.from(files).forEach((file) => {
-        if (!file.type.startsWith("image/")) return;
+    (files: FileList | null): string | null => {
+      if (!files) return null;
+      const list = Array.from(files);
+      if (list.some((f) => !f.type.startsWith("image/"))) return "Only image files are supported";
+      if (list.some((f) => f.size > MAX_LIBRARY_IMAGE_BYTES)) return IMAGE_SIZE_ERROR;
+      list.forEach((file) => {
         const reader = new FileReader();
-        reader.onload = (e) => {
-          const dataUrl = e.target?.result as string;
-          onAddImage(chapter.id, { id: makeId(), name: file.name, dataUrl });
-        };
+        reader.onload = (e) =>
+          void onAddImage(chapter.id, { id: makeId(), name: file.name, dataUrl: e.target?.result as string });
+        reader.onerror = () => showImageError("Couldn't read that file.");
         reader.readAsDataURL(file);
       });
+      return null;
     },
-    [chapter.id, onAddImage]
+    [chapter.id, onAddImage, showImageError]
   );
 
   const processImageUrl = useCallback(
@@ -756,6 +731,7 @@ export default function RightColumn({
       const res = await fetch(`/api/image?url=${encodeURIComponent(url)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
+      if (blob.size > MAX_LIBRARY_IMAGE_BYTES) throw new Error(IMAGE_SIZE_ERROR);
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target?.result as string);
@@ -763,7 +739,7 @@ export default function RightColumn({
         reader.readAsDataURL(blob);
       });
       const filename = url.split("/").pop()?.split("?")[0] || "image.jpg";
-      onAddImage(chapter.id, { id: makeId(), name: filename, dataUrl });
+      void onAddImage(chapter.id, { id: makeId(), name: filename, dataUrl });
     },
     [chapter.id, onAddImage]
   );
@@ -771,7 +747,8 @@ export default function RightColumn({
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setDraggingOver(false);
-    processImageFiles(e.dataTransfer.files);
+    const err = processImageFiles(e.dataTransfer.files);
+    if (err) showImageError(err);
   }
 
   async function handleAddNote() {
@@ -1063,11 +1040,15 @@ export default function RightColumn({
         className={`mx-4 mt-4 mb-3 rounded-lg border border-dashed ${
           draggingOver ? "border-accent bg-accent/5" : "border-border-subtle hover:border-hover"
         }`}
-        onDragOver={(e) => { e.preventDefault(); setDraggingOver(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          // Only light up for files dragged in from outside, not internal reorders.
+          if (e.dataTransfer.types.includes("Files")) setDraggingOver(true);
+        }}
         onDragLeave={() => setDraggingOver(false)}
         onDrop={handleDrop}
       >
-        {chapter.library.images.length === 0 ? (
+        {chapter.library.images.length === 0 && pendingImages === 0 ? (
           <div
             className="py-5 flex flex-col items-center gap-2 cursor-pointer"
             onClick={() => setImageModalOpen(true)}
@@ -1078,30 +1059,20 @@ export default function RightColumn({
             <span className="text-[10px] text-subtle uppercase tracking-widest">Drop images or click</span>
           </div>
         ) : (
-          <div className="p-2 grid grid-cols-3 gap-1.5">
-            {chapter.library.images.map((img, i) => (
-              <GalleryImage
-                key={img.id}
-                img={img}
-                index={i}
-                cellProps={imageReorder.cellProps(i)}
-                highlighted={imageReorder.overIndex === i}
-                onOpen={() => setImageLightboxIndex(i)}
-                onRemove={() => onRemoveImage(chapter.id, img.id)}
-                onLoad={() => retriedImageIds.current.delete(img.id)}
-                onError={() => {
-                  if (!img.path || retriedImageIds.current.has(img.id)) return;
-                  retriedImageIds.current.add(img.id);
-                  onRefreshImage(chapter.id, img.id);
-                }}
-              />
-            ))}
-            <button
-              className="aspect-square rounded bg-panel flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"
-              onClick={() => setImageModalOpen(true)}
-            >
-              <Image src="/plus.svg" alt="Add image" width={14} height={14} />
-            </button>
+          <div className="p-2">
+            <ImageMasonry
+              images={chapter.library.images}
+              pending={pendingImages}
+              onOpen={setImageLightboxIndex}
+              onRemove={(id) => onRemoveImage(chapter.id, id)}
+              onReorder={(from, to) => onReorderImages(chapter.id, from, to)}
+              onRefresh={(id) => onRefreshImage(chapter.id, id)}
+              onMeasured={(id, w, h) => onImageMeasured?.(chapter.id, id, w, h)}
+              onAdd={() => setImageModalOpen(true)}
+            />
+            {imageError && (
+              <p role="alert" className="mt-1.5 text-[11px] text-muted">{imageError}</p>
+            )}
           </div>
         )}
       </div>

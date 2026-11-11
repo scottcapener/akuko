@@ -24,6 +24,10 @@ export interface LibraryImage {
   // images (whose dataUrl is a time-limited signed URL); used to re-mint the
   // URL when it expires. Absent for images stored as an external URL.
   path?: string;
+  // Natural pixel size, when known (stored on the row; lets the gallery lay out
+  // skeletons at the right proportions before the image loads).
+  width?: number;
+  height?: number;
 }
 
 export interface LibraryNote {

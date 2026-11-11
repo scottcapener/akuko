@@ -384,7 +384,7 @@ export async function uploadBookCover(
   bookId: string,
   file: File
 ): Promise<{ path: string; signedUrl: string }> {
-  const path = `${userId}/covers/${bookId}/${Date.now()}-${file.name}`;
+  const path = `${userId}/covers/${bookId}/${Date.now()}-${safeStorageName(file.name)}`;
   const db = supabase();
 
   const { error: uploadError } = await db.storage
@@ -791,6 +791,8 @@ export async function getLibraryForChapter(chapterId: string): Promise<{
         name: item.filename ?? "",
         dataUrl,
         path: item.storage_path ?? undefined,
+        width: typeof item.width === "number" ? item.width : undefined,
+        height: typeof item.height === "number" ? item.height : undefined,
       });
     } else if (item.type === "text") {
       notes.push({
@@ -821,13 +823,34 @@ export async function getLibraryForChapter(chapterId: string): Promise<{
   return { images, notes, musicLinks, links };
 }
 
+/** Largest image accepted into a chapter library. */
+export const MAX_LIBRARY_IMAGE_BYTES = 10 * 1024 * 1024;
+export const IMAGE_SIZE_ERROR = "Files must be under 10MB";
+
+/** Storage object keys reject many characters that are legal in filenames
+ *  (macOS screenshots use a narrow no-break space before "PM", for example).
+ *  Reduce a name to a safe ASCII slug; the original is kept in the DB row. */
+function safeStorageName(name: string): string {
+  const dot = name.lastIndexOf(".");
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot + 1) : "";
+  const clean = (v: string) =>
+    v.normalize("NFKD").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  const b = clean(base) || "image";
+  const e = clean(ext).toLowerCase();
+  return e ? `${b}.${e}` : b;
+}
+
 export async function addLibraryImage(
   chapterId: string,
   userId: string,
   file: File,
   position: number
 ): Promise<LibraryImage> {
-  const path = `${userId}/${chapterId}/images/${Date.now()}-${file.name}`;
+  if (file.size > MAX_LIBRARY_IMAGE_BYTES) {
+    throw new Error(IMAGE_SIZE_ERROR);
+  }
+  const path = `${userId}/${chapterId}/images/${Date.now()}-${safeStorageName(file.name)}`;
   const db = supabase();
 
   const { error: uploadError } = await db.storage
@@ -852,12 +875,37 @@ export async function addLibraryImage(
     .from("library-files")
     .createSignedUrl(path, SIGNED_URL_TTL);
 
+  const dims = await readImageDimensions(file);
+  if (dims) void setLibraryImageDimensions(data.id, dims.width, dims.height);
+
   return {
     id: data.id,
     name: file.name,
     dataUrl: signed?.signedUrl ?? "",
     path,
+    ...(dims ?? {}),
   };
+}
+
+async function readImageDimensions(file: Blob): Promise<{ width: number; height: number } | null> {
+  try {
+    const bmp = await createImageBitmap(file);
+    const dims = { width: bmp.width, height: bmp.height };
+    bmp.close();
+    return dims.width && dims.height ? dims : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort: persist an image's natural size. Silently no-ops if the
+ *  width/height columns (migration 022) don't exist yet. */
+export async function setLibraryImageDimensions(itemId: string, width: number, height: number) {
+  try {
+    await supabase().from("library_items").update({ width, height }).eq("id", itemId);
+  } catch {
+    /* non-critical */
+  }
 }
 
 // Re-mint a signed URL for a stored library image. Called by the UI when an
