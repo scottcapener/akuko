@@ -109,6 +109,18 @@ export default function SceneBlock({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene.id]);
 
+  // Keep this editor's DOM in step with the store when the body changes from
+  // somewhere else. /write mounts a desktop AND a mobile CenterColumn at once
+  // (one is CSS-hidden), so each scene has two contentEditables; without this the
+  // hidden twin kept the stale body, showed missing text after a resize, and
+  // worse, would save that stale text back over newer edits. Never touch the
+  // editor the user is typing in — that would reset the caret.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || document.activeElement === el) return;
+    if (el.innerHTML !== scene.body) el.innerHTML = scene.body;
+  }, [scene.body]);
+
   function handleLabelClick() {
     if (draggedRef.current) { draggedRef.current = false; return; }
     setEditingLabel(true);
